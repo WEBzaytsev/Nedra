@@ -365,13 +365,15 @@ const FolderAccessDialog = ({ open, onClose }) => {
                             {t("folderAccess.ownerLabel", { owner: selected?.owner_username })}
                           </Text>
                         </Flex>
-                        <Text color="secondary" wordBreak="break-word">
-                          {t(
-                            selected?.access
-                              ? `folderAccess.permissions.${selected.access}`
-                              : "folderAccess.managementOnly"
-                          )}
-                        </Text>
+                        {!ownsSelected && (
+                          <Text color="secondary" wordBreak="break-word">
+                            {t(
+                              selected?.access
+                                ? `folderAccess.permissions.${selected.access}`
+                                : "folderAccess.managementOnly"
+                            )}
+                          </Text>
+                        )}
                       </Flex>
                       {ownsSelected && (
                         <Flex direction="column" gap="spacing-2" minWidth="0">

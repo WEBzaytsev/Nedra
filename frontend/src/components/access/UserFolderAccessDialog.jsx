@@ -47,13 +47,15 @@ const AccessRow = ({ item, busy, onSave, onRevoke }) => {
             {t("folderAccess.ownerLabel", { owner: item.folder.owner_username })}
           </Text>
         </Flex>
-        <Text wordBreak="break-word" color="secondary">
-          {t(
-            item.effective_permission
-              ? `folderAccess.permissions.${item.effective_permission}`
-              : "folderAccess.permissions.none"
-          )}
-        </Text>
+        {!owned && (
+          <Text wordBreak="break-word" color="secondary">
+            {t(
+              item.effective_permission
+                ? `folderAccess.permissions.${item.effective_permission}`
+                : "folderAccess.permissions.none"
+            )}
+          </Text>
+        )}
       </Flex>
 
       <Flex gap="spacing-2" wrap="wrap" minWidth="0">

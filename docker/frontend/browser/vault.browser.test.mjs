@@ -1033,6 +1033,10 @@ for (const width of [375, 1440]) {
             await dialog
                 .getByText("synthetic created the folder.", { exact: true })
                 .waitFor();
+            assert.equal(
+                await dialog.getByText("Owner", { exact: true }).count(),
+                0,
+            );
             const [renameBox, grantsBox] = await Promise.all([
                 dialog
                     .getByLabel("Rename folder", { exact: true })
