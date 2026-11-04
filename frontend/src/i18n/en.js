@@ -145,6 +145,8 @@ const en = {
     },
     allFolders: "All folders",
     noSearchResults: "No entries match “{{search}}”.",
+    noFolderResults: "No entries in this folder",
+    resetFilters: "Clear filters",
     emptyTitle: "No entries yet.",
     emptyDescription: "Add a login or note to start using your vault.",
     addFirstPassword: "Add entry",
@@ -160,6 +162,7 @@ const en = {
     },
     moveToTrash: {
       title: "Move entry to trash?",
+      action: "Move to trash",
       message:
         "Move <strong>{{name}}</strong> to trash? You can restore the entry from there later.",
     },
@@ -222,7 +225,7 @@ const en = {
       username: "john@example.com",
       website: "https://github.com",
       folder: "Work, Personal",
-      tags: "Type a tag, then press Enter",
+      tags: "work, personal",
       description: "Personal account, work email",
       noteName: "Recovery codes, Wi-Fi, passport",
       passwordName: "GitHub, Gmail, Netflix",
@@ -295,8 +298,8 @@ const en = {
       "Choose a CSV export from Chrome, Bitwarden, KeePass, Proton Pass or another password manager. Nedra matches the columns automatically.",
     backupDescription:
       "Choose a Nedra .cmbackup file, then enter the backup password to restore its entries.",
-    chooseCsv: "Choose CSV file (.csv)",
-    chooseBackup: "Choose backup file (.cmbackup)",
+    chooseCsv: "Choose CSV file",
+    chooseBackup: "Choose backup file",
     selectCsv: "Select a CSV file to continue.",
     selectBackup: "Select a backup file to continue.",
     existingLabel: "If an entry already exists",

@@ -57,9 +57,11 @@ const Brand = ({ version, onClick }) => {
         {name}
       </Text>
       {version && (
-        <Text color="secondary" variant="caption-2">
-          v{String(version).replace(/^v/, "")}
-        </Text>
+        <Box as="span" marginInlineStart="spacing-2">
+          <Text color="secondary" variant="caption-2">
+            v{String(version).replace(/^v/, "")}
+          </Text>
+        </Box>
       )}
     </Button>
   );
@@ -210,10 +212,10 @@ const TopMenu = () => {
       <Flex alignItems="center" gap="spacing-3" minWidth="0" qa="navigation-account">
         <Avatar text={currentUser?.username ?? "?"} size="m" aria-label={currentUser?.username} />
         <Flex direction="column" gap="spacing-1" minWidth="0">
-          <Text variant="subheader-1" ellipsis>
+          <Text variant="subheader-1" wordBreak="break-word">
             {currentUser?.username}
           </Text>
-          <Text color="secondary" variant="caption-2" ellipsis>
+          <Text color="secondary" variant="caption-2" wordBreak="break-word">
             {t(`users.roles.${currentUser?.role}`)}
           </Text>
         </Flex>

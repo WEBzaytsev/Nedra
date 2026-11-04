@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { Flex, Text, Alert, Button, Col, Dialog, Row, Select, TextInput } from "@gravity-ui/uikit";
+import { Flex, Text, Alert, Button, Col, Dialog, Row, Select } from "@gravity-ui/uikit";
 import { useStoreActions } from "easy-peasy";
 import { useTranslation } from "react-i18next";
 
 import { isInvalidExpiry, toLocalExpiry, toUtcExpiry } from "../../lib/accessExpiry";
+import ExpiryField from "../access/ExpiryField";
 
 const ShareDialog = ({ entry, open, onClose }) => {
   const { t } = useTranslation();
@@ -124,10 +125,10 @@ const ShareDialog = ({ entry, open, onClose }) => {
                             {t(`users.roles.${share.role}`)}
                           </Text>
                         </Flex>
+                        <Text>{t("sharing.permission")}</Text>
                         <Select
                           size="xl"
                           width="max"
-                          label={t("sharing.permission")}
                           aria-label={t("sharing.permission")}
                           value={[share.permission]}
                           disabled={busy}
@@ -147,7 +148,7 @@ const ShareDialog = ({ entry, open, onClose }) => {
                           <Button
                             type="button"
                             size="xl"
-                            view="outlined-danger"
+                            view="flat-danger"
                             disabled={busy}
                             onClick={() =>
                               run(() => revokeShare({ entryId: entry.id, userId: share.user_id }))
@@ -168,10 +169,11 @@ const ShareDialog = ({ entry, open, onClose }) => {
                   {t("sharing.grantAccess")}
                 </Text>
                 <Flex direction="column" gap="spacing-3" minWidth="0">
+                  <Text>{t("sharing.user")}</Text>
                   <Select
                     size="xl"
                     width="max"
-                    label={t("sharing.user")}
+
                     aria-label={t("sharing.user")}
                     placeholder={t("sharing.selectTarget")}
                     value={targetId ? [targetId] : []}
@@ -182,27 +184,21 @@ const ShareDialog = ({ entry, open, onClose }) => {
                     }))}
                     onUpdate={([value = ""]) => setTargetId(value)}
                   />
+                  <Text>{t("sharing.permission")}</Text>
                   <Select
                     size="xl"
                     width="max"
-                    label={t("sharing.permission")}
                     aria-label={t("sharing.permission")}
                     value={[permission]}
                     disabled={busy}
                     options={permissionOptions}
                     onUpdate={([value = "read"]) => setPermission(value)}
                   />
-                  <TextInput
-                    size="xl"
-                    type="datetime-local"
-                    label={t("folderAccess.expiresAt")}
-                    note={t("folderAccess.expiresHint")}
+                  <ExpiryField
                     value={expiresAt}
                     disabled={busy}
                     onUpdate={setExpiresAt}
-                    validationState={expiryInvalid ? "invalid" : undefined}
-                    errorMessage={expiryInvalid ? t("folderAccess.expiresValidation") : undefined}
-                    controlProps={{ min: toLocalExpiry(new Date().toISOString()) }}
+                    invalid={expiryInvalid}
                   />
                   <Flex>
                     <Button
@@ -225,7 +221,7 @@ const ShareDialog = ({ entry, open, onClose }) => {
       <Dialog.Footer
         onClickButtonApply={onClose}
         textButtonApply={t("common.actions.close")}
-        propsButtonApply={{ disabled: busy, view: "action" }}
+        propsButtonApply={{ disabled: busy, view: "normal" }}
       />
     </Dialog>
   );

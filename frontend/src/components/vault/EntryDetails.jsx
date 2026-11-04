@@ -17,7 +17,6 @@ import {
   Divider,
   Flex,
   Icon,
-  Label,
   Text,
   Tooltip,
 } from "@gravity-ui/uikit";
@@ -122,12 +121,12 @@ const EntryDetails = ({
           </Text>
         )}
         <Flex gap="spacing-2" wrap="wrap" alignItems="center">
-          <Label>{t(isNote ? "entry.kind.note" : "entry.kind.login")}</Label>
+          <Text color="secondary">{t(isNote ? "entry.kind.note" : "entry.kind.login")}</Text>
           {entry.folder && <Text wordBreak="break-word">{entry.folder}</Text>}
           {entry.access !== "owner" && (
-            <Label>
+            <Text color="secondary" wordBreak="break-word">
               {t(entry.access === "read" ? "sharing.readOnlyAccess" : "sharing.readWrite")}
-            </Label>
+            </Text>
           )}
         </Flex>
         <Flex gap="spacing-2" wrap="wrap" alignItems="center">
@@ -186,8 +185,8 @@ const EntryDetails = ({
       {entry.url && (
         <DefinitionList direction="vertical">
           <DefinitionList.Item name={t("entry.labels.websiteOptional")}>
-            <Flex gap="spacing-2" alignItems="center">
-              <Text variant="code-1" wordBreak="break-all">
+            <Flex gap="spacing-2" alignItems="center" minWidth="0">
+              <Text variant="code-1" wordBreak="break-all" style={{ minWidth: 0, flex: 1 }}>
                 {entry.url}
               </Text>
               <IconAction

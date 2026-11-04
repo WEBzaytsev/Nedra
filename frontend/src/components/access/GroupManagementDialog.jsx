@@ -181,15 +181,15 @@ const GroupManagementDialog = ({ open, onClose }) => {
               <Row gap="spacing-6">
                 <Col size={{ xs: 12, m: 5 }} minWidth="0">
                   <Flex direction="column" gap="spacing-4">
+                    <Text>{t("groups.group")}</Text>
                     <Select
                       size="xl"
                       width="max"
-                      label={t("groups.group")}
                       aria-label={t("groups.group")}
                       value={groupId ? [groupId] : []}
                       options={groups.map((group) => ({
                         value: String(group.id),
-                        content: `${group.name} · ${t("groups.memberCount", { count: group.member_count })}`,
+                        content: group.name,
                       }))}
                       onUpdate={([value = ""]) => setGroupId(value)}
                     />
@@ -202,9 +202,12 @@ const GroupManagementDialog = ({ open, onClose }) => {
                       paddingBlock="spacing-3"
                     >
                       <Flex direction="column" gap="spacing-2" minWidth="0">
+                        <Text as="label" htmlFor="cm-group-rename">
+                          {t("groups.rename")}
+                        </Text>
                         <TextInput
+                          id="cm-group-rename"
                           size="xl"
-                          label={t("groups.rename")}
                           placeholder={t("groups.rename")}
                           controlProps={{ "aria-label": t("groups.rename") }}
                           value={renameName}
@@ -380,7 +383,7 @@ const GroupManagementDialog = ({ open, onClose }) => {
         <Dialog.Footer
           onClickButtonApply={onClose}
           textButtonApply={t("common.actions.close")}
-          propsButtonApply={{ disabled: busy, view: "action" }}
+          propsButtonApply={{ disabled: busy, view: "normal" }}
         />
       </Dialog>
 

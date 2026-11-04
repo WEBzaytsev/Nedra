@@ -1,5 +1,5 @@
 import { useId } from "react";
-import { Flex, Alert, Dialog } from "@gravity-ui/uikit";
+import { Box, Flex, Alert, Dialog } from "@gravity-ui/uikit";
 import { useTranslation } from "react-i18next";
 
 const ConfirmDialog = ({
@@ -34,11 +34,11 @@ const ConfirmDialog = ({
     >
       <Dialog.Header caption={title} id={titleId} />
       <Dialog.Body>
-        <Flex direction="column" gap="spacing-3" minWidth="0">
+        <Box minWidth="0" style={{ overflowWrap: "anywhere" }}>
           {children}
-        </Flex>
+        </Box>
         {error && (
-          <Flex direction="column" gap="spacing-3" minWidth="0" role="alert">
+          <Flex direction="column" marginBlockStart="spacing-3" minWidth="0" role="alert">
             <Alert message={error} theme="danger" view="outlined" />
           </Flex>
         )}

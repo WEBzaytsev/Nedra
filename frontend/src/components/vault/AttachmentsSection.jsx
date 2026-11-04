@@ -164,7 +164,7 @@ const AttachmentsSection = ({ passwordName, onChanged, readOnly = false }) => {
           alignItems={{ m: "center" }}
         >
           <input {...fileInputProps} multiple />
-          <Button {...fileTriggerProps} type="button" size="m" view="outlined" loading={busy}>
+          <Button {...fileTriggerProps} type="button" size="xl" view="outlined" loading={busy}>
             <Icon data={Paperclip} />
             {t("attachments.attachFile")}
           </Button>

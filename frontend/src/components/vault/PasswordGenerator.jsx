@@ -45,7 +45,7 @@ const PasswordGenerator = ({
               type="button"
               size="xl"
               selected={options[key]}
-              view={options[key] ? "action" : "outlined"}
+              view="outlined"
               onClick={() => onToggleClass(key)}
               aria-pressed={options[key]}
             >

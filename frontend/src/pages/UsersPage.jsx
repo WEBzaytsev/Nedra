@@ -150,7 +150,14 @@ const UsersPage = () => {
           title={t("users.serviceTokenOnce")}
           message={
             <Flex direction="column" gap="spacing-3" minWidth="0">
-              <TextInput value={serviceToken} controlProps={{ readOnly: true }} />
+              <Flex as="label" direction="column" gap="spacing-2" minWidth="0">
+                <Text>{t("users.serviceToken")}</Text>
+                <TextInput
+                  value={serviceToken}
+                  size="xl"
+                  controlProps={{ readOnly: true, "aria-label": t("users.serviceToken") }}
+                />
+              </Flex>
               <Flex direction="column" gap="spacing-3" minWidth="0">
                 <Button type="button" view="outlined" onClick={() => copy(serviceToken)}>
                   {t("users.copyToken")}

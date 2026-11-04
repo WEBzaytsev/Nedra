@@ -145,6 +145,8 @@ const ru = {
     },
     allFolders: "Все папки",
     noSearchResults: "По запросу «{{search}}» записей не найдено.",
+    noFolderResults: "В этой папке нет записей",
+    resetFilters: "Сбросить фильтры",
     emptyTitle: "Здесь пока нет записей.",
     emptyDescription: "Добавьте логин с паролем или заметку, чтобы начать работу с хранилищем.",
     addFirstPassword: "Добавить запись",
@@ -160,6 +162,7 @@ const ru = {
     },
     moveToTrash: {
       title: "Переместить запись в корзину?",
+      action: "В корзину",
       message: "Запись <strong>{{name}}</strong> можно будет восстановить из корзины.",
     },
     columns: {
@@ -221,7 +224,7 @@ const ru = {
       username: "john@example.com",
       website: "https://github.com",
       folder: "Работа, личное",
-      tags: "Введите метку и нажмите Enter",
+      tags: "работа, личное",
       description: "Личная учётная запись, рабочая почта",
       noteName: "Коды восстановления, Wi-Fi, паспорт",
       passwordName: "GitHub, Gmail, Netflix",
@@ -294,8 +297,8 @@ const ru = {
       "Выберите CSV из Chrome, Bitwarden, KeePass, Proton Pass или другого менеджера паролей. Недра автоматически сопоставят столбцы.",
     backupDescription:
       "Выберите файл резервной копии Недр .cmbackup и введите её пароль, чтобы восстановить записи.",
-    chooseCsv: "Выбрать CSV-файл (.csv)",
-    chooseBackup: "Выбрать резервную копию (.cmbackup)",
+    chooseCsv: "Выбрать CSV-файл",
+    chooseBackup: "Выбрать файл копии",
     selectCsv: "Сначала выберите CSV-файл.",
     selectBackup: "Сначала выберите файл резервной копии.",
     existingLabel: "Если запись уже существует",

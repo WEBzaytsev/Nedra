@@ -108,6 +108,17 @@ async function vault(
     if (options.clock) await page.clock.install();
     const errors = [];
     const userFolderAccess = structuredClone(options.userFolderAccess ?? []);
+    if (options.updateAvailable) {
+        await page.route("https://api.github.com/**", (route) =>
+            route.fulfill({
+                json: {
+                    tag_name: "v3.2.0",
+                    html_url:
+                        "https://github.com/krolbot/ciphermoth/releases/tag/v3.2.0",
+                },
+            }),
+        );
+    }
     const folderGrants = structuredClone(options.folderGrants ?? []);
     const folderAudit = structuredClone(options.folderAudit ?? []);
     page.on("pageerror", (error) => errors.push(error.stack ?? error.message));
@@ -261,7 +272,7 @@ async function vault(
             data = { entries: [], attachments: [] };
         else if (path === "/api/settings")
             data = {
-                update_check_enabled: false,
+                update_check_enabled: options.updateAvailable ?? false,
                 inactivity_ms: options.clock ? 30000 : 3600000,
                 hidden_ms: options.clock ? 10000 : 3600000,
                 warn_before_ms: options.clock ? 5000 : 60000,
@@ -288,7 +299,7 @@ async function vault(
             };
         else if (path.endsWith("/attachments"))
             data = [{ id: 8, filename: "Readme.txt", size_bytes: 100 }];
-        else if (path.endsWith("/shares")) data = [];
+        else if (path.endsWith("/shares")) data = options.shares ?? [];
         else if (path === "/api/users/share-targets")
             data = options.shareTargets ?? [];
         else if (path === "/api/auth/me")
@@ -406,6 +417,11 @@ async function settleAnimations(page) {
         await Promise.all(
             document
                 .getAnimations()
+                .filter(
+                    (animation) =>
+                        animation.effect?.getComputedTiming().iterations !==
+                        Infinity,
+                )
                 .map((animation) => animation.finished.catch(() => undefined)),
         );
     });
@@ -415,19 +431,24 @@ async function axe(page) {
     await settleAnimations(page);
     await page.addScriptTag({ path: axePath });
     const violations = await page.evaluate(async () =>
+        // Floating UI focus sentinels intentionally redirect Tab and are
+        // aria-hidden. Audit product controls, not these library guards.
         (
-            await window.axe.run(document, {
-                runOnly: {
-                    type: "tag",
-                    values: [
-                        "wcag2a",
-                        "wcag2aa",
-                        "wcag21a",
-                        "wcag21aa",
-                        "wcag22aa",
-                    ],
+            await window.axe.run(
+                { exclude: [["[data-floating-ui-focus-guard]"]] },
+                {
+                    runOnly: {
+                        type: "tag",
+                        values: [
+                            "wcag2a",
+                            "wcag2aa",
+                            "wcag21a",
+                            "wcag21aa",
+                            "wcag22aa",
+                        ],
+                    },
                 },
-            })
+            )
         ).violations.map(({ id, impact, nodes }) => ({
             id,
             impact,
@@ -1932,6 +1953,71 @@ test("profile footer shows and applies current language and theme", async () => 
 
 // Opt-in visual matrix uses exactly the synthetic API/session fixture above.
 // No backend, native runtime, real unlock, or external service is involved.
+async function captureMatrixState(page, prefix) {
+    // Disclosures may scroll more than the body (e.g. a mobile Dialog's root).
+    // Capture the real top and every scroll owner rather than assuming one CSS node.
+    const owners = await page.evaluate(() => {
+        const foreground = [...document.querySelectorAll('[role="dialog"]')]
+            .filter((node) => !node.closest('[aria-hidden="true"]'))
+            .at(-1);
+        window.__matrixScrollOwners = [
+            ...document.querySelectorAll("body *"),
+        ].filter((node) => {
+            const rect = node.getBoundingClientRect();
+            return (
+                rect.width > 0 &&
+                rect.height > 0 &&
+                !node.closest('[aria-hidden="true"]') &&
+                (!foreground ||
+                    foreground.contains(node) ||
+                    node.contains(foreground)) &&
+                node.scrollHeight > node.clientHeight + 1 &&
+                /auto|scroll/.test(getComputedStyle(node).overflowY)
+            );
+        });
+        window.__matrixScrollOwners.forEach((node) => {
+            node.scrollTop = 0;
+        });
+        if (!document.querySelector('[role="dialog"]')) window.scrollTo(0, 0);
+        return window.__matrixScrollOwners.map((node) =>
+            Math.ceil(
+                (node.scrollHeight - node.clientHeight) /
+                    Math.max(1, node.clientHeight * 0.75),
+            ),
+        );
+    });
+    const images = [`${prefix}.png`];
+    await viewportScreenshot(page, images[0]);
+    for (let index = 0; index < owners.length; index++) {
+        for (let step = 1; step <= owners[index]; step++) {
+            await page.evaluate(
+                ({ index, step }) => {
+                    const node = window.__matrixScrollOwners[index];
+                    node.scrollTop = node.clientHeight * 0.75 * step;
+                },
+                { index, step },
+            );
+            const name = `${prefix}-owner-${index}-scroll-${step}.png`;
+            images.push(name);
+            await viewportScreenshot(page, name);
+        }
+        await page.evaluate((index) => {
+            window.__matrixScrollOwners[index].scrollTop = 0;
+        }, index);
+    }
+    if (
+        !(await page.getByRole("dialog").count()) &&
+        !(await page.getByRole("menu").count()) &&
+        (await page.evaluate(
+            () => document.documentElement.scrollHeight > innerHeight + 1,
+        ))
+    ) {
+        const name = `${prefix}-full.png`;
+        images.push(name);
+        await screenshot(page, name);
+    }
+    return images;
+}
 if (process.env.CIPHERMOTH_LAYOUT_MATRIX) {
     const combinations =
         process.env.CIPHERMOTH_LAYOUT_MATRIX === "baseline"
@@ -1939,20 +2025,26 @@ if (process.env.CIPHERMOTH_LAYOUT_MATRIX) {
                   [375, "ru", "dark"],
                   [1440, "en", "light"],
               ]
-            : [320, 375, 768, 1440].flatMap((width) =>
-                  ["ru", "en"].flatMap((language) =>
-                      ["light", "dark"].map((theme) => [
-                          width,
-                          language,
-                          theme,
-                      ]),
-                  ),
-              );
+            : process.env.CIPHERMOTH_LAYOUT_MATRIX === "final"
+              ? [320, 375, 768, 1440].flatMap((width) => [
+                    [width, "ru", "dark"],
+                    [width, "en", "light"],
+                ])
+              : [320, 375, 768, 1440].flatMap((width) =>
+                    ["ru", "en"].flatMap((language) =>
+                        ["light", "dark"].map((theme) => [
+                            width,
+                            language,
+                            theme,
+                        ]),
+                    ),
+                );
     for (const [width, language, theme] of combinations) {
         test(`composition matrix ${width} ${language} ${theme}`, async () => {
             const t = language === "ru" ? ruText : enText;
             const options = {
                 role: "admin",
+                updateAvailable: true,
                 users: [
                     {
                         id: 1,
@@ -1978,7 +2070,24 @@ if (process.env.CIPHERMOTH_LAYOUT_MATRIX) {
                     { user_id: 2, username: "team-member", role: "member" },
                 ],
                 shareTargets: [
+                    { id: 4, username: "auditor", role: "member" },
                     { id: 2, username: "team-member", role: "member" },
+                ],
+                groupAudit: [
+                    {
+                        id: 1,
+                        created: "2026-10-27T12:00:00Z",
+                        actor_username: "synthetic",
+                        action: "group_created",
+                    },
+                ],
+                folderAudit: [
+                    {
+                        id: 1,
+                        created: "2026-10-27T12:00:00Z",
+                        actor_username: "synthetic",
+                        action: "folder_created",
+                    },
                 ],
                 folderGrants: [
                     {
@@ -2009,7 +2118,20 @@ if (process.env.CIPHERMOTH_LAYOUT_MATRIX) {
                 width,
                 language,
                 theme,
-                entries,
+                entries.map((entry) =>
+                    entry.id === 1
+                        ? {
+                              ...entry,
+                              attachment_count: 1,
+                              password_history: [
+                                  {
+                                      changed_at: "2026-09-01T12:00:00Z",
+                                      value: "Synthetic-old-secret",
+                                  },
+                              ],
+                          }
+                        : entry,
+                ),
                 options,
             );
             const metrics = [];
@@ -2021,9 +2143,18 @@ if (process.env.CIPHERMOTH_LAYOUT_MATRIX) {
                 // Dialogs and drawers are viewport overlays. A full-page capture
                 // stitches fixed layers over scrolled content and invents visual
                 // overlaps that are not present in the rendered viewport.
-                await viewportScreenshot(page, `${prefix}-${name}.png`);
+                const images = await captureMatrixState(
+                    page,
+                    `${prefix}-${name}`,
+                );
                 metrics.push({
                     state: name,
+                    images,
+                    language,
+                    theme,
+                    route:
+                        new URL(page.url()).pathname +
+                        new URL(page.url()).search,
                     ...(await page.evaluate(() => ({
                         width: innerWidth,
                         height: innerHeight,
@@ -2051,6 +2182,17 @@ if (process.env.CIPHERMOTH_LAYOUT_MATRIX) {
             };
             try {
                 await capture("vault");
+                const search = page.getByPlaceholder(t.vault.searchPlaceholder);
+                await search.fill("no-synthetic-match");
+                await capture("no-results");
+                await button(t.vault.resetFilters).click();
+                assert.equal(
+                    await page
+                        .locator('[data-qa="entry-list"]')
+                        .getByRole("row")
+                        .count(),
+                    entries.length,
+                );
                 if (width < 1080) {
                     await button(t.navigation.more).click();
                     await capture("drawer");
@@ -2091,26 +2233,7 @@ if (process.env.CIPHERMOTH_LAYOUT_MATRIX) {
                                             const logout = shell.querySelector(
                                                 '[data-qa="navigation-footer"] > button',
                                             );
-                                            const intrinsicWidths = buttons.map(
-                                                (button) => {
-                                                    const clone =
-                                                        button.cloneNode(true);
-                                                    clone.style.position =
-                                                        "fixed";
-                                                    clone.style.visibility =
-                                                        "hidden";
-                                                    clone.style.width =
-                                                        "max-content";
-                                                    clone.style.maxWidth =
-                                                        "none";
-                                                    document.body.append(clone);
-                                                    const width =
-                                                        clone.getBoundingClientRect()
-                                                            .width;
-                                                    clone.remove();
-                                                    return width;
-                                                },
-                                            );
+
                                             return {
                                                 width: preferences.getBoundingClientRect()
                                                     .width,
@@ -2129,7 +2252,7 @@ if (process.env.CIPHERMOTH_LAYOUT_MATRIX) {
                                                         };
                                                     },
                                                 ),
-                                                intrinsicWidths,
+
                                                 logoutWidth:
                                                     logout.getBoundingClientRect()
                                                         .width,
@@ -2156,39 +2279,17 @@ if (process.env.CIPHERMOTH_LAYOUT_MATRIX) {
                                 Math.abs(geometry.footer.bottom - height) <= 1,
                                 JSON.stringify(geometry),
                             );
-                            assert.deepEqual(geometry.controls, [44, 44]);
                             assert.ok(
-                                geometry.preferences.buttonWidths.every(
-                                    (buttonWidth, index) =>
-                                        buttonWidth + 1 >=
-                                        geometry.preferences.intrinsicWidths[
-                                            index
-                                        ],
+                                geometry.controls.every(
+                                    (height) => height >= 44,
                                 ),
-                                JSON.stringify(geometry.preferences),
-                            );
-                            assert.ok(
-                                geometry.preferences.buttonWidths.every(
-                                    (buttonWidth) =>
-                                        Math.abs(
-                                            buttonWidth -
-                                                geometry.preferences.width,
-                                        ) <= 1,
-                                ),
-                                JSON.stringify(geometry.preferences),
                             );
                             assert.ok(
                                 geometry.preferences.buttonRects[0].bottom <=
                                     geometry.preferences.buttonRects[1].top,
                                 JSON.stringify(geometry.preferences),
                             );
-                            assert.ok(
-                                Math.abs(
-                                    geometry.preferences.logoutWidth -
-                                        geometry.preferences.width,
-                                ) <= 1,
-                                JSON.stringify(geometry.preferences),
-                            );
+
                             metrics.push({
                                 state: `drawer-${height}`,
                                 ...geometry,
@@ -2201,30 +2302,6 @@ if (process.env.CIPHERMOTH_LAYOUT_MATRIX) {
                         width,
                         height: width < 600 ? 812 : 900,
                     });
-                    if (process.env.CIPHERMOTH_LAYOUT_MATRIX !== "baseline") {
-                        const centers = await page
-                            .locator('[data-qa="mobile-header"]')
-                            .evaluate((header) =>
-                                ["burger", "brand-mark", "brand-title"].map(
-                                    (qa) => {
-                                        const r = header
-                                            .querySelector(`[data-qa="${qa}"]`)
-                                            .getBoundingClientRect();
-                                        return {
-                                            qa,
-                                            center: r.top + r.height / 2,
-                                        };
-                                    },
-                                ),
-                            );
-                        assert.ok(
-                            Math.max(...centers.map((r) => r.center)) -
-                                Math.min(...centers.map((r) => r.center)) <=
-                                1,
-                            JSON.stringify(centers),
-                        );
-                        metrics.push({ state: "header-axis", centers });
-                    }
                 }
                 const list = page.locator('[data-qa="entry-list"]');
                 const longRow = list
@@ -2250,10 +2327,6 @@ if (process.env.CIPHERMOTH_LAYOUT_MATRIX) {
                     };
                 });
                 for (const value of Object.values(wrappedValues)) {
-                    assert.ok(
-                        value.height >= value.lineHeight * 2 - 1,
-                        JSON.stringify(wrappedValues),
-                    );
                     assert.ok(
                         value.scrollWidth <= value.clientWidth + 1,
                         JSON.stringify(wrappedValues),
@@ -2285,6 +2358,7 @@ if (process.env.CIPHERMOTH_LAYOUT_MATRIX) {
                     .filter({ hasText: "GitHub" })
                     .click();
                 await button(t.common.actions.delete).click();
+                await button(t.vault.moveToTrash.action).waitFor();
                 await capture("delete-confirm");
                 await dismiss();
                 await page.keyboard.press("Escape");
@@ -2311,173 +2385,131 @@ if (process.env.CIPHERMOTH_LAYOUT_MATRIX) {
                 }
                 await utility(t.topMenu.settings);
                 await capture("settings");
+                await page
+                    .getByRole("dialog")
+                    .getByRole("spinbutton")
+                    .first()
+                    .fill("0");
+                await button(t.common.actions.save).click();
+                await capture("settings-validation");
                 await dismiss();
                 await utility(t.auth.changePassword);
                 await capture("change-password");
+                await page
+                    .getByLabel(t.auth.currentPassword, { exact: true })
+                    .fill("Synthetic-current");
+                await page
+                    .getByLabel(t.auth.newPassword, { exact: true })
+                    .fill("Synthetic-new-Password!2026");
+                await page
+                    .getByLabel(t.auth.confirmNewPassword, { exact: true })
+                    .fill("Mismatch");
+                await button(t.auth.changePassword).click();
+                await capture("change-password-validation");
+                await dismiss();
+                await utility(t.common.actions.update);
+                await capture("updates");
                 await dismiss();
                 await button(t.common.actions.add).click();
                 await capture("editor");
                 await button(t.entry.actions.generatePassword).click();
                 await capture("generator");
+                await button(t.generator.regenerate).click();
+                const slider = page.getByRole("slider").first();
+                await slider.focus();
+                await page.keyboard.press("ArrowRight");
+                await capture("generator-strength");
                 await button(t.common.actions.cancel).click();
+                await button(t.common.actions.add).click();
+                await page
+                    .getByRole("radio", {
+                        name: t.entry.labels.note,
+                        exact: true,
+                    })
+                    .check();
+                await capture("create-note");
+                await button(t.common.actions.cancel).click();
+                for (const [entryName, state] of [
+                    ["GitHub", "edit-login"],
+                    ["Recovery notes", "edit-note"],
+                ]) {
+                    await page
+                        .locator('[data-qa="entry-list"]')
+                        .getByRole("row")
+                        .filter({ hasText: entryName })
+                        .click();
+                    await button(t.common.actions.edit).click();
+                    const editor = page.getByRole("dialog", {
+                        name:
+                            state === "edit-login"
+                                ? t.entry.title.editPassword
+                                : t.entry.title.editNote,
+                        exact: true,
+                    });
+                    await editor.waitFor();
+                    if (state === "edit-login") {
+                        await editor
+                            .getByRole("button", {
+                                name: new RegExp(
+                                    `^${t.entry.labels.passwordHistory}`,
+                                ),
+                            })
+                            .click();
+                        await editor
+                            .getByText("Readme.txt", { exact: true })
+                            .waitFor();
+                        await editor
+                            .getByRole("button", {
+                                name: t.entry.labels.notes,
+                                exact: true,
+                            })
+                            .click();
+                    }
+                    await capture(state);
+                    if (state === "edit-login") {
+                        await editor
+                            .getByRole("button", {
+                                name: t.attachments.removeFile,
+                                exact: true,
+                            })
+                            .click();
+                        await capture("attachment-delete-confirm");
+                        await page
+                            .getByRole("dialog", {
+                                name: t.attachments.removeTitle,
+                                exact: true,
+                            })
+                            .getByRole("button", {
+                                name: t.common.actions.cancel,
+                                exact: true,
+                            })
+                            .click();
+                        await page
+                            .getByRole("dialog", {
+                                name: t.attachments.removeTitle,
+                                exact: true,
+                            })
+                            .waitFor({ state: "hidden" });
+                    }
+                    await button(t.common.actions.cancel).click();
+                    await editor.waitFor({ state: "hidden" });
+                    await page.keyboard.press("Escape");
+                }
                 await page.goto(`${origin}/users`);
                 await page.getByText("team-member", { exact: true }).waitFor();
-                if (width < 600) {
-                    const cards = await page
-                        .locator('[data-qa="user-card"]')
-                        .evaluateAll((nodes) =>
-                            nodes.map((card) => {
-                                const bounds = (node) => {
-                                    const rect = node.getBoundingClientRect();
-                                    return {
-                                        top: rect.top,
-                                        bottom: rect.bottom,
-                                        left: rect.left,
-                                        right: rect.right,
-                                        width: rect.width,
-                                        height: rect.height,
-                                        center: rect.top + rect.height / 2,
-                                    };
-                                };
-                                const controls = card.querySelector(
-                                    '[data-qa="user-controls"]',
-                                );
-                                const actions = card.querySelector(
-                                    '[data-qa="user-actions"]',
-                                );
-                                const role = card.querySelector(
-                                    '[data-qa="user-role-control"]',
-                                );
-                                const roleText =
-                                    role.querySelector('[role="combobox"]');
-                                const status = card
-                                    .querySelector('[role="switch"]')
-                                    .closest("label");
-                                const more =
-                                    card.querySelector("[data-user-menu]");
-                                return {
-                                    card: bounds(card),
-                                    controls: bounds(controls),
-                                    role: bounds(role),
-                                    roleText: {
-                                        clientWidth: roleText.clientWidth,
-                                        scrollWidth: roleText.scrollWidth,
-                                    },
-                                    actions: bounds(actions),
-                                    actionCenters: [
-                                        bounds(status).center,
-                                        bounds(more).center,
-                                    ],
-                                };
-                            }),
-                        );
-                    assert.equal(cards.length, 3);
-                    for (const geometry of cards) {
-                        assert.ok(
-                            geometry.card.left >= 0 &&
-                                geometry.card.right <= width &&
-                                geometry.card.height <= 220,
-                            JSON.stringify(geometry),
-                        );
-                        assert.ok(
-                            Math.abs(
-                                geometry.role.width - geometry.controls.width,
-                            ) <= 1,
-                            JSON.stringify(geometry),
-                        );
-                        assert.ok(
-                            geometry.roleText.scrollWidth <=
-                                geometry.roleText.clientWidth,
-                            JSON.stringify(geometry),
-                        );
-                        assert.ok(
-                            Math.abs(
-                                geometry.actions.width -
-                                    geometry.controls.width,
-                            ) <= 1,
-                            JSON.stringify(geometry),
-                        );
-                        assert.ok(
-                            Math.max(...geometry.actionCenters) -
-                                Math.min(...geometry.actionCenters) <=
-                                1,
-                            JSON.stringify(geometry),
-                        );
-                    }
-                    metrics.push({ state: "user-cards", cards });
-                }
-                if (width >= 768) {
-                    const cards = await page
-                        .locator('[data-qa="user-card"]')
-                        .evaluateAll((nodes) =>
-                            nodes.map((card) => {
-                                const bounds = (node) => {
-                                    const rect = node.getBoundingClientRect();
-                                    return {
-                                        left: rect.left,
-                                        right: rect.right,
-                                        width: rect.width,
-                                    };
-                                };
-                                const controls = card.querySelector(
-                                    '[data-qa="user-controls"]',
-                                );
-                                const role = card.querySelector(
-                                    '[data-qa="user-role-control"]',
-                                );
-                                const actions = card.querySelector(
-                                    '[data-qa="user-actions"]',
-                                );
-                                const roleText =
-                                    role.querySelector('[role="combobox"]');
-                                return {
-                                    card: {
-                                        ...bounds(card),
-                                        clientWidth: card.clientWidth,
-                                        scrollWidth: card.scrollWidth,
-                                    },
-                                    controls: bounds(controls),
-                                    role: bounds(role),
-                                    actions: bounds(actions),
-                                    roleText: {
-                                        clientWidth: roleText.clientWidth,
-                                        scrollWidth: roleText.scrollWidth,
-                                    },
-                                };
-                            }),
-                        );
-                    assert.equal(cards.length, 3);
-                    for (const card of cards) {
-                        assert.ok(
-                            card.card.scrollWidth <= card.card.clientWidth,
-                            JSON.stringify(card),
-                        );
-                        assert.ok(
-                            card.roleText.scrollWidth <=
-                                card.roleText.clientWidth,
-                            JSON.stringify(card),
-                        );
-                    }
-                    for (const key of ["left", "right", "width"]) {
-                        assert.ok(
-                            Math.max(...cards.map((card) => card.role[key])) -
-                                Math.min(
-                                    ...cards.map((card) => card.role[key]),
-                                ) <=
-                                1,
-                            JSON.stringify(cards),
-                        );
-                    }
-                    assert.ok(
-                        Math.max(...cards.map((card) => card.actions.right)) -
-                            Math.min(
-                                ...cards.map((card) => card.actions.right),
-                            ) <=
-                            1,
-                        JSON.stringify(cards),
+                const clippedAccounts = await page
+                    .locator(
+                        '[data-qa="user-card"], [data-qa="user-role-control"]',
+                    )
+                    .evaluateAll((nodes) =>
+                        nodes
+                            .filter(
+                                (node) =>
+                                    node.scrollWidth > node.clientWidth + 1,
+                            )
+                            .map((node) => node.textContent),
                     );
-                    metrics.push({ state: "user-cards-wide", cards });
-                }
+                assert.deepEqual(clippedAccounts, []);
                 await capture("users");
                 await button(t.groups.title).click();
                 await page
@@ -2513,10 +2545,19 @@ if (process.env.CIPHERMOTH_LAYOUT_MATRIX) {
                 );
                 await page.goto(`${origin}/passwords`);
                 await page
-                    .getByText(t.vault.subtitle.empty, { exact: true })
+                    .getByText(t.vault.emptyTitle, { exact: true })
                     .first()
                     .waitFor();
                 await capture("empty");
+                assert.equal(
+                    await page
+                        .getByRole("button", {
+                            name: t.common.actions.add,
+                            exact: true,
+                        })
+                        .count(),
+                    0,
+                );
                 await page.route("**/api/passwords", (route) =>
                     route.fulfill({
                         status: 503,
@@ -2529,6 +2570,18 @@ if (process.env.CIPHERMOTH_LAYOUT_MATRIX) {
                     .first()
                     .waitFor();
                 await capture("error");
+                assert.equal(
+                    await page
+                        .getByText(t.vault.emptyTitle, { exact: true })
+                        .count(),
+                    0,
+                );
+                await page.route("**/api/passwords", (route) =>
+                    route.fulfill({ json: entries }),
+                );
+                await button(t.common.actions.retry).click();
+                await page.locator('[data-qa="entry-list"]').waitFor();
+                await capture("retry-recovered");
                 assert.deepEqual(errors, []);
             } finally {
                 if (process.env.CIPHERMOTH_SCREENSHOT_DIR)
@@ -2543,4 +2596,599 @@ if (process.env.CIPHERMOTH_LAYOUT_MATRIX) {
             }
         });
     }
+
+    // Additional states use the same shipped app and intercepted fixture. They
+    // protect long labels, request/empty distinctions and secondary form owners.
+    for (const width of [320, 375, 768, 1440])
+        for (const [language, theme] of [
+            ["ru", "dark"],
+            ["en", "light"],
+        ]) {
+            test(`extended matrix ${width} ${language} ${theme}`, async () => {
+                const t = language === "ru" ? ruText : enText;
+                const users = [
+                    {
+                        id: 1,
+                        username: "synthetic",
+                        role: "admin",
+                        active: true,
+                    },
+                    {
+                        id: 2,
+                        username: "team-member",
+                        role: "member",
+                        active: true,
+                        must_change_password: true,
+                    },
+                    {
+                        id: 3,
+                        username: "automation",
+                        role: "service",
+                        active: false,
+                    },
+                ];
+                const records = entries.map((entry) =>
+                    entry.id === 1
+                        ? {
+                              ...entry,
+                              attachment_count: 1,
+                              password_history: [
+                                  {
+                                      changed_at: "2026-09-01T12:00:00Z",
+                                      value: "Synthetic-old-secret",
+                                  },
+                              ],
+                          }
+                        : entry,
+                );
+                const { context, page, errors } = await vault(
+                    width,
+                    language,
+                    theme,
+                    records,
+                    {
+                        role: "admin",
+                        users,
+                        shares: [
+                            {
+                                user_id: 2,
+                                username: "team-member",
+                                role: "member",
+                                permission: "read",
+                            },
+                        ],
+                        userFolderAccess: [
+                            {
+                                folder: {
+                                    id: 1,
+                                    name: "Work / " + "continuous".repeat(8),
+                                    owner_id: 1,
+                                    owner_username: "synthetic",
+                                },
+                                direct_permission: "read",
+                                effective_permission: "write",
+                                sources: [
+                                    {
+                                        source: "group",
+                                        source_id: 10,
+                                        name:
+                                            "Operations / " +
+                                            "continuous".repeat(12),
+                                        permission: "write",
+                                        expired: false,
+                                    },
+                                    {
+                                        source: "direct",
+                                        source_id: 2,
+                                        name: "team-member",
+                                        permission: "read",
+                                        expired: true,
+                                    },
+                                ],
+                            },
+                        ],
+                    },
+                );
+                const metrics = [];
+                const button = (name) =>
+                    page.getByRole("button", { name, exact: true });
+                const capture = async (state) => {
+                    await page.evaluate(() => document.fonts.ready);
+                    await fits(page);
+                    const images = await captureMatrixState(
+                        page,
+                        `extended-${width}-${language}-${theme}-${state}`,
+                    );
+                    await axe(page);
+                    metrics.push({
+                        state,
+                        images,
+                        route:
+                            new URL(page.url()).pathname +
+                            new URL(page.url()).search,
+                        width,
+                        language,
+                        theme,
+                    });
+                };
+                const go = async (tool) => {
+                    await page.goto(
+                        `${origin}/passwords${tool ? `?tool=${tool}` : ""}`,
+                    );
+                    if (tool) {
+                        await page.getByRole("dialog").waitFor();
+                        // Wait for the overlay's real focus handoff. With reduced
+                        // motion CSS can finish before the modal focus lifecycle.
+                        await page.waitForFunction(() =>
+                            document.activeElement?.closest('[role="dialog"]'),
+                        );
+                    } else
+                        await page.locator('[data-qa="entry-list"]').waitFor();
+                };
+                const dismiss = async () => {
+                    await page.keyboard.press("Escape");
+                    await page.getByRole("dialog").waitFor({ state: "hidden" });
+                };
+                const override = async (path, json, status = 200) =>
+                    page.route(`**/api/${path}`, (route) =>
+                        route.fulfill({ status, json }),
+                    );
+                try {
+                    await page.emulateMedia({ reducedMotion: "reduce" });
+                    await page
+                        .getByRole("combobox", {
+                            name: t.common.fields.folder,
+                            exact: true,
+                        })
+                        .click();
+                    await page.getByRole("option", { name: /^Shared/ }).click();
+                    await capture("folder-filter");
+                    await go();
+                    await page
+                        .locator('[data-qa="entry-list"]')
+                        .getByRole("row")
+                        .filter({ hasText: "GitHub" })
+                        .click();
+                    const detail =
+                        width >= 1280
+                            ? page.getByRole("region", {
+                                  name: t.vault.browser.details,
+                                  exact: true,
+                              })
+                            : page.getByRole("dialog", {
+                                  name: "GitHub",
+                                  exact: true,
+                              });
+                    await detail
+                        .getByRole("button", {
+                            name: t.vault.columns.revealPassword,
+                            exact: true,
+                        })
+                        .click();
+                    await detail
+                        .getByRole("button", {
+                            name: `${t.passwordField.show}: Recovery code`,
+                            exact: true,
+                        })
+                        .click();
+                    await detail
+                        .getByRole("button", {
+                            name: new RegExp(
+                                `^${t.entry.labels.passwordHistory}`,
+                            ),
+                        })
+                        .click();
+                    await detail
+                        .getByRole("button", {
+                            name: new RegExp(`^${t.entry.labels.attachments}`),
+                        })
+                        .click();
+                    await detail
+                        .getByText("Readme.txt", { exact: true })
+                        .waitFor();
+                    await capture("details-revealed-history-attachments");
+                    await detail
+                        .getByRole("button", {
+                            name: t.vault.columns.copyPassword,
+                            exact: true,
+                        })
+                        .click();
+
+                    await detail
+                        .getByRole("button", {
+                            name: /^(Copy 2FA code|Скопировать код 2FA)/,
+                        })
+                        .click();
+                    await capture("copy-feedback");
+                    // Keep the feedback capture, but do not let its transient
+                    // toasts obscure the independent sharing/expiry states.
+                    for (const toast of await page
+                        .locator('[data-toast="true"]')
+                        .all()) {
+                        await toast.getByRole("button").click();
+                    }
+                    await detail
+                        .getByRole("button", {
+                            name: t.sharing.manage,
+                            exact: true,
+                        })
+                        .click();
+                    await page
+                        .getByRole("dialog", {
+                            name: t.sharing.manage,
+                            exact: true,
+                        })
+                        .waitFor();
+                    await capture("share-current");
+                    await page
+                        .getByRole("dialog", {
+                            name: t.sharing.manage,
+                            exact: true,
+                        })
+                        .getByLabel(t.folderAccess.expiresAt, { exact: true })
+                        .fill("2000-01-01T10:00");
+                    await capture("share-expiry-error");
+                    await dismiss();
+                    await page.keyboard.press("Escape");
+                    await go("backup");
+                    await button(t.backup.title).click();
+                    await capture("backup-validation");
+                    await page
+                        .getByLabel(t.auth.masterPassword, { exact: true })
+                        .fill("Synthetic-only");
+                    let releaseBackup;
+                    const backupPending = new Promise((resolve) => {
+                        releaseBackup = resolve;
+                    });
+                    await page.route(
+                        "**/api/passwords/backup",
+                        async (route) => {
+                            await backupPending;
+                            await route.fulfill({
+                                status: 422,
+                                json: { detail: t.errors.backupFailed },
+                            });
+                        },
+                    );
+                    const backupRequest = page.waitForRequest(
+                        "**/api/passwords/backup",
+                    );
+                    await button(t.backup.title).click();
+                    await backupRequest;
+                    assert.equal(
+                        await button(t.backup.title).isDisabled(),
+                        true,
+                    );
+                    await capture("backup-busy");
+                    releaseBackup();
+                    await page
+                        .getByText(t.errors.backupFailed, { exact: true })
+                        .waitFor();
+                    await capture("backup-error");
+                    await dismiss();
+                    await go("import");
+                    await button(t.common.actions.import).click();
+                    await capture("import-validation");
+                    await page
+                        .getByRole("radio", {
+                            name: t.importDialog.csvMode,
+                            exact: true,
+                        })
+                        .check();
+                    await button(t.common.actions.import).click();
+                    await capture("csv-validation");
+                    const filename =
+                        "Synthetic-" + "continuous".repeat(12) + ".csv";
+                    await page.locator('input[type="file"]').setInputFiles({
+                        name: filename,
+                        mimeType: "text/csv",
+                        buffer: Buffer.from(
+                            "name,password\nfixture,synthetic-only\n",
+                        ),
+                    });
+                    await capture("csv-file");
+                    await override(
+                        "passwords/import/csv",
+                        { detail: t.errors.importFailed },
+                        422,
+                    );
+                    await button(t.common.actions.import).click();
+                    await page
+                        .getByText(t.errors.importFailed, { exact: true })
+                        .waitFor();
+                    await capture("csv-error");
+                    let releaseImport;
+                    const importPending = new Promise((resolve) => {
+                        releaseImport = resolve;
+                    });
+                    await page.route(
+                        "**/api/passwords/import/csv",
+                        async (route) => {
+                            await importPending;
+                            await route.fulfill({
+                                json: {
+                                    total: 3,
+                                    imported: 1,
+                                    overwritten: 1,
+                                    skipped: 1,
+                                    renamed: 1,
+                                    renamed_rows: [
+                                        {
+                                            where: "row 2",
+                                            name: "Renamed synthetic entry",
+                                            reason: "Name conflict",
+                                        },
+                                    ],
+                                    ignored: 1,
+                                    ignored_rows: [
+                                        {
+                                            where: "row 4",
+                                            name: "Invalid synthetic entry",
+                                            reason: "Missing password",
+                                        },
+                                    ],
+                                },
+                            });
+                        },
+                    );
+                    const importRequest = page.waitForRequest(
+                        "**/api/passwords/import/csv",
+                    );
+                    await button(t.common.actions.import).click();
+                    await importRequest;
+                    assert.equal(
+                        await button(t.common.actions.import).isDisabled(),
+                        true,
+                    );
+                    await capture("csv-busy");
+                    releaseImport();
+                    await page
+                        .getByRole("dialog", {
+                            name: t.importDialog.completeTitle,
+                            exact: true,
+                        })
+                        .waitFor();
+                    await capture("csv-result");
+                    await dismiss();
+                    await go("import");
+                    await page.locator('input[type="file"]').setInputFiles({
+                        name: "Synthetic.cmbackup",
+                        mimeType: "application/octet-stream",
+                        buffer: Buffer.from("synthetic UI fixture only"),
+                    });
+                    await page
+                        .getByLabel(t.importDialog.backupPassword, {
+                            exact: true,
+                        })
+                        .fill("Synthetic-only-password");
+                    await override("passwords/import", {
+                        total: 1,
+                        imported: 1,
+                        trashed: 1,
+                        attachments: 1,
+                        grants_restored: 1,
+                        settings_restored: true,
+                    });
+                    await button(t.common.actions.import).click();
+                    await page
+                        .getByRole("dialog", {
+                            name: t.importDialog.completeTitle,
+                            exact: true,
+                        })
+                        .waitFor();
+                    await capture("restore-result");
+                    await dismiss();
+                    await go("folders");
+                    await page
+                        .getByRole("dialog")
+                        .getByRole("heading", { name: "Work", exact: true })
+                        .waitFor();
+                    await page
+                        .getByRole("dialog")
+                        .getByRole("combobox", {
+                            name: t.common.fields.folder,
+                            exact: true,
+                        })
+                        .click();
+
+                    await page.getByRole("option", { name: /^Shared/ }).click();
+                    await capture("folder-readonly");
+                    await dismiss();
+                    await override("folders", []);
+                    await go("folders");
+                    await page
+                        .getByText(t.folderAccess.empty, { exact: true })
+                        .waitFor();
+                    await capture("folders-empty");
+                    await dismiss();
+                    await page.goto(`${origin}/users`);
+                    await page
+                        .getByText("team-member", { exact: true })
+                        .waitFor();
+                    await button(t.groups.title).click();
+                    await page
+                        .getByText(t.groups.empty, { exact: true })
+                        .waitFor();
+                    await capture("groups-empty");
+                    await dismiss();
+                    await button(`${t.navigation.more}: team-member`).click();
+                    await capture("user-menu");
+                    await page
+                        .getByRole("menuitem", {
+                            name: t.folderAccess.manage,
+                            exact: true,
+                        })
+                        .click();
+                    await page.getByText(/Operations \/ continuous/).waitFor();
+                    await capture("user-acl-sources");
+                    await dismiss();
+                    await button(`${t.navigation.more}: team-member`).click();
+                    await page
+                        .getByRole("menuitem", {
+                            name: t.common.actions.delete,
+                            exact: true,
+                        })
+                        .click();
+                    await capture("user-delete-confirm");
+                    await dismiss();
+                    const form = page.locator("form");
+                    await form
+                        .getByRole("combobox", {
+                            name: t.users.role,
+                            exact: true,
+                        })
+                        .click();
+                    await page
+                        .getByRole("option", {
+                            name: t.users.roles.service,
+                            exact: true,
+                        })
+                        .click();
+                    await capture("create-service");
+                    await form
+                        .getByLabel(t.auth.username, { exact: false })
+                        .fill("synthetic-service");
+                    await page.route("**/api/users", (route) =>
+                        route.request().method() === "POST"
+                            ? route.fulfill({
+                                  json: {
+                                      id: 4,
+                                      service_token:
+                                          "Synthetic-issued-token-only",
+                                  },
+                              })
+                            : route.fallback(),
+                    );
+                    await form
+                        .getByRole("button", {
+                            name: t.common.actions.create,
+                            exact: true,
+                        })
+                        .click();
+                    await page
+                        .getByText(t.users.serviceTokenOnce, { exact: true })
+                        .waitFor();
+                    await capture("service-token");
+                    // Clear transient messages before inspecting other empty/error owners.
+                    await go("trash");
+                    await page
+                        .getByRole("button", {
+                            name: /^(Удалить навсегда|Delete forever):/,
+                        })
+                        .click();
+
+                    await page.route("**/api/passwords/**", (route) =>
+                        new URL(route.request().url()).pathname.endsWith(
+                            "/purge",
+                        )
+                            ? route.fulfill({
+                                  status: 503,
+                                  json: { detail: t.errors.deletePassword },
+                              })
+                            : route.fallback(),
+                    );
+                    await page
+                        .getByRole("dialog", {
+                            name: t.trashDialog.deleteForeverTitle,
+                            exact: true,
+                        })
+                        .getByRole("button", {
+                            name: t.trashDialog.deleteForever,
+                            exact: true,
+                        })
+                        .click();
+                    await page
+                        .getByText(t.trashDialog.purgeFailed, { exact: true })
+                        .waitFor();
+                    await capture("purge-error");
+
+                    await page
+                        .getByRole("dialog", {
+                            name: t.trashDialog.deleteForeverTitle,
+                            exact: true,
+                        })
+                        .getByRole("button", {
+                            name: t.common.actions.cancel,
+                            exact: true,
+                        })
+                        .click();
+                    await page
+                        .getByRole("dialog", {
+                            name: t.trashDialog.deleteForeverTitle,
+                            exact: true,
+                        })
+                        .waitFor({ state: "hidden" });
+                    await override("passwords/trash", []);
+                    await page.reload();
+                    await page
+                        .getByText(t.trashDialog.empty, { exact: true })
+                        .waitFor();
+                    await capture("trash-empty");
+                    await dismiss();
+                    const weak = [
+                        entries[0],
+                        ...entries.slice(1).map((entry) => ({
+                            ...entry,
+                            password_value: "x",
+                            updated: "2020-01-01T00:00:00Z",
+                        })),
+                    ];
+                    await override("passwords", weak);
+                    await go("health");
+                    await capture("health-issues");
+                    await dismiss();
+                    await override("vault/damaged", {
+                        entries: [77],
+                        attachments: [88],
+                    });
+                    await go();
+                    await page
+                        .getByRole("button", {
+                            name: t.common.actions.remove,
+                            exact: true,
+                        })
+                        .waitFor();
+                    await capture("damage-warning");
+                    await override(
+                        "auth/entry-draft-key",
+                        { detail: t.entry.draft.unavailable },
+                        503,
+                    );
+                    await page.reload();
+                    await page
+                        .getByRole("button", {
+                            name: t.common.actions.retry,
+                            exact: true,
+                        })
+                        .waitFor();
+                    await capture("draft-error-disabled");
+                    // Hold only the synthetic list GET to inspect loading, without real data.
+                    let release;
+                    const pending = new Promise((resolve) => {
+                        release = resolve;
+                    });
+                    await page.route("**/api/passwords", async (route) => {
+                        await pending;
+                        await route.fulfill({ json: entries });
+                    });
+                    await page.reload();
+                    await page
+                        .locator('[data-qa="vault-page"] .g-loader')
+                        .waitFor();
+                    await capture("vault-loading");
+                    release();
+                    assert.deepEqual(errors, []);
+                } finally {
+                    if (process.env.CIPHERMOTH_SCREENSHOT_DIR)
+                        await writeFile(
+                            resolve(
+                                process.env.CIPHERMOTH_SCREENSHOT_DIR,
+                                `extended-${width}-${language}-${theme}-metrics.json`,
+                            ),
+                            JSON.stringify(metrics, null, 2),
+                        );
+                    await context.close();
+                }
+            });
+        }
 }

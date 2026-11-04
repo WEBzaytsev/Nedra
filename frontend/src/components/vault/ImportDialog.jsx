@@ -10,7 +10,6 @@ import {
   Icon,
   RadioGroup,
   Row,
-  SegmentedRadioGroup,
   useFileInput,
 } from "@gravity-ui/uikit";
 import { Trans, useTranslation } from "react-i18next";
@@ -222,20 +221,17 @@ const ImportDialog = ({ open, onClose, onImport, onImportCsv }) => {
           <ImportResult result={result} />
         ) : (
           <Flex direction="column" gap="spacing-5" minWidth="0">
-            <SegmentedRadioGroup
+            <RadioGroup
               size="l"
               name="import-mode"
-              width="max"
+              direction="vertical"
               value={mode}
               onUpdate={changeMode}
-            >
-              <SegmentedRadioGroup.Option value="ciphermoth">
-                {t("importDialog.backupMode")}
-              </SegmentedRadioGroup.Option>
-              <SegmentedRadioGroup.Option value="csv">
-                {t("importDialog.csvMode")}
-              </SegmentedRadioGroup.Option>
-            </SegmentedRadioGroup>
+              options={[
+                { value: "ciphermoth", content: t("importDialog.backupMode") },
+                { value: "csv", content: t("importDialog.csvMode") },
+              ]}
+            />
 
             <Text as="div" color="secondary" wordBreak="break-word">
               {isCsv ? t("importDialog.csvDescription") : t("importDialog.backupDescription")}
@@ -255,12 +251,9 @@ const ImportDialog = ({ open, onClose, onImport, onImportCsv }) => {
                     onClick={IS_DESKTOP && !isCsv ? chooseFile : fileTriggerProps.onClick}
                   >
                     <Icon data={FileArrowUp} />
-                    <Text ellipsis>
-                      {file
-                        ? file.name
-                        : t(isCsv ? "importDialog.chooseCsv" : "importDialog.chooseBackup")}
-                    </Text>
+                    {t(isCsv ? "importDialog.chooseCsv" : "importDialog.chooseBackup")}
                   </Button>
+                  {file && <Text wordBreak="break-all">{file.name}</Text>}
 
                   {!isCsv && (
                     <PasswordField

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation } from "react-router-dom";
 import {
   Alert,
@@ -28,6 +28,15 @@ const LoginPage = () => {
   const { state } = useLocation();
   const [acknowledged, setAcknowledged] = useState(false);
   const [notice, setNotice] = useState("");
+  const usernameRef = useRef(null);
+  const passwordRef = useRef(null);
+  const confirmRef = useRef(null);
+  const [invalidField, setInvalidField] = useState("");
+  const reportError = (message, field, ref) => {
+    setError(message);
+    setInvalidField(field);
+    ref?.current?.focus();
+  };
 
   const { fetchStatus, authenticate, setUsername, setValue, setConfirm, setError } =
     useStoreActions((actions) => actions.ciphermothModels.masterPassword);
@@ -48,11 +57,11 @@ const LoginPage = () => {
 
   const handleLogin = () => {
     if (!username.trim()) {
-      setError(t("auth.validation.enterUsername"));
+      reportError(t("auth.validation.enterUsername"), "username", usernameRef);
       return;
     }
     if (!value.trim()) {
-      setError(t("auth.validation.enterMasterPassword"));
+      reportError(t("auth.validation.enterMasterPassword"), "password", passwordRef);
       return;
     }
     authenticate({ endpoint: "/auth/login", username, password: value, returnTo: state?.returnTo });
@@ -60,19 +69,19 @@ const LoginPage = () => {
 
   const handleCreate = () => {
     if (!username.trim()) {
-      setError(t("auth.validation.enterAdministratorUsername"));
+      reportError(t("auth.validation.enterAdministratorUsername"), "username", usernameRef);
       return;
     }
     if (!value) {
-      setError(t("auth.validation.enterNewMasterPassword"));
+      reportError(t("auth.validation.enterNewMasterPassword"), "password", passwordRef);
       return;
     }
     if (value !== confirm) {
-      setError(t("auth.validation.passwordsDoNotMatch"));
+      reportError(t("auth.validation.passwordsDoNotMatch"), "confirm", confirmRef);
       return;
     }
     if (strength && strength.value < 70) {
-      setError(t("auth.validation.weakPassword"));
+      reportError(t("auth.validation.weakPassword"), "password", passwordRef);
       return;
     }
     if (!acknowledged) {
@@ -122,32 +131,49 @@ const LoginPage = () => {
           <Box as="h1" margin="0">
             <Text variant="header-1">{t(initialized ? "auth.unlock" : "auth.setupTitle")}</Text>
           </Box>
-          <Text color="secondary">{t(initialized ? "auth.tagline" : "auth.setupDescription")}</Text>
+          {!initialized && <Text color="secondary">{t("auth.setupDescription")}</Text>}
           {notice && <Alert theme="info" message={notice} />}
-          {error && <Alert theme="danger" message={error} />}
-          <TextInput
-            id="cm-auth-username"
-            placeholder={t(initialized ? "auth.username" : "auth.administratorUsername")}
-            required
-            size="xl"
-            value={username}
-            disabled={loading}
-            autoFocus
-            autoComplete="username"
-            onUpdate={(next) => {
-              setUsername(next);
-              setError(null);
-            }}
-            note={initialized ? undefined : t("auth.usernameRules")}
-            controlProps={{
-              "aria-label": t(initialized ? "auth.username" : "auth.administratorUsername"),
-              autoCapitalize: "none",
-              spellCheck: false,
-              required: true,
-            }}
-          />
+          {error && !invalidField && (
+            <Box role="alert">
+              <Alert theme="danger" message={error} />
+            </Box>
+          )}
+          <Flex as="label" direction="column" gap="spacing-2">
+            <Text>{t(initialized ? "auth.username" : "auth.administratorUsername")}</Text>
+            <TextInput
+              id="cm-auth-username"
+              controlRef={usernameRef}
+              validationState={error && invalidField === "username" ? "invalid" : undefined}
+              errorMessage={invalidField === "username" ? error : undefined}
+              required
+              size="xl"
+              value={username}
+              disabled={loading}
+              autoFocus
+              autoComplete="username"
+              onUpdate={(next) => {
+                setUsername(next);
+                setError(null);
+                setInvalidField("");
+              }}
+              controlProps={{
+                "aria-label": t(initialized ? "auth.username" : "auth.administratorUsername"),
+                autoCapitalize: "none",
+                spellCheck: false,
+                required: true,
+              }}
+            />
+            {!initialized && (
+              <Text variant="caption-2" color="secondary">
+                {t("auth.usernameRules")}
+              </Text>
+            )}
+          </Flex>
           <PasswordField
-            placeholder={t("auth.masterPassword")}
+            label={t("auth.masterPassword")}
+            inputRef={passwordRef}
+            error={Boolean(error && invalidField === "password")}
+            helperText={invalidField === "password" ? error : undefined}
             required
             value={value}
             onGenerate={initialized ? undefined : setValue}
@@ -155,6 +181,7 @@ const LoginPage = () => {
             onUpdate={(next) => {
               setValue(next);
               setError(null);
+              setInvalidField("");
             }}
             autoComplete={initialized ? "current-password" : "new-password"}
             controlProps={{ "aria-label": t("auth.masterPassword") }}
@@ -168,13 +195,17 @@ const LoginPage = () => {
           {!initialized && (
             <>
               <PasswordField
-                placeholder={t("auth.confirmMasterPassword")}
+                label={t("auth.confirmMasterPassword")}
+                inputRef={confirmRef}
+                error={Boolean(error && invalidField === "confirm")}
+                helperText={invalidField === "confirm" ? error : undefined}
                 required
                 value={confirm}
                 disabled={loading}
                 onUpdate={(next) => {
                   setConfirm(next);
                   setError(null);
+                  setInvalidField("");
                 }}
                 autoComplete="new-password"
                 controlProps={{ "aria-label": t("auth.confirmMasterPassword") }}

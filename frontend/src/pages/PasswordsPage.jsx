@@ -268,13 +268,9 @@ const PasswordsPage = () => {
   };
 
   const handlePurge = async (name) => {
-    try {
-      await purge(name);
-      enqueueSnackbar(t("vault.messages.permanentlyDeleted"), { variant: "success" });
-    } catch (requestError) {
-      enqueueSnackbar(requestError.message, { variant: "error" });
-      throw requestError;
-    }
+    // TrashDialog keeps a failed purge inline, alongside Retry and Cancel.
+    await purge(name);
+    enqueueSnackbar(t("vault.messages.permanentlyDeleted"), { variant: "success" });
   };
 
   const handleBackup = async (masterPassword) => {
@@ -315,8 +311,11 @@ const PasswordsPage = () => {
     );
   }, [passwords, search, activeFolder, sortOrder]);
 
-  const subtitle = useMemo(() => buildSubtitle(loading, passwords, t), [loading, passwords, t]);
-  const isEmpty = !loading && passwords.length === 0;
+  const subtitle = useMemo(
+    () => (error || passwords.length === 0 ? "" : buildSubtitle(loading, passwords, t)),
+    [error, loading, passwords, t]
+  );
+  const isEmpty = !loading && !error && passwords.length === 0;
 
   return (
     <Flex
@@ -345,22 +344,36 @@ const PasswordsPage = () => {
             {subtitle}
           </Text>
         </Flex>
-        <Flex
-          direction={{ xs: "column", s: "row" }}
-          gap="spacing-3"
-          minWidth="0"
-          alignItems={{ s: "center" }}
-        >
-          <Button type="button" view="action" size="xl" disabled={!draftReady} onClick={openAdd}>
-            <Icon data={Plus} />
-            {t("common.actions.add")}
-          </Button>
-        </Flex>
+        {!isEmpty && (
+          <Flex>
+            <Button type="button" view="action" size="xl" disabled={!draftReady} onClick={openAdd}>
+              <Icon data={Plus} />
+              {t("common.actions.add")}
+            </Button>
+          </Flex>
+        )}
       </Flex>
 
       {(error || (draftError && !draftReady) || damageCheckError || damagedCount > 0) && (
         <Flex direction="column" gap="spacing-3" minWidth="0">
-          {error && <Alert theme="danger" view="outlined" message={error} />}
+          {error && (
+            <Alert
+              theme="danger"
+              view="outlined"
+              message={error}
+              actions={
+                <Button
+                  type="button"
+                  size="xl"
+                  view="outlined"
+                  onClick={() => get()}
+                  disabled={loading}
+                >
+                  {t("common.actions.retry")}
+                </Button>
+              }
+            />
+          )}
           {draftError && !draftReady && (
             <Alert
               theme="danger"
@@ -424,7 +437,7 @@ const PasswordsPage = () => {
         </Flex>
       )}
 
-      {!isEmpty && (
+      {passwords.length > 0 && (
         <Row gap="spacing-3">
           <Col
             size={{ xs: 12, m: folderOptions.length ? 12 : 8, xl: folderOptions.length ? 6 : 8 }}
@@ -489,13 +502,19 @@ const PasswordsPage = () => {
         </Flex>
       )}
 
-      {isEmpty && <EmptyVault onAdd={openAdd} />}
+      {isEmpty && <EmptyVault onAdd={openAdd} disabled={!draftReady} />}
 
       {passwords.length > 0 && (
         <EntryBrowser
           entries={filteredPasswords}
           totalCount={passwords.length}
-          emptyMessage={t("vault.noSearchResults", { search: search.trim() })}
+          emptyMessage={t(search.trim() ? "vault.noSearchResults" : "vault.noFolderResults", {
+            search: search.trim(),
+          })}
+          onResetFilters={() => {
+            setSearch("");
+            setFolderFilter("");
+          }}
           requestedEntryId={requestedEntryId}
           onRequestedEntryOpen={() => setRequestedEntryId(null)}
           onCopy={copy}
@@ -555,7 +574,7 @@ const PasswordsPage = () => {
       <ConfirmDialog
         open={Boolean(deleteTarget)}
         title={t("vault.moveToTrash.title")}
-        confirmText={t("vault.moveToTrash.title")}
+        confirmText={t("vault.moveToTrash.action")}
         confirmColor="error"
         onClose={() => setDeleteTarget(null)}
         onConfirm={handleDelete}

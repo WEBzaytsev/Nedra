@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
-import { mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { after, before, test } from "node:test";
 import { chromium } from "playwright";
 import en from "../../../frontend/src/i18n/en.js";
 import ru from "../../../frontend/src/i18n/ru.js";
 import { startFrontend, stopFrontend } from "./frontend.mjs";
+const axePath = createRequire(import.meta.url).resolve("axe-core/axe.min.js");
 
 let frontend;
 let browser;
@@ -30,16 +32,27 @@ async function openPage(
 ) {
     const context = await browser.newContext({
         viewport: { width, height: 900 },
+        bypassCSP: true,
     });
     const page = await context.newPage();
     if (policy.clock) await page.clock.install();
     const errors = [];
     const writes = [];
-    const user = { id: 1, username: "synthetic-user", role, active: true };
+    const user = {
+        id: 1,
+        username: "synthetic-user",
+        role,
+        active: true,
+        must_change_password: policy.required ?? false,
+    };
+    let releaseStatus;
+    const statusReady = new Promise((resolve) => {
+        releaseStatus = resolve;
+    });
     const t = language === "ru" ? ru : en;
     page.on("pageerror", (error) => errors.push(error.stack ?? error.message));
     await page.addInitScript(
-        ({ authenticated, user, language }) => {
+        ({ authenticated, user, language, theme }) => {
             if (
                 authenticated &&
                 !sessionStorage.getItem("synthetic-fixture-initialized")
@@ -52,9 +65,9 @@ async function openPage(
             }
             sessionStorage.setItem("synthetic-fixture-initialized", "true");
             localStorage.setItem("ciphermoth-language", language);
-            localStorage.setItem("ciphermoth-theme", "dark");
+            localStorage.setItem("ciphermoth-theme", theme);
         },
-        { authenticated, user, language },
+        { authenticated, user, language, theme: policy.theme ?? "dark" },
     );
     const data = {
         "/api/auth/status": { initialized },
@@ -101,9 +114,11 @@ async function openPage(
             expires_in_ms: policy.remaining_ms ?? policy.inactivity_ms,
         },
     };
-    await page.route("**/api/**", (route) => {
+    await page.route("**/api/**", async (route) => {
         const request = route.request();
         const path = new URL(request.url()).pathname;
+        if (path === "/api/auth/status" && policy.statusLoading)
+            await statusReady;
         if (path === "/api/master_password/session") {
             return route.fulfill({
                 status: 200,
@@ -133,7 +148,7 @@ async function openPage(
         });
     });
     await page.goto(`${frontend.url}${path}`);
-    return { context, page, t, errors, writes };
+    return { context, page, t, errors, writes, releaseStatus };
 }
 
 for (const remaining of [900000, 30000]) {
@@ -428,7 +443,9 @@ for (const [width, language] of [
                 resetPassword,
             );
             await reset.waitFor({ state: "hidden" });
-            for (const toast of await page.locator('[data-toast="true"]').all()) {
+            for (const toast of await page
+                .locator('[data-toast="true"]')
+                .all()) {
                 await toast.getByRole("button").click();
             }
             await create
@@ -627,14 +644,22 @@ test("existing vault generator stays singular; backup, restore and TOTP never ge
         "/passwords",
     );
     try {
-        await page.locator('[data-qa="entry-list"]').getByRole("row").first().click();
+        await page
+            .locator('[data-qa="entry-list"]')
+            .getByRole("row")
+            .first()
+            .click();
         const detail = page.getByRole("dialog", { name: "Synthetic entry" });
         await detail
             .getByRole("button", { name: t.common.actions.edit, exact: true })
             .click();
-        const existingPassword = page.locator('input[autocomplete="new-password"]').last();
+        const existingPassword = page
+            .locator('input[autocomplete="new-password"]')
+            .last();
         await existingPassword.waitFor();
-        const editForm = page.getByRole("dialog").filter({ has: existingPassword });
+        const editForm = page
+            .getByRole("dialog")
+            .filter({ has: existingPassword });
         await editForm
             .getByRole("button", {
                 name: t.entry.actions.generatePassword,
@@ -908,4 +933,197 @@ for (const [width, authenticated] of [
             await context.close();
         }
     });
+}
+
+// Visual regression for the persistent labels and field-local error/focus fixes.
+// Only intercepted API requests and synthetic credentials, never a real unlock.
+if (process.env.CIPHERMOTH_LAYOUT_MATRIX) {
+    for (const width of [320, 375, 768, 1440]) {
+        for (const [language, theme] of [
+            ["ru", "dark"],
+            ["en", "light"],
+        ]) {
+            test(`auth matrix ${width} ${language} ${theme}`, async () => {
+                const metrics = [];
+                const capture = async (page, state) => {
+                    await page.evaluate(() => document.fonts.ready);
+                    await fits(page);
+                    await screenshot(
+                        page,
+                        `auth-${width}-${language}-${theme}-${state}.png`,
+                    );
+                    await page.addScriptTag({ path: axePath });
+                    const violations = await page.evaluate(async () =>
+                        (
+                            await window.axe.run(document, {
+                                runOnly: {
+                                    type: "tag",
+                                    values: [
+                                        "wcag2a",
+                                        "wcag2aa",
+                                        "wcag21aa",
+                                        "wcag22aa",
+                                    ],
+                                },
+                            })
+                        ).violations.map(({ id, nodes }) => ({
+                            id,
+                            targets: nodes.map((node) => node.target),
+                        })),
+                    );
+                    assert.deepEqual(violations, [], state);
+                    metrics.push({
+                        route: new URL(page.url()).pathname,
+                        state,
+                        width,
+                        language,
+                        theme,
+                    });
+                };
+                for (const initialized of [false, true]) {
+                    const fixture = await openPage(
+                        width,
+                        language,
+                        "/login",
+                        false,
+                        initialized,
+                        "admin",
+                        {
+                            theme,
+                            inactivity_ms: 3600000,
+                            hidden_ms: 3600000,
+                            statusLoading: true,
+                        },
+                    );
+                    const { context, page, t, errors, releaseStatus } = fixture;
+                    const kind = initialized ? "login" : "bootstrap";
+                    const button = (name) =>
+                        page.getByRole("button", { name, exact: true });
+                    try {
+                        await page.getByRole("status").waitFor();
+                        if (!initialized) await capture(page, "loading");
+                        releaseStatus();
+                        const username = page.locator(
+                            'input[autocomplete="username"]',
+                        );
+                        const password = page
+                            .locator(
+                                `input[autocomplete="${initialized ? "current-password" : "new-password"}"]`,
+                            )
+                            .first();
+                        await username.waitFor();
+                        await capture(page, kind);
+                        if (!initialized)
+                            await page.getByRole("checkbox").check();
+                        const submit = button(
+                            initialized ? t.auth.unlock : t.auth.create,
+                        );
+                        await submit.click();
+                        assert.equal(
+                            await username.getAttribute("aria-invalid"),
+                            "true",
+                        );
+                        assert.equal(
+                            await username.evaluate(
+                                (node) => document.activeElement === node,
+                            ),
+                            true,
+                        );
+                        await capture(page, `${kind}-username-error`);
+                        await username.fill("synthetic-admin");
+                        await submit.click();
+                        await capture(page, `${kind}-password-error`);
+                        await password.fill("Synthetic-Only!Password-2026");
+                        if (!initialized) {
+                            await page
+                                .getByLabel(t.auth.confirmMasterPassword, {
+                                    exact: true,
+                                })
+                                .fill("Mismatch-only");
+                            await submit.click();
+                            await capture(page, "bootstrap-confirm-error");
+                            await page
+                                .getByLabel(t.auth.confirmMasterPassword, {
+                                    exact: true,
+                                })
+                                .fill("Synthetic-Only!Password-2026");
+                        }
+                        let release;
+                        const pending = new Promise((resolve) => {
+                            release = resolve;
+                        });
+                        await page.route(
+                            `**/api/auth/${initialized ? "login" : "bootstrap"}`,
+                            async (route) => {
+                                await pending;
+                                await route.fulfill({
+                                    status: 422,
+                                    json: {
+                                        detail: "Synthetic authentication rejected",
+                                    },
+                                });
+                            },
+                        );
+                        const request = page.waitForRequest((request) =>
+                            /\/auth\/(login|bootstrap)$/.test(
+                                new URL(request.url()).pathname,
+                            ),
+                        );
+                        await submit.click();
+                        await request;
+                        assert.equal(await submit.isDisabled(), true);
+                        await capture(page, `${kind}-busy`);
+                        release();
+                        await page
+                            .getByText("Synthetic authentication rejected", {
+                                exact: false,
+                            })
+                            .waitFor();
+                        await capture(page, `${kind}-server-error`);
+                        assert.deepEqual(errors, []);
+                    } finally {
+                        releaseStatus();
+                        await context.close();
+                    }
+                }
+                // The required-password modal has different navigation/dismissal rules.
+                const { context, page, errors, t } = await openPage(
+                    width,
+                    language,
+                    "/passwords",
+                    true,
+                    true,
+                    "member",
+                    {
+                        theme,
+                        required: true,
+                        inactivity_ms: 3600000,
+                        hidden_ms: 3600000,
+                    },
+                );
+                try {
+                    await page
+                        .getByRole("dialog", {
+                            name: t.auth.changeTemporaryPassword,
+                            exact: true,
+                        })
+                        .waitFor();
+                    await capture(page, "required-password-change");
+                    await page.keyboard.press("Escape");
+                    assert.equal(await page.getByRole("dialog").count(), 1);
+                    assert.deepEqual(errors, []);
+                } finally {
+                    await context.close();
+                }
+                if (process.env.CIPHERMOTH_SCREENSHOT_DIR)
+                    await writeFile(
+                        resolve(
+                            process.env.CIPHERMOTH_SCREENSHOT_DIR,
+                            `auth-${width}-${language}-${theme}-metrics.json`,
+                        ),
+                        JSON.stringify(metrics, null, 2),
+                    );
+            });
+        }
+    }
 }

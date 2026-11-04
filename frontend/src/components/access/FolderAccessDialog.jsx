@@ -47,7 +47,7 @@ const GrantRow = ({ grant, busy, onSave, onRevoke }) => {
           {grant.target_name}
         </Text>
         <Flex gap="spacing-2" wrap="wrap">
-          <Label size="s">{t(`folderAccess.targetTypes.${grant.target_type}`)}</Label>
+          <Text color="secondary">{t(`folderAccess.targetTypes.${grant.target_type}`)}</Text>
           {grant.expired && (
             <Label size="s" theme="warning">
               {t("folderAccess.expired")}
@@ -328,20 +328,26 @@ const FolderAccessDialog = ({ open, onClose }) => {
                         as="header"
                       >
                         <Flex direction="column" gap="spacing-3" minWidth="0">
-                          <Text as="div" role="heading" aria-level={3} variant="subheader-2">
+                          <Text
+                            as="div"
+                            role="heading"
+                            aria-level={3}
+                            variant="subheader-2"
+                            wordBreak="break-word"
+                          >
                             {selected?.name}
                           </Text>
                           <Text as="div" color="secondary" wordBreak="break-word">
                             {t("folderAccess.ownerLabel", { owner: selected?.owner_username })}
                           </Text>
                         </Flex>
-                        <Label size="s">
+                        <Text color="secondary" wordBreak="break-word">
                           {t(
                             selected?.access
                               ? `folderAccess.permissions.${selected.access}`
                               : "folderAccess.managementOnly"
                           )}
-                        </Label>
+                        </Text>
                       </Flex>
                       {ownsSelected && (
                         <Flex direction="column" gap="spacing-2" minWidth="0">
@@ -474,7 +480,6 @@ const FolderAccessDialog = ({ open, onClose }) => {
                                 size="xl"
                                 aria-label={t("folderAccess.target")}
                                 width="max"
-                                placeholder={t("folderAccess.target")}
                                 value={targetId ? [targetId] : []}
                                 disabled={busy || grantTargets.length === 0}
                                 options={grantTargets.map((target) => ({
@@ -568,7 +573,7 @@ const FolderAccessDialog = ({ open, onClose }) => {
         <Dialog.Footer
           onClickButtonApply={onClose}
           textButtonApply={t("common.actions.close")}
-          propsButtonApply={{ disabled: busy, view: "action" }}
+          propsButtonApply={{ disabled: busy, view: "normal" }}
         />
       </Dialog>
 

@@ -7,7 +7,6 @@ import {
   Divider,
   Flex,
   Icon,
-  Label,
   List,
   PlaceholderContainer,
   Text,
@@ -22,6 +21,7 @@ const EntryBrowser = ({
   entries,
   totalCount,
   emptyMessage,
+  onResetFilters,
   onCopy,
   requestedEntryId,
   onRequestedEntryOpen,
@@ -126,11 +126,27 @@ const EntryBrowser = ({
         {entries.length !== totalCount && (
           <Flex alignItems="center" gap="spacing-2" paddingBlockEnd="spacing-3">
             <Text variant="subheader-1">{t("vault.browser.entries")}</Text>
-            <Label>{entries.length}</Label>
+            <Text color="secondary">{entries.length}</Text>
           </Flex>
         )}
         {entries.length === 0 ? (
-          <PlaceholderContainer size="s" title={emptyMessage} />
+          <PlaceholderContainer
+            size="s"
+            direction="column"
+            content={
+              <Text variant="subheader-1" wordBreak="break-word">
+                {emptyMessage}
+              </Text>
+            }
+            actions={[
+              {
+                text: t("vault.resetFilters"),
+                size: "xl",
+                view: "outlined",
+                onClick: onResetFilters,
+              },
+            ]}
+          />
         ) : (
           <List
             ref={listRef}
@@ -163,7 +179,7 @@ const EntryBrowser = ({
                           : ctx.item.username || ctx.item.url || t("entry.kind.login")}
                       </Text>
                       {ctx.item.access === "read" && (
-                        <Label size="s">{t("sharing.readOnlyAccess")}</Label>
+                        <Text color="secondary">{t("sharing.readOnlyAccess")}</Text>
                       )}
                       {ctx.item.folder && (
                         <Text wordBreak="break-word" color="secondary">

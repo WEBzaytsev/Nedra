@@ -70,10 +70,11 @@ const IssueGroup = ({ icon, title, hint, color, entries, onSelect }) => {
             component="button"
             type="button"
             size="xl"
-            description={<Text ellipsis>{entry.username}</Text>}
+            style={{ textAlign: "start" }}
+            description={<Text wordBreak="break-all">{entry.username}</Text>}
             endContent={<Icon data={ChevronRight} />}
           >
-            <Text ellipsis>{entry.password_name}</Text>
+            <Text wordBreak="break-word">{entry.password_name}</Text>
           </List.ItemView>
         ))}
       </Flex>
@@ -125,7 +126,7 @@ const HealthDialog = ({ open, onClose, passwords, onSelect }) => {
               label={t("health.reused")}
             />
             <StatTile
-              color="info"
+              color="secondary"
               count={report.stale.length}
               icon={Clock}
               label={t("health.old")}
@@ -160,7 +161,7 @@ const HealthDialog = ({ open, onClose, passwords, onSelect }) => {
                   title={t("health.reused")}
                 />
                 <IssueGroup
-                  color="info"
+                  color="secondary"
                   entries={report.stale}
                   hint={t("health.oldHint")}
                   icon={Clock}
@@ -172,7 +173,11 @@ const HealthDialog = ({ open, onClose, passwords, onSelect }) => {
           )}
         </Flex>
       </Dialog.Body>
-      <Dialog.Footer onClickButtonApply={onClose} textButtonApply={t("common.actions.done")} />
+      <Dialog.Footer
+        onClickButtonApply={onClose}
+        textButtonApply={t("common.actions.done")}
+        propsButtonApply={{ view: "normal" }}
+      />
     </Dialog>
   );
 };

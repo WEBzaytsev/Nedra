@@ -2,7 +2,7 @@ import { Plus } from "@gravity-ui/icons";
 import { Button, Icon, PlaceholderContainer } from "@gravity-ui/uikit";
 import { useTranslation } from "react-i18next";
 
-const EmptyVault = ({ onAdd }) => {
+const EmptyVault = ({ onAdd, disabled }) => {
   const { t } = useTranslation();
 
   return (
@@ -12,7 +12,7 @@ const EmptyVault = ({ onAdd }) => {
       title={t("vault.emptyTitle")}
       description={t("vault.emptyDescription")}
       actions={
-        <Button type="button" view="action" size="l" onClick={onAdd}>
+        <Button type="button" view="action" size="xl" onClick={onAdd} disabled={disabled}>
           <Icon data={Plus} />
           {t("vault.addFirstPassword")}
         </Button>

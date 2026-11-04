@@ -117,22 +117,26 @@ const CustomFieldRow = ({ field, onChange, onToggleHidden, onRemove }) => {
   const { t } = useTranslation();
   return (
     <Flex direction="column" gap="spacing-2" minWidth="0">
-      <TextInput
-        label={t("entry.labels.label")}
-        size="xl"
-        value={field.label}
-        onUpdate={(value) => onChange({ ...field, label: value })}
-        placeholder={t("entry.placeholders.customLabel")}
-      />
-      <TextInput
-        label={t("entry.labels.value")}
-        size="xl"
-        type={field.hidden ? "password" : "text"}
-        value={field.value}
-        onUpdate={(value) => onChange({ ...field, value })}
-        autoComplete="off"
-        controlProps={{ spellCheck: false, autoCorrect: "off", autoCapitalize: "none" }}
-      />
+      <Flex as="label" direction="column" gap="spacing-2" minWidth="0">
+        <Text>{t("entry.labels.label")}</Text>
+        <TextInput
+          size="xl"
+          value={field.label}
+          onUpdate={(value) => onChange({ ...field, label: value })}
+          placeholder={t("entry.placeholders.customLabel")}
+        />
+      </Flex>
+      <Flex as="label" direction="column" gap="spacing-2" minWidth="0">
+        <Text>{t("entry.labels.value")}</Text>
+        <TextInput
+          size="xl"
+          type={field.hidden ? "password" : "text"}
+          value={field.value}
+          onUpdate={(value) => onChange({ ...field, value })}
+          autoComplete="off"
+          controlProps={{ spellCheck: false, autoCorrect: "off", autoCapitalize: "none" }}
+        />
+      </Flex>
       <Flex gap="spacing-2" justifyContent="flex-end">
         <Tooltip
           content={t(field.hidden ? "entry.actions.valueHidden" : "entry.actions.hideValue")}
@@ -455,7 +459,7 @@ const PasswordFormDialog = ({
   const body = (
     <Flex direction="column" gap="spacing-5" minWidth="0">
       {!editTarget && !draftError && (
-        <Text as="div" color="secondary" wordBreak="break-word" role="status">
+        <Text as="div" variant="caption-2" color="secondary" wordBreak="break-word">
           {t("entry.draft.savedLocally")}
         </Text>
       )}
@@ -497,30 +501,33 @@ const PasswordFormDialog = ({
                 autoFocus
                 controlRef={nameInputRef}
                 controlProps={{ maxLength: 255, "aria-label": t("common.fields.name") }}
-                note={
-                  editTarget
-                    ? t("entry.help.nameCannotChange")
-                    : isNote
-                      ? t("entry.placeholders.noteName")
-                      : t("entry.placeholders.passwordName")
+                placeholder={
+                  isNote ? t("entry.placeholders.noteName") : t("entry.placeholders.passwordName")
                 }
               />
+              {editTarget && (
+                <Text variant="caption-2" color="secondary">
+                  {t("entry.help.nameCannotChange")}
+                </Text>
+              )}
             </Flex>
 
             {isNote ? (
-              <TextArea
-                label={t("entry.labels.note")}
-                size="l"
-                value={form.password_value}
-                onUpdate={setValue("password_value")}
-                controlRef={valueInputRef}
-                required
-                minRows={6}
-                maxRows={10}
-                autoComplete="off"
-                placeholder={t("entry.placeholders.note")}
-                controlProps={{ spellCheck: false }}
-              />
+              <Flex as="label" direction="column" gap="spacing-2" minWidth="0">
+                <Text>{t("entry.labels.note")}</Text>
+                <TextArea
+                  size="l"
+                  value={form.password_value}
+                  onUpdate={setValue("password_value")}
+                  controlRef={valueInputRef}
+                  required
+                  minRows={6}
+                  maxRows={10}
+                  autoComplete="off"
+                  placeholder={t("entry.placeholders.note")}
+                  controlProps={{ spellCheck: false }}
+                />
+              </Flex>
             ) : (
               <>
                 <Flex as="label" direction="column" gap="spacing-2" minWidth="0">
@@ -578,7 +585,8 @@ const PasswordFormDialog = ({
                       <Button
                         type="button"
                         size="xl"
-                        view={showGenerator ? "action" : "flat-secondary"}
+                        view="flat-secondary"
+                        selected={showGenerator}
                         onClick={toggleGenerator}
                         aria-label={t(
                           showGenerator
@@ -604,30 +612,29 @@ const PasswordFormDialog = ({
                 <StrengthBar password={form.password_value} />
               </>
             )}
-          </Flex>
-
-          <Flex direction="column" gap="spacing-2" minWidth="0">
-            <Text>{t("entry.labels.folderOptional")}</Text>
-            <Select
-              size="xl"
-              width="max"
-              value={folderSelectValue ? [folderSelectValue] : []}
-              options={folderSelectOptions}
-              filterable={folderSelectOptions.length > 8}
-              hasClear
-              disabled={Boolean(editTarget && editTarget.access !== "owner")}
-              placeholder={t("entry.placeholders.folder")}
-              aria-label={t("entry.labels.folderOptional")}
-              onUpdate={([value = ""]) => {
-                const match = folderOptions.find((folder) => String(folder.id) === value);
-                setForm((previous) => ({
-                  ...previous,
-                  folder: match?.name ?? (value.startsWith("legacy:") ? previous.folder : ""),
-                  folder_id: match?.id ?? null,
-                }));
-                closeSnackbar("entry-form-error");
-              }}
-            />
+            <Flex direction="column" gap="spacing-2" minWidth="0">
+              <Text>{t("entry.labels.folderOptional")}</Text>
+              <Select
+                size="xl"
+                width="max"
+                value={folderSelectValue ? [folderSelectValue] : []}
+                options={folderSelectOptions}
+                filterable={folderSelectOptions.length > 8}
+                hasClear
+                disabled={Boolean(editTarget && editTarget.access !== "owner")}
+                placeholder={t("entry.placeholders.folder")}
+                aria-label={t("entry.labels.folderOptional")}
+                onUpdate={([value = ""]) => {
+                  const match = folderOptions.find((folder) => String(folder.id) === value);
+                  setForm((previous) => ({
+                    ...previous,
+                    folder: match?.name ?? (value.startsWith("legacy:") ? previous.folder : ""),
+                    folder_id: match?.id ?? null,
+                  }));
+                  closeSnackbar("entry-form-error");
+                }}
+              />
+            </Flex>
           </Flex>
         </Col>
         <Col size={{ xs: 12, m: 5 }} minWidth="0">
@@ -664,19 +671,21 @@ const PasswordFormDialog = ({
               open={sections.tags}
               onToggle={toggleSection("tags")}
             >
-              <TextInput
-                label={t("common.fields.tags")}
-                size="xl"
-                value={tagsValue}
-                onUpdate={setTagsValue}
-                onBlur={() =>
-                  setForm((previous) => ({
-                    ...previous,
-                    tags: parseTags(tagsValue),
-                  }))
-                }
-                placeholder={t("entry.placeholders.tags")}
-              />
+              <Flex as="label" direction="column" gap="spacing-2" minWidth="0">
+                <Text>{t("common.fields.tags")}</Text>
+                <TextInput
+                  size="xl"
+                  value={tagsValue}
+                  onUpdate={setTagsValue}
+                  onBlur={() =>
+                    setForm((previous) => ({
+                      ...previous,
+                      tags: parseTags(tagsValue),
+                    }))
+                  }
+                  placeholder={t("entry.placeholders.tags")}
+                />
+              </Flex>
             </FormSection>
 
             <FormSection
@@ -700,7 +709,7 @@ const PasswordFormDialog = ({
                     onRemove={() => removeCustomField(index)}
                   />
                 ))}
-                <Button type="button" size="m" view="flat" onClick={addCustomField}>
+                <Button type="button" size="xl" view="flat" onClick={addCustomField}>
                   <Icon data={Plus} />
                   {t("entry.actions.addField")}
                 </Button>
@@ -714,15 +723,17 @@ const PasswordFormDialog = ({
                 open={sections.notes}
                 onToggle={toggleSection("notes")}
               >
-                <TextArea
-                  label={t("common.fields.description")}
-                  size="m"
-                  value={form.description}
-                  onUpdate={setValue("description")}
-                  minRows={2}
-                  maxRows={5}
-                  placeholder={t("entry.placeholders.description")}
-                />
+                <Flex as="label" direction="column" gap="spacing-2" minWidth="0">
+                  <Text>{t("common.fields.description")}</Text>
+                  <TextArea
+                    size="m"
+                    value={form.description}
+                    onUpdate={setValue("description")}
+                    minRows={2}
+                    maxRows={5}
+                    placeholder={t("entry.placeholders.description")}
+                  />
+                </Flex>
               </FormSection>
             )}
 

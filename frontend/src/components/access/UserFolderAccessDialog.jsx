@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Flex, Text, Button, Col, Dialog, Label, Row, Select } from "@gravity-ui/uikit";
+import { Flex, Text, Button, Col, Dialog, Row, Select } from "@gravity-ui/uikit";
 import { useStoreActions } from "easy-peasy";
 import { useTranslation } from "react-i18next";
 
@@ -30,35 +30,36 @@ const AccessRow = ({ item, busy, onSave, onRevoke }) => {
         as="header"
       >
         <Flex direction="column" gap="spacing-1" minWidth="0" flexGrow={1}>
-          <Text as="div" role="heading" aria-level={3} variant="subheader-2">
+          <Text as="div" role="heading" aria-level={3} variant="subheader-2" wordBreak="break-word">
             {item.folder.name}
           </Text>
           <Text as="div" color="secondary" wordBreak="break-word">
             {t("folderAccess.ownerLabel", { owner: item.folder.owner_username })}
           </Text>
         </Flex>
-        <Label size="s" theme={item.effective_permission ? "success" : "unknown"}>
+        <Text wordBreak="break-word" color="secondary">
           {t(
             item.effective_permission
               ? `folderAccess.permissions.${item.effective_permission}`
               : "folderAccess.permissions.none"
           )}
-        </Label>
+        </Text>
       </Flex>
 
       <Flex gap="spacing-2" wrap="wrap" minWidth="0">
         {item.sources.map((source, index) => (
-          <Label
+          <Text
             key={`${source.source}-${source.source_id}-${index}`}
-            size="s"
-            theme={source.expired ? "unknown" : "success"}
+            color="secondary"
+            wordBreak="break-word"
           >
             {t("folderAccess.source", {
               source: t(`folderAccess.sources.${source.source}`),
               name: source.name || "",
               permission: t(`folderAccess.permissions.${source.permission}`),
             })}
-          </Label>
+            {source.expired && ` · ${t("folderAccess.expired")}`}
+          </Text>
         ))}
       </Flex>
 
@@ -69,19 +70,22 @@ const AccessRow = ({ item, busy, onSave, onRevoke }) => {
       ) : (
         <Row gap="spacing-4">
           <Col size={{ xs: 12, s: 5 }} minWidth="0">
-            <Select
-              size="xl"
-              width="max"
-              label={t("sharing.permission")}
-              aria-label={t("sharing.permission")}
-              value={[permission]}
-              disabled={busy}
-              options={[
-                { value: "read", content: t("sharing.read") },
-                { value: "write", content: t("sharing.readWrite") },
-              ]}
-              onUpdate={([value = "read"]) => setPermission(value)}
-            />
+            <Flex direction="column" gap="spacing-2">
+              <Text>{t("sharing.permission")}</Text>
+              <Select
+                size="xl"
+                width="max"
+
+                aria-label={t("sharing.permission")}
+                value={[permission]}
+                disabled={busy}
+                options={[
+                  { value: "read", content: t("sharing.read") },
+                  { value: "write", content: t("sharing.readWrite") },
+                ]}
+                onUpdate={([value = "read"]) => setPermission(value)}
+              />
+            </Flex>
           </Col>
           <Col size={{ xs: 12, s: 7 }} minWidth="0">
             <ExpiryField
@@ -105,7 +109,7 @@ const AccessRow = ({ item, busy, onSave, onRevoke }) => {
               <Button
                 type="button"
                 size="xl"
-                view="outlined-danger"
+                view="flat-danger"
                 disabled={busy || !item.direct_permission}
                 onClick={() => onRevoke(item.folder.id)}
               >
@@ -212,7 +216,7 @@ const UserFolderAccessDialog = ({ open, user, onClose }) => {
       <Dialog.Footer
         onClickButtonApply={onClose}
         textButtonApply={t("common.actions.close")}
-        propsButtonApply={{ disabled: busy, view: "action" }}
+        propsButtonApply={{ disabled: busy, view: "normal" }}
       />
     </Dialog>
   );

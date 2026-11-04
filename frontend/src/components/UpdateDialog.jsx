@@ -1,5 +1,5 @@
 import { ArrowRight } from "@gravity-ui/icons";
-import { Dialog, Flex, Icon, Label, Link, Text } from "@gravity-ui/uikit";
+import { Dialog, Flex, Icon, Link, Text } from "@gravity-ui/uikit";
 import { useStoreState } from "easy-peasy";
 import { useTranslation } from "react-i18next";
 
@@ -35,11 +35,9 @@ const UpdateDialog = ({ open, onClose }) => {
             minWidth="0"
             aria-label={t("updateDialog.title")}
           >
-            <Label size="s">{current ? `v${stripV(current)}` : "-"}</Label>
+            <Text color="secondary">{current ? `v${stripV(current)}` : "—"}</Text>
             <Icon data={ArrowRight} size={16} />
-            <Label size="s" theme="success">
-              {latest ?? "-"}
-            </Label>
+            <Text>{latest ?? "-"}</Text>
           </Flex>
 
           {releaseUrl && (
@@ -61,7 +59,7 @@ const UpdateDialog = ({ open, onClose }) => {
       <Dialog.Footer
         onClickButtonApply={onClose}
         textButtonApply={t("common.actions.close")}
-        propsButtonApply={{ view: "action" }}
+        propsButtonApply={{ view: "normal" }}
       />
     </Dialog>
   );
