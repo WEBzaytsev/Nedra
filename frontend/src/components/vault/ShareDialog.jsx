@@ -3,7 +3,7 @@ import { Flex, Text, Alert, Button, Col, Dialog, Row, Select } from "@gravity-ui
 import { useStoreActions } from "easy-peasy";
 import { useTranslation } from "react-i18next";
 
-import { isInvalidExpiry, toLocalExpiry, toUtcExpiry } from "../../lib/accessExpiry";
+import { isInvalidExpiry, toUtcExpiry } from "../../lib/accessExpiry";
 import ExpiryField from "../access/ExpiryField";
 
 const ShareDialog = ({ entry, open, onClose }) => {
@@ -17,9 +17,10 @@ const ShareDialog = ({ entry, open, onClose }) => {
   const [targetId, setTargetId] = useState("");
   const [permission, setPermission] = useState("read");
   const [expiresAt, setExpiresAt] = useState("");
+  const [expiryRejected, setExpiryRejected] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const expiryInvalid = isInvalidExpiry(expiresAt);
+  const expiryInvalid = expiryRejected || isInvalidExpiry(expiresAt);
 
   const load = useCallback(async () => {
     if (!entry) return;
@@ -33,6 +34,7 @@ const ShareDialog = ({ entry, open, onClose }) => {
     setTargetId("");
     setPermission("read");
     setExpiresAt("");
+    setExpiryRejected(false);
     setError("");
     load().catch((requestError) => setError(requestError.message));
   }, [open, load]);
@@ -54,6 +56,10 @@ const ShareDialog = ({ entry, open, onClose }) => {
 
   const add = async () => {
     if (!targetId) return;
+    if (isInvalidExpiry(expiresAt)) {
+      setExpiryRejected(true);
+      return;
+    }
     if (
       await run(() =>
         setShare({
@@ -66,6 +72,7 @@ const ShareDialog = ({ entry, open, onClose }) => {
     ) {
       setTargetId("");
       setExpiresAt("");
+      setExpiryRejected(false);
     }
   };
 
@@ -139,7 +146,7 @@ const ShareDialog = ({ entry, open, onClose }) => {
                                 entryId: entry.id,
                                 userId: share.user_id,
                                 permission: nextPermission,
-                                expiresAt: toUtcExpiry(toLocalExpiry(share.expires_at)),
+                                expiresAt: share.expires_at ?? null,
                               })
                             )
                           }
@@ -197,7 +204,10 @@ const ShareDialog = ({ entry, open, onClose }) => {
                   <ExpiryField
                     value={expiresAt}
                     disabled={busy}
-                    onUpdate={setExpiresAt}
+                    onUpdate={(value) => {
+                      setExpiresAt(value);
+                      setExpiryRejected(false);
+                    }}
                     invalid={expiryInvalid}
                   />
                   <Flex>

@@ -431,6 +431,7 @@ const en = {
     createDescription:
       "Users see entries they own or have been granted access to. Service accounts use a separate MCP token and need explicit access grants.",
     temporaryPassword: "Temporary password",
+    temporaryPasswordRequired: "Enter a temporary password.",
     serviceToken: "MCP bearer token",
     serviceTokenOnce: "Copy and store this token now. You cannot view it again.",
     copyToken: "Copy token",

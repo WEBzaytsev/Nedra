@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "@gravity-ui/components": "^5.0.0",
+    "@gravity-ui/date-components": "^5.0.0",
+    "@gravity-ui/date-utils": "^2.7.3",
     "@gravity-ui/icons": "^2.23.0",
     "@gravity-ui/uikit": "^8.0.0",
     "@noble/ciphers": "2.4.0",

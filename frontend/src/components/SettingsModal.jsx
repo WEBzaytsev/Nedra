@@ -1,6 +1,16 @@
 import { useEffect, useId, useState } from "react";
 
-import { Flex, Text, Alert, Col, Divider, Dialog, Row, Switch, TextInput } from "@gravity-ui/uikit";
+import {
+  Flex,
+  Text,
+  Alert,
+  Col,
+  Divider,
+  Dialog,
+  NumberInput,
+  Row,
+  Switch,
+} from "@gravity-ui/uikit";
 import { toaster } from "@gravity-ui/uikit/toaster-singleton";
 import { useStoreActions, useStoreState } from "easy-peasy";
 import { useTranslation } from "react-i18next";
@@ -74,11 +84,6 @@ const SettingsModal = ({ open, onClose }) => {
     }
   }, [open, settings]);
 
-  const handleChange = (key) => (e) => {
-    setForm((prev) => ({ ...prev, [key]: e.target.value }));
-    setFormError("");
-  };
-
   const handleSave = async () => {
     const invalidField = FIELDS.find(({ key, min, max }) => {
       const value = Number(form[key]);
@@ -148,13 +153,17 @@ const SettingsModal = ({ open, onClose }) => {
                   </Flex>
                 </Col>
                 <Col size={{ xs: 12, s: 4 }} minWidth="0">
-                  <TextInput
-                    controlProps={{ min, max, step: 1 }}
+                  <NumberInput
                     endContent={<Text color="secondary">{t("common.labels.secondsShort")}</Text>}
                     id={inputId}
-                    onChange={handleChange(key)}
+                    min={min}
+                    max={max}
+                    step={1}
+                    onUpdate={(value) => {
+                      setForm((prev) => ({ ...prev, [key]: value }));
+                      setFormError("");
+                    }}
                     size="xl"
-                    type="number"
                     value={form[key]}
                   />
                 </Col>

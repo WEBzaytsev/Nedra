@@ -66,3 +66,9 @@ html[data-theme="dark"] body {
   --g-color-line-brand: #b5f602;
   --g-color-line-focus: #b5f602;
 }
+
+.nedra-expiry-picker:has(input[aria-expanded="true"]) > .g-text-input > .g-text-input__content {
+  border-color: var(--g-color-line-focus);
+  outline: 2px solid var(--g-color-line-focus);
+  outline-offset: -1px;
+}

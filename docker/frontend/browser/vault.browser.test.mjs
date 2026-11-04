@@ -1060,16 +1060,29 @@ for (const width of [375, 1440]) {
             await page
                 .getByRole("option", { name: "Operations", exact: true })
                 .click();
-            assert.match(
-                await dialog
-                    .getByLabel("Expires (optional)", { exact: true })
-                    .getAttribute("min"),
-                /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/,
-            );
             const expiry = dialog.getByLabel("Expires (optional)", {
                 exact: true,
             });
-            assert.equal(await expiry.getAttribute("type"), "datetime-local");
+            assert.equal(await expiry.getAttribute("type"), "text");
+            assert.equal(await expiry.getAttribute("role"), "combobox");
+            assert.equal(
+                await dialog.locator('input[type="datetime-local"]').count(),
+                0,
+            );
+            await dialog
+                .getByRole("button", { name: "Calendar", exact: true })
+                .click();
+            const calendar = page.getByRole("grid").last();
+            await calendar.waitFor();
+            const calendarBounds = await calendar.boundingBox();
+            assert.ok(
+                calendarBounds &&
+                    calendarBounds.x >= 0 &&
+                    calendarBounds.x + calendarBounds.width <= width,
+                JSON.stringify({ calendarBounds, width }),
+            );
+            await page.keyboard.press("Escape");
+            await calendar.waitFor({ state: "hidden" });
             await dialog
                 .getByRole("button", { name: "Grant access", exact: true })
                 .click();
@@ -1110,6 +1123,223 @@ for (const width of [375, 1440]) {
         }
     });
 }
+
+for (const [width, language, theme] of [
+    [320, "ru", "dark"],
+    [375, "en", "light"],
+    [768, "ru", "light"],
+    [1440, "en", "dark"],
+]) {
+    test(`expiration uses the Gravity date picker at ${width}px in ${language} ${theme}`, async () => {
+        const copy = language === "ru" ? ruText : enText;
+        const { context, page, errors } = await vault(
+            width,
+            language,
+            theme,
+            entries,
+            {
+                groups: [{ id: 10, name: "Operations", member_count: 1 }],
+            },
+        );
+        try {
+            if (await page.locator('[data-qa="mobile-header"]').count()) {
+                await page.locator('[data-qa="burger"]').click();
+            }
+            await page.locator('a[href="/passwords?tool=folders"]').click();
+            if (await page.locator('[data-qa="mobile-header"]').count()) {
+                await page
+                    .getByRole("dialog", {
+                        name: copy.navigation.workspace,
+                        exact: true,
+                    })
+                    .waitFor({ state: "hidden" });
+            }
+            const dialog = page.getByRole("dialog", {
+                name: copy.folderAccess.title,
+                exact: true,
+            });
+            await dialog.waitFor();
+            await settleAnimations(page);
+            await dialog
+                .getByLabel(copy.folderAccess.targetType, { exact: true })
+                .click();
+            await page
+                .getByRole("option", {
+                    name: copy.folderAccess.targetTypes.group,
+                    exact: true,
+                })
+                .click();
+            await dialog
+                .getByLabel(copy.folderAccess.target, { exact: true })
+                .click();
+            await page
+                .getByRole("option", { name: "Operations", exact: true })
+                .click();
+
+            const expiry = dialog.getByLabel(copy.folderAccess.expiresAt, {
+                exact: true,
+            });
+            assert.equal(await expiry.getAttribute("type"), "text");
+            assert.equal(await expiry.getAttribute("role"), "combobox");
+            assert.equal(
+                await page.locator('input[type="datetime-local"]').count(),
+                0,
+            );
+            const calendarTrigger = dialog.getByRole("button", {
+                name: language === "ru" ? "Календарь" : "Calendar",
+                exact: true,
+            });
+            await calendarTrigger.click();
+            const calendar = page.getByRole("grid").last();
+            await calendar.waitFor();
+            if (width <= 375) {
+                const dayBounds = await calendar
+                    .locator(".g-date-calendar__button")
+                    .first()
+                    .boundingBox();
+                assert.ok(
+                    dayBounds && dayBounds.width >= 39 && dayBounds.height >= 39,
+                    JSON.stringify({ dayBounds, width }),
+                );
+                const openFieldStyle = await page
+                    .locator(
+                        ".nedra-expiry-picker > .g-text-input > .g-text-input__content",
+                    )
+                    .evaluate((node) => {
+                        const style = getComputedStyle(node);
+                        return {
+                            outlineStyle: style.outlineStyle,
+                            outlineWidth: style.outlineWidth,
+                        };
+                    });
+                assert.deepEqual(openFieldStyle, {
+                    outlineStyle: "solid",
+                    outlineWidth: "2px",
+                });
+            }
+            const calendarBounds = await calendar.boundingBox();
+            assert.ok(
+                calendarBounds &&
+                    calendarBounds.x >= 0 &&
+                    calendarBounds.x + calendarBounds.width <= width,
+                JSON.stringify({ calendarBounds, width }),
+            );
+            assert.equal(
+                await page.locator("html").getAttribute("data-theme"),
+                theme,
+            );
+            await viewportScreenshot(
+                page,
+                `gravity-expiry-${width}-${language}-${theme}.png`,
+            );
+            await page.keyboard.press("Escape");
+            await calendar.waitFor({ state: "hidden" });
+            assert.deepEqual(errors, []);
+        } finally {
+            await context.close();
+        }
+    });
+}
+
+test("Gravity composites replace native settings, form validation, and confirmation UI", async () => {
+    const { context, page, errors } = await vault(
+        1440,
+        "en",
+        "light",
+        entries,
+        {
+            role: "admin",
+            users: [
+                { id: 1, username: "synthetic", role: "admin", active: true },
+                { id: 2, username: "team-member", role: "member", active: true },
+            ],
+        },
+    );
+    try {
+        await page.getByText(enText.topMenu.settings, { exact: true }).click();
+        const settings = page.getByRole("dialog", {
+            name: enText.settings.title,
+            exact: true,
+        });
+        await settings.waitFor();
+        const inactivity = settings.getByRole("spinbutton").first();
+        assert.notEqual(await inactivity.getAttribute("type"), "number");
+        assert.equal(await inactivity.getAttribute("aria-valuemin"), "30");
+        assert.equal(await inactivity.getAttribute("aria-valuemax"), "3600");
+        assert.equal(await settings.locator('input[type="number"]').count(), 0);
+        assert.equal(
+            await settings.locator('[data-qa="control-buttons-qa"]').count(),
+            5,
+        );
+        await page.keyboard.press("Escape");
+        await settings.waitFor({ state: "hidden" });
+
+        let createRequests = 0;
+        page.on("request", (request) => {
+            if (
+                request.method() === "POST" &&
+                new URL(request.url()).pathname === "/api/users"
+            ) {
+                createRequests += 1;
+            }
+        });
+        await page.goto(`${origin}/users`);
+        const form = page.locator("form");
+        await form
+            .getByLabel(enText.auth.username, { exact: false })
+            .fill("new-member");
+        await form
+            .getByRole("button", {
+                name: enText.common.actions.create,
+                exact: true,
+            })
+            .click();
+        await form
+            .getByText(enText.users.temporaryPasswordRequired, {
+                exact: true,
+            })
+            .waitFor();
+        const password = form.getByLabel(enText.users.temporaryPassword, {
+            exact: true,
+        });
+        assert.equal(await password.getAttribute("aria-invalid"), "true");
+        assert.equal(
+            await password.evaluate((node) => node === document.activeElement),
+            true,
+        );
+        assert.equal(createRequests, 0);
+
+        await page
+            .getByRole("button", { name: "More: team-member", exact: true })
+            .click();
+        await page
+            .getByRole("menuitem", {
+                name: enText.common.actions.delete,
+                exact: true,
+            })
+            .click();
+        const confirmation = page.getByRole("dialog").last();
+        await confirmation.waitFor();
+        assert.equal(
+            await confirmation.getAttribute("aria-label"),
+            enText.common.actions.delete,
+        );
+        assert.equal(await confirmation.locator(".gc-confirm-dialog__body").count(), 1);
+        const cancel = confirmation.getByRole("button", {
+            name: enText.common.actions.cancel,
+            exact: true,
+        });
+        assert.equal(
+            await cancel.evaluate((node) => node === document.activeElement),
+            true,
+        );
+        await cancel.click();
+        await confirmation.waitFor({ state: "hidden" });
+        assert.deepEqual(errors, []);
+    } finally {
+        await context.close();
+    }
+});
 
 for (const width of [375, 1440]) {
     test(`sidebar navigation keeps native spacing and one active item at ${width}px`, async () => {
@@ -1654,9 +1884,11 @@ test("desktop quick actions and details preserve ACL and confirmation boundaries
                 .count(),
             0,
         );
-        await detail
-            .getByRole("button", { name: "Delete", exact: true })
-            .click();
+        const deleteButton = detail.getByRole("button", {
+            name: "Delete",
+            exact: true,
+        });
+        await deleteButton.click();
         const confirmation = page.getByRole("dialog", {
             name: "Move entry to trash?",
             exact: true,
@@ -1666,6 +1898,12 @@ test("desktop quick actions and details preserve ACL and confirmation boundaries
             .getByRole("button", { name: "Cancel", exact: true })
             .click();
         await confirmation.waitFor({ state: "hidden" });
+        await page.evaluate(
+            () =>
+                new Promise((resolve) =>
+                    requestAnimationFrame(() => requestAnimationFrame(resolve)),
+                ),
+        );
         await page.keyboard.press("Escape");
         assert.equal(await detail.count(), 0);
         await page.waitForFunction(

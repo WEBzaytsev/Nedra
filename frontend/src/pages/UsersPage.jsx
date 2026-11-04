@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, EllipsisVertical, Persons } from "@gravity-ui/icons";
 import {
   Flex,
@@ -47,6 +47,8 @@ const UsersPage = () => {
   const [folderAccessTarget, setFolderAccessTarget] = useState(null);
   const [groupsOpen, setGroupsOpen] = useState(false);
   const [temporaryPassword, setTemporaryPassword] = useState("");
+  const [temporaryPasswordError, setTemporaryPasswordError] = useState(false);
+  const temporaryPasswordRef = useRef(null);
 
   const closeUserAction = (setter, target) => {
     const userId = target?.id;
@@ -78,11 +80,17 @@ const UsersPage = () => {
 
   const add = async (event) => {
     event.preventDefault();
+    if (form.role !== "service" && !form.temporary_password) {
+      setTemporaryPasswordError(true);
+      temporaryPasswordRef.current?.focus();
+      return;
+    }
     const payload = form.role === "service" ? { username: form.username, role: form.role } : form;
     const created = await run(() => create(payload), t("users.messages.created"));
     if (!created) return;
     setServiceToken(created.service_token || "");
     setForm(EMPTY_FORM);
+    setTemporaryPasswordError(false);
   };
 
   const saveReset = async () => {
@@ -321,7 +329,14 @@ const UsersPage = () => {
             <Text as="div" role="heading" aria-level={2} variant="subheader-3">
               {t("users.createAccount")}
             </Text>
-            <Flex direction="column" gap="spacing-3" minWidth="0" as="form" onSubmit={add}>
+            <Flex
+              direction="column"
+              gap="spacing-3"
+              minWidth="0"
+              as="form"
+              noValidate
+              onSubmit={add}
+            >
               <Flex as="label" direction="column" gap="spacing-2">
                 <Text>{t("auth.username")}</Text>
                 <TextInput
@@ -345,18 +360,22 @@ const UsersPage = () => {
                 <PasswordField
                   label={t("users.temporaryPassword")}
                   size="xl"
-                  required
+                  inputRef={temporaryPasswordRef}
+                  error={temporaryPasswordError}
+                  helperText={temporaryPasswordError ? t("users.temporaryPasswordRequired") : ""}
                   value={form.temporary_password}
-                  onGenerate={(temporary_password) =>
-                    setForm((current) => ({ ...current, temporary_password }))
-                  }
+                  onGenerate={(temporary_password) => {
+                    setForm((current) => ({ ...current, temporary_password }));
+                    setTemporaryPasswordError(false);
+                  }}
                   disabled={busy}
-                  onChange={(event) =>
+                  onChange={(event) => {
                     setForm((current) => ({
                       ...current,
                       temporary_password: event.target.value,
-                    }))
-                  }
+                    }));
+                    setTemporaryPasswordError(false);
+                  }}
                   autoComplete="new-password"
                 />
               )}
@@ -368,13 +387,14 @@ const UsersPage = () => {
                   value: role,
                   content: t(`users.roles.${role}`),
                 }))}
-                onUpdate={([role = "member"]) =>
+                onUpdate={([role = "member"]) => {
                   setForm((current) => ({
                     ...current,
                     role,
                     temporary_password: role === "service" ? "" : current.temporary_password,
-                  }))
-                }
+                  }));
+                  setTemporaryPasswordError(false);
+                }}
               />
               <Button
                 type="submit"

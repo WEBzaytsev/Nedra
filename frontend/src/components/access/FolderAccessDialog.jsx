@@ -14,7 +14,12 @@ import { useStoreActions, useStoreState } from "easy-peasy";
 import { useTranslation } from "react-i18next";
 
 import { useSnackbar } from "../../hooks/useNotify";
-import { isInvalidExpiry, toLocalExpiry, toUtcExpiry } from "../../lib/accessExpiry";
+import {
+  isInvalidExpiry,
+  toLocalExpiry,
+  toPersistedExpiry,
+  toUtcExpiry,
+} from "../../lib/accessExpiry";
 import { getCurrentUser } from "../../utils";
 import ConfirmDialog from "../ConfirmDialog";
 import ExpiryField from "./ExpiryField";
@@ -33,12 +38,22 @@ const GrantRow = ({ grant, busy, onSave, onRevoke }) => {
   const { t } = useTranslation();
   const [permission, setPermission] = useState(grant.permission);
   const [expiresAt, setExpiresAt] = useState(toLocalExpiry(grant.expires_at));
-  const expiryInvalid = isInvalidExpiry(expiresAt);
+  const [expiryRejected, setExpiryRejected] = useState(false);
+  const expiryInvalid = expiryRejected || isInvalidExpiry(expiresAt);
 
   useEffect(() => {
     setPermission(grant.permission);
     setExpiresAt(toLocalExpiry(grant.expires_at));
+    setExpiryRejected(false);
   }, [grant.expires_at, grant.permission]);
+
+  const save = () => {
+    if (isInvalidExpiry(expiresAt)) {
+      setExpiryRejected(true);
+      return;
+    }
+    onSave(permission, toPersistedExpiry(expiresAt, grant.expires_at));
+  };
 
   return (
     <Flex direction="column" gap="spacing-4" minWidth="0" as="article" paddingBlock="spacing-3">
@@ -70,7 +85,10 @@ const GrantRow = ({ grant, busy, onSave, onRevoke }) => {
         </Flex>
         <ExpiryField
           value={expiresAt}
-          onUpdate={setExpiresAt}
+          onUpdate={(value) => {
+            setExpiresAt(value);
+            setExpiryRejected(false);
+          }}
           disabled={busy}
           invalid={expiryInvalid}
         />
@@ -81,7 +99,7 @@ const GrantRow = ({ grant, busy, onSave, onRevoke }) => {
           size="xl"
           view="outlined"
           disabled={busy || expiryInvalid}
-          onClick={() => onSave(permission, toUtcExpiry(expiresAt))}
+          onClick={save}
         >
           {t("common.actions.save")}
         </Button>
@@ -121,9 +139,10 @@ const FolderAccessDialog = ({ open, onClose }) => {
   const [targetId, setTargetId] = useState("");
   const [permission, setPermission] = useState("read");
   const [expiresAt, setExpiresAt] = useState("");
+  const [expiryRejected, setExpiryRejected] = useState(false);
   const [busy, setBusy] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
-  const expiryInvalid = isInvalidExpiry(expiresAt);
+  const expiryInvalid = expiryRejected || isInvalidExpiry(expiresAt);
   const currentUserId = getCurrentUser()?.id;
   const selected = folders.find((folder) => folder.id === Number(folderId)) ?? null;
   const ownsSelected = selected?.owner_id === currentUserId;
@@ -207,6 +226,10 @@ const FolderAccessDialog = ({ open, onClose }) => {
 
   const addGrant = async () => {
     if (!targetId) return;
+    if (isInvalidExpiry(expiresAt)) {
+      setExpiryRejected(true);
+      return;
+    }
     const saved = await run(
       () =>
         setFolderGrant({
@@ -221,6 +244,7 @@ const FolderAccessDialog = ({ open, onClose }) => {
     if (saved) {
       setTargetId("");
       setExpiresAt("");
+      setExpiryRejected(false);
     }
   };
 
@@ -503,7 +527,10 @@ const FolderAccessDialog = ({ open, onClose }) => {
                             </Flex>
                             <ExpiryField
                               value={expiresAt}
-                              onUpdate={setExpiresAt}
+                              onUpdate={(value) => {
+                                setExpiresAt(value);
+                                setExpiryRejected(false);
+                              }}
                               disabled={busy}
                               invalid={expiryInvalid}
                             />

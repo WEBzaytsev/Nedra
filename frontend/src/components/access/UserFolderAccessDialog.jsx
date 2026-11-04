@@ -4,20 +4,30 @@ import { useStoreActions } from "easy-peasy";
 import { useTranslation } from "react-i18next";
 
 import { useSnackbar } from "../../hooks/useNotify";
-import { isInvalidExpiry, toLocalExpiry, toUtcExpiry } from "../../lib/accessExpiry";
+import { isInvalidExpiry, toLocalExpiry, toPersistedExpiry } from "../../lib/accessExpiry";
 import ExpiryField from "./ExpiryField";
 
 const AccessRow = ({ item, busy, onSave, onRevoke }) => {
   const { t } = useTranslation();
   const [permission, setPermission] = useState(item.direct_permission ?? "read");
   const [expiresAt, setExpiresAt] = useState(toLocalExpiry(item.direct_expires_at));
+  const [expiryRejected, setExpiryRejected] = useState(false);
   const owned = item.folder.owner_id === item.userId;
-  const expiryInvalid = isInvalidExpiry(expiresAt);
+  const expiryInvalid = expiryRejected || isInvalidExpiry(expiresAt);
 
   useEffect(() => {
     setPermission(item.direct_permission ?? "read");
     setExpiresAt(toLocalExpiry(item.direct_expires_at));
+    setExpiryRejected(false);
   }, [item.direct_expires_at, item.direct_permission]);
+
+  const save = () => {
+    if (isInvalidExpiry(expiresAt)) {
+      setExpiryRejected(true);
+      return;
+    }
+    onSave(item.folder.id, permission, toPersistedExpiry(expiresAt, item.direct_expires_at));
+  };
 
   return (
     <Flex direction="column" gap="spacing-3" minWidth="0" as="article" paddingBlock="spacing-3">
@@ -90,7 +100,10 @@ const AccessRow = ({ item, busy, onSave, onRevoke }) => {
           <Col size={{ xs: 12, s: 7 }} minWidth="0">
             <ExpiryField
               value={expiresAt}
-              onUpdate={setExpiresAt}
+              onUpdate={(value) => {
+                setExpiresAt(value);
+                setExpiryRejected(false);
+              }}
               disabled={busy}
               invalid={expiryInvalid}
             />
@@ -102,7 +115,7 @@ const AccessRow = ({ item, busy, onSave, onRevoke }) => {
                 size="xl"
                 view="action"
                 disabled={busy || expiryInvalid}
-                onClick={() => onSave(item.folder.id, permission, toUtcExpiry(expiresAt))}
+                onClick={save}
               >
                 {t("common.actions.save")}
               </Button>
