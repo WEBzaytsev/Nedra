@@ -14,8 +14,6 @@ import {
 } from "@gravity-ui/icons";
 import {
   Flex,
-  Row,
-  Col,
   Text,
   Disclosure,
   Button,
@@ -487,287 +485,283 @@ const PasswordFormDialog = ({
         </Flex>
       )}
 
-      <Row gap="spacing-6" alignItems="start">
-        <Col size={{ xs: 12, m: 7 }} minWidth="0">
-          <Flex direction="column" gap="spacing-4" minWidth="0">
-            <Flex as="label" direction="column" gap="spacing-2" minWidth="0">
-              <Text>{t("common.fields.name")}</Text>
-              <TextInput
-                size="xl"
-                value={form.password_name}
-                onUpdate={setValue("password_name")}
-                disabled={Boolean(editTarget)}
-                required
-                autoFocus
-                controlRef={nameInputRef}
-                controlProps={{ maxLength: 255, "aria-label": t("common.fields.name") }}
-                placeholder={
-                  isNote ? t("entry.placeholders.noteName") : t("entry.placeholders.passwordName")
-                }
-              />
-              {editTarget && (
-                <Text variant="caption-2" color="secondary">
-                  {t("entry.help.nameCannotChange")}
-                </Text>
-              )}
-            </Flex>
+      <Flex direction="column" gap="spacing-5" minWidth="0">
+        <Flex direction="column" gap="spacing-4" minWidth="0">
+          <Flex as="label" direction="column" gap="spacing-2" minWidth="0">
+            <Text>{t("common.fields.name")}</Text>
+            <TextInput
+              size="xl"
+              value={form.password_name}
+              onUpdate={setValue("password_name")}
+              disabled={Boolean(editTarget)}
+              required
+              autoFocus
+              controlRef={nameInputRef}
+              controlProps={{ maxLength: 255, "aria-label": t("common.fields.name") }}
+              placeholder={
+                isNote ? t("entry.placeholders.noteName") : t("entry.placeholders.passwordName")
+              }
+            />
+            {editTarget && (
+              <Text variant="caption-2" color="secondary">
+                {t("entry.help.nameCannotChange")}
+              </Text>
+            )}
+          </Flex>
 
-            {isNote ? (
+          {isNote ? (
+            <Flex as="label" direction="column" gap="spacing-2" minWidth="0">
+              <Text>{t("entry.labels.note")}</Text>
+              <TextArea
+                size="l"
+                value={form.password_value}
+                onUpdate={setValue("password_value")}
+                controlRef={valueInputRef}
+                required
+                minRows={6}
+                maxRows={10}
+                autoComplete="off"
+                placeholder={t("entry.placeholders.note")}
+                controlProps={{ spellCheck: false }}
+              />
+            </Flex>
+          ) : (
+            <>
               <Flex as="label" direction="column" gap="spacing-2" minWidth="0">
-                <Text>{t("entry.labels.note")}</Text>
-                <TextArea
-                  size="l"
-                  value={form.password_value}
-                  onUpdate={setValue("password_value")}
-                  controlRef={valueInputRef}
-                  required
-                  minRows={6}
-                  maxRows={10}
-                  autoComplete="off"
-                  placeholder={t("entry.placeholders.note")}
-                  controlProps={{ spellCheck: false }}
+                <Text>{t("entry.labels.usernameOptional")}</Text>
+                <TextInput
+                  size="xl"
+                  value={form.username}
+                  onUpdate={setValue("username")}
+                  placeholder={t("entry.placeholders.username")}
+                  controlProps={{
+                    "aria-label": t("entry.labels.usernameOptional"),
+                    spellCheck: false,
+                    autoCorrect: "off",
+                    autoCapitalize: "none",
+                  }}
                 />
               </Flex>
-            ) : (
-              <>
-                <Flex as="label" direction="column" gap="spacing-2" minWidth="0">
-                  <Text>{t("entry.labels.usernameOptional")}</Text>
-                  <TextInput
-                    size="xl"
-                    value={form.username}
-                    onUpdate={setValue("username")}
-                    placeholder={t("entry.placeholders.username")}
-                    controlProps={{
-                      "aria-label": t("entry.labels.usernameOptional"),
-                      spellCheck: false,
-                      autoCorrect: "off",
-                      autoCapitalize: "none",
-                    }}
-                  />
-                </Flex>
-                <Flex as="label" direction="column" gap="spacing-2" minWidth="0">
-                  <Text>{t("entry.labels.websiteOptional")}</Text>
-                  <TextInput
-                    size="xl"
-                    value={form.url}
-                    onUpdate={setValue("url")}
-                    placeholder={t("entry.placeholders.website")}
-                    controlProps={{
-                      "aria-label": t("entry.labels.websiteOptional"),
-                      spellCheck: false,
-                      autoCorrect: "off",
-                      autoCapitalize: "none",
-                    }}
-                  />
-                </Flex>
-                <PasswordField
-                  label={t("common.fields.password")}
+              <Flex as="label" direction="column" gap="spacing-2" minWidth="0">
+                <Text>{t("entry.labels.websiteOptional")}</Text>
+                <TextInput
                   size="xl"
-                  value={form.password_value}
-                  onChange={(event) => {
-                    setField("password_value")(event);
-                    setGeneratorUndo(null);
-                    if (showGenerator) setShowGenerator(false);
+                  value={form.url}
+                  onUpdate={setValue("url")}
+                  placeholder={t("entry.placeholders.website")}
+                  controlProps={{
+                    "aria-label": t("entry.labels.websiteOptional"),
+                    spellCheck: false,
+                    autoCorrect: "off",
+                    autoCapitalize: "none",
                   }}
-                  inputRef={valueInputRef}
-                  required
-                  autoComplete="new-password"
-                  show={showValue}
-                  onToggleShow={() => setShowValue((value) => !value)}
-                  adornment={
-                    <Tooltip
-                      content={t(
+                />
+              </Flex>
+              <PasswordField
+                label={t("common.fields.password")}
+                size="xl"
+                value={form.password_value}
+                onChange={(event) => {
+                  setField("password_value")(event);
+                  setGeneratorUndo(null);
+                  if (showGenerator) setShowGenerator(false);
+                }}
+                inputRef={valueInputRef}
+                required
+                autoComplete="new-password"
+                show={showValue}
+                onToggleShow={() => setShowValue((value) => !value)}
+                adornment={
+                  <Tooltip
+                    content={t(
+                      showGenerator
+                        ? "entry.actions.closeGenerator"
+                        : "entry.actions.generatePassword"
+                    )}
+                  >
+                    <Button
+                      type="button"
+                      size="xl"
+                      view="flat-secondary"
+                      selected={showGenerator}
+                      onClick={toggleGenerator}
+                      aria-label={t(
                         showGenerator
                           ? "entry.actions.closeGenerator"
                           : "entry.actions.generatePassword"
                       )}
                     >
-                      <Button
-                        type="button"
-                        size="xl"
-                        view="flat-secondary"
-                        selected={showGenerator}
-                        onClick={toggleGenerator}
-                        aria-label={t(
-                          showGenerator
-                            ? "entry.actions.closeGenerator"
-                            : "entry.actions.generatePassword"
-                        )}
-                      >
-                        <Icon data={MagicWand} />
-                      </Button>
-                    </Tooltip>
-                  }
+                      <Icon data={MagicWand} />
+                    </Button>
+                  </Tooltip>
+                }
+              />
+              {showGenerator && (
+                <PasswordGenerator
+                  options={genOpts}
+                  onChangeLength={changeGenLength}
+                  onToggleClass={toggleGenClass}
+                  onRegenerate={() => applyGenerated(genOpts)}
+                  canUndo={generatorUndo !== null}
+                  onUndo={undoGenerated}
                 />
-                {showGenerator && (
-                  <PasswordGenerator
-                    options={genOpts}
-                    onChangeLength={changeGenLength}
-                    onToggleClass={toggleGenClass}
-                    onRegenerate={() => applyGenerated(genOpts)}
-                    canUndo={generatorUndo !== null}
-                    onUndo={undoGenerated}
-                  />
-                )}
-                <StrengthBar password={form.password_value} />
-              </>
-            )}
-            <Flex direction="column" gap="spacing-2" minWidth="0">
-              <Text>{t("entry.labels.folderOptional")}</Text>
-              <Select
+              )}
+              <StrengthBar password={form.password_value} />
+            </>
+          )}
+          <Flex direction="column" gap="spacing-2" minWidth="0">
+            <Text>{t("entry.labels.folderOptional")}</Text>
+            <Select
+              size="xl"
+              width="max"
+              value={folderSelectValue ? [folderSelectValue] : []}
+              options={folderSelectOptions}
+              filterable={folderSelectOptions.length > 8}
+              hasClear
+              disabled={Boolean(editTarget && editTarget.access !== "owner")}
+              placeholder={t("entry.placeholders.folder")}
+              aria-label={t("entry.labels.folderOptional")}
+              onUpdate={([value = ""]) => {
+                const match = folderOptions.find((folder) => String(folder.id) === value);
+                setForm((previous) => ({
+                  ...previous,
+                  folder: match?.name ?? (value.startsWith("legacy:") ? previous.folder : ""),
+                  folder_id: match?.id ?? null,
+                }));
+                closeSnackbar("entry-form-error");
+              }}
+            />
+          </Flex>
+        </Flex>
+        <Flex direction="column" gap="spacing-3" minWidth="0">
+          {!isNote && (
+            <FormSection
+              label={t("entry.labels.twoFactor")}
+              preview={form.totp_secret ? t("common.labels.configured") : ""}
+              open={sections.totp}
+              onToggle={toggleSection("totp")}
+            >
+              <PasswordField
+                label={t("entry.labels.twoFactorSecret")}
                 size="xl"
-                width="max"
-                value={folderSelectValue ? [folderSelectValue] : []}
-                options={folderSelectOptions}
-                filterable={folderSelectOptions.length > 8}
-                hasClear
-                disabled={Boolean(editTarget && editTarget.access !== "owner")}
-                placeholder={t("entry.placeholders.folder")}
-                aria-label={t("entry.labels.folderOptional")}
-                onUpdate={([value = ""]) => {
-                  const match = folderOptions.find((folder) => String(folder.id) === value);
+                value={form.totp_secret}
+                onChange={setField("totp_secret")}
+                autoComplete="off"
+                show={showTotp}
+                onToggleShow={() => setShowTotp((value) => !value)}
+                helperText={t("entry.help.twoFactor")}
+                adornment={
+                  <Tooltip content={t("entry.help.twoFactorTooltip")}>
+                    <Icon data={CircleQuestion} />
+                  </Tooltip>
+                }
+              />
+            </FormSection>
+          )}
+
+          <FormSection
+            label={t("common.fields.tags")}
+            count={parsedTags.length}
+            preview={parsedTags.slice(0, 3).join(", ")}
+            open={sections.tags}
+            onToggle={toggleSection("tags")}
+          >
+            <Flex as="label" direction="column" gap="spacing-2" minWidth="0">
+              <Text>{t("common.fields.tags")}</Text>
+              <TextInput
+                size="xl"
+                value={tagsValue}
+                onUpdate={setTagsValue}
+                onBlur={() =>
                   setForm((previous) => ({
                     ...previous,
-                    folder: match?.name ?? (value.startsWith("legacy:") ? previous.folder : ""),
-                    folder_id: match?.id ?? null,
-                  }));
-                  closeSnackbar("entry-form-error");
-                }}
+                    tags: parseTags(tagsValue),
+                  }))
+                }
+                placeholder={t("entry.placeholders.tags")}
               />
             </Flex>
-          </Flex>
-        </Col>
-        <Col size={{ xs: 12, m: 5 }} minWidth="0">
-          <Flex direction="column" gap="spacing-3" minWidth="0">
-            {!isNote && (
-              <FormSection
-                label={t("entry.labels.twoFactor")}
-                preview={form.totp_secret ? t("common.labels.configured") : ""}
-                open={sections.totp}
-                onToggle={toggleSection("totp")}
-              >
-                <PasswordField
-                  label={t("entry.labels.twoFactorSecret")}
-                  size="xl"
-                  value={form.totp_secret}
-                  onChange={setField("totp_secret")}
-                  autoComplete="off"
-                  show={showTotp}
-                  onToggleShow={() => setShowTotp((value) => !value)}
-                  helperText={t("entry.help.twoFactor")}
-                  adornment={
-                    <Tooltip content={t("entry.help.twoFactorTooltip")}>
-                      <Icon data={CircleQuestion} />
-                    </Tooltip>
-                  }
-                />
-              </FormSection>
-            )}
+          </FormSection>
 
+          <FormSection
+            label={t("entry.labels.customFields")}
+            count={customCount}
+            preview={normalizeCustomFields(form.custom_fields)
+              .map((field) => field.label)
+              .join(", ")}
+            open={sections.custom}
+            onToggle={toggleSection("custom")}
+          >
+            <Flex direction="column" gap="spacing-3" minWidth="0">
+              {form.custom_fields.map((field, index) => (
+                <CustomFieldRow
+                  key={index}
+                  field={field}
+                  onChange={(next) => updateCustomField(index, next)}
+                  onToggleHidden={() =>
+                    updateCustomField(index, { ...field, hidden: !field.hidden })
+                  }
+                  onRemove={() => removeCustomField(index)}
+                />
+              ))}
+              <Button type="button" size="xl" view="flat" onClick={addCustomField}>
+                <Icon data={Plus} />
+                {t("entry.actions.addField")}
+              </Button>
+            </Flex>
+          </FormSection>
+
+          {!isNote && (
             <FormSection
-              label={t("common.fields.tags")}
-              count={parsedTags.length}
-              preview={parsedTags.slice(0, 3).join(", ")}
-              open={sections.tags}
-              onToggle={toggleSection("tags")}
+              label={t("entry.labels.notes")}
+              preview={form.description}
+              open={sections.notes}
+              onToggle={toggleSection("notes")}
             >
               <Flex as="label" direction="column" gap="spacing-2" minWidth="0">
-                <Text>{t("common.fields.tags")}</Text>
-                <TextInput
-                  size="xl"
-                  value={tagsValue}
-                  onUpdate={setTagsValue}
-                  onBlur={() =>
-                    setForm((previous) => ({
-                      ...previous,
-                      tags: parseTags(tagsValue),
-                    }))
-                  }
-                  placeholder={t("entry.placeholders.tags")}
+                <Text>{t("common.fields.description")}</Text>
+                <TextArea
+                  size="m"
+                  value={form.description}
+                  onUpdate={setValue("description")}
+                  minRows={2}
+                  maxRows={5}
+                  placeholder={t("entry.placeholders.description")}
                 />
               </Flex>
             </FormSection>
+          )}
+        </Flex>
 
-            <FormSection
-              label={t("entry.labels.customFields")}
-              count={customCount}
-              preview={normalizeCustomFields(form.custom_fields)
-                .map((field) => field.label)
-                .join(", ")}
-              open={sections.custom}
-              onToggle={toggleSection("custom")}
-            >
-              <Flex direction="column" gap="spacing-3" minWidth="0">
-                {form.custom_fields.map((field, index) => (
-                  <CustomFieldRow
-                    key={index}
-                    field={field}
-                    onChange={(next) => updateCustomField(index, next)}
-                    onToggleHidden={() =>
-                      updateCustomField(index, { ...field, hidden: !field.hidden })
-                    }
-                    onRemove={() => removeCustomField(index)}
-                  />
-                ))}
-                <Button type="button" size="xl" view="flat" onClick={addCustomField}>
-                  <Icon data={Plus} />
-                  {t("entry.actions.addField")}
-                </Button>
-              </Flex>
-            </FormSection>
+        {editTarget && (
+          <FormSection
+            label={t("entry.labels.attachments")}
+            count={editTarget.attachment_count ?? 0}
+            open={sections.attachments}
+            onToggle={toggleSection("attachments")}
+          >
+            <AttachmentsSection
+              passwordName={editTarget.password_name}
+              onChanged={() => setAttachmentsDirty(true)}
+            />
+          </FormSection>
+        )}
 
-            {!isNote && (
-              <FormSection
-                label={t("entry.labels.notes")}
-                preview={form.description}
-                open={sections.notes}
-                onToggle={toggleSection("notes")}
-              >
-                <Flex as="label" direction="column" gap="spacing-2" minWidth="0">
-                  <Text>{t("common.fields.description")}</Text>
-                  <TextArea
-                    size="m"
-                    value={form.description}
-                    onUpdate={setValue("description")}
-                    minRows={2}
-                    maxRows={5}
-                    placeholder={t("entry.placeholders.description")}
-                  />
-                </Flex>
-              </FormSection>
-            )}
-
-            {editTarget && (
-              <FormSection
-                label={t("entry.labels.attachments")}
-                count={editTarget.attachment_count ?? 0}
-                open={sections.attachments}
-                onToggle={toggleSection("attachments")}
-              >
-                <AttachmentsSection
-                  passwordName={editTarget.password_name}
-                  onChanged={() => setAttachmentsDirty(true)}
-                />
-              </FormSection>
-            )}
-
-            {!isNote && editTarget && history.length > 0 && (
-              <FormSection
-                label={t("entry.labels.passwordHistory")}
-                count={history.length}
-                open={sections.history}
-                onToggle={toggleSection("history")}
-              >
-                <Flex direction="column" gap="spacing-3" minWidth="0">
-                  {history.map((entry, index) => (
-                    <HistoryRow key={index} entry={entry} onCopy={onCopy} />
-                  ))}
-                </Flex>
-              </FormSection>
-            )}
-          </Flex>
-        </Col>
-      </Row>
+        {!isNote && editTarget && history.length > 0 && (
+          <FormSection
+            label={t("entry.labels.passwordHistory")}
+            count={history.length}
+            open={sections.history}
+            onToggle={toggleSection("history")}
+          >
+            <Flex direction="column" gap="spacing-3" minWidth="0">
+              {history.map((entry, index) => (
+                <HistoryRow key={index} entry={entry} onCopy={onCopy} />
+              ))}
+            </Flex>
+          </FormSection>
+        )}
+      </Flex>
     </Flex>
   );
 
