@@ -1,5 +1,6 @@
 import { useCallback } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { getPageScrollTop } from "../lib/pageScroll";
 
 // Navigation state contains only a return URL, never form values or secrets.
 export default function useTaskRoute() {
@@ -12,7 +13,7 @@ export default function useTaskRoute() {
       for (const key of ["tool", "entry", "view", "user"]) next.delete(key);
       for (const [key, value] of Object.entries(values)) next.set(key, String(value));
       navigate(`${location.pathname}?${next}`, {
-        state: { taskReturn: location.pathname + location.search, taskScroll: window.scrollY },
+        state: { taskReturn: location.pathname + location.search, taskScroll: getPageScrollTop() },
       });
     },
     [location.pathname, location.search, navigate]

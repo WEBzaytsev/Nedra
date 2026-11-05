@@ -519,9 +519,90 @@ async function mobileToastFits(page, text, width) {
             );
             if (!content) return false;
             const box = content.getBoundingClientRect();
-            return box.x >= 8 && box.right <= width - 8;
+            return (
+                box.x >= 8 &&
+                box.right <= width - 8 &&
+                box.y >= 0 &&
+                box.bottom <= innerHeight
+            );
         },
         { text, width },
+    );
+}
+
+async function feedbackDoesNotCover(page, ...controls) {
+    // No manual dismissal or auto-hide wait: feedback must coexist with actions.
+    await page
+        .locator('[data-qa="notification-shelf"] [data-toast="true"]')
+        .first()
+        .waitFor();
+    await page.waitForTimeout(300); // UIKit replacement animation, not auto-hide.
+    assert.equal(
+        await page
+            .locator('[data-qa="notification-shelf"] [data-toast="true"]')
+            .count(),
+        1,
+    );
+    for (const control of controls) {
+        await control.scrollIntoViewIfNeeded();
+        assert.equal(
+            await control.evaluate((node) => {
+                const box = node.getBoundingClientRect();
+                const toastRects = [
+                    ...document.querySelectorAll('[data-toast="true"]'),
+                ]
+                    // A foreground confirmation hides feedback with its backdrop.
+                    // Its background rectangle is not a visible overlap.
+                    .filter((toast) => {
+                        const rect = toast.getBoundingClientRect();
+                        return toast.contains(
+                            document.elementFromPoint(
+                                rect.x + rect.width / 2,
+                                rect.y + rect.height / 2,
+                            ),
+                        );
+                    })
+                    .map((toast) => toast.getBoundingClientRect());
+                const points = [0.2, 0.5, 0.8].map((fraction) => ({
+                    x: box.x + box.width * fraction,
+                    y: box.y + box.height / 2,
+                }));
+                return (
+                    box.y >= 0 &&
+                    box.bottom <= innerHeight &&
+                    points.every(({ x, y }) =>
+                        node.contains(document.elementFromPoint(x, y)),
+                    ) &&
+                    toastRects.every(
+                        (toast) =>
+                            box.right <= toast.x ||
+                            box.x >= toast.right ||
+                            box.bottom <= toast.y ||
+                            box.y >= toast.bottom,
+                    )
+                );
+            }),
+            true,
+            `feedback must not cover ${(await control.getAttribute("aria-label")) ?? (await control.textContent())}`,
+        );
+    }
+    const geometry = await page.evaluate(() => {
+        const pane = document.querySelector('[data-qa="page-scroll"]');
+        const shelf = document.querySelector('[data-qa="notification-shelf"]');
+        return {
+            paneBottom: pane.getBoundingClientRect().bottom,
+            shelfTop: shelf.getBoundingClientRect().top,
+            bodyHeight: document.documentElement.scrollHeight,
+            viewportHeight: innerHeight,
+        };
+    });
+    assert.ok(
+        geometry.paneBottom <= geometry.shelfTop,
+        JSON.stringify(geometry),
+    );
+    assert.ok(
+        geometry.bodyHeight <= geometry.viewportHeight,
+        "phone has one content scroll owner, not body + pane",
     );
 }
 
@@ -1557,6 +1638,9 @@ for (const width of [375, 1440]) {
                 const group = node.querySelector(
                     '[data-qa="health-issue-group"]',
                 );
+                const pageScroll = document.querySelector(
+                    '[data-qa="page-scroll"]',
+                );
                 const rect = (element) => {
                     const bounds = element.getBoundingClientRect();
                     return {
@@ -1572,7 +1656,7 @@ for (const width of [375, 1440]) {
                     footer: rect(footer),
                     group: rect(group),
                     bodyScrollable: node.hasAttribute("data-qa")
-                        ? document.documentElement.scrollHeight > innerHeight
+                        ? pageScroll.scrollHeight > pageScroll.clientHeight
                         : body.scrollHeight > body.clientHeight,
                     bodyOverflow: body.scrollWidth > body.clientWidth,
                 };
@@ -1616,9 +1700,24 @@ for (const width of [375, 1440]) {
             }
             await rows.last().scrollIntoViewIfNeeded();
             await rows.last().waitFor({ state: "visible" });
-            await page
-                .getByRole("button", { name: "Готово", exact: true })
-                .waitFor({ state: "visible" });
+            const done = page.getByRole("button", {
+                name: "Готово",
+                exact: true,
+            });
+            await visibleTouchAction(page, done);
+            assert.equal(
+                await done.evaluate((node) => {
+                    const rect = node.getBoundingClientRect();
+                    return node.contains(
+                        document.elementFromPoint(
+                            rect.x + rect.width / 2,
+                            rect.y + rect.height / 2,
+                        ),
+                    );
+                }),
+                true,
+                "health completion is reachable through its only scroll owner",
+            );
             if (process.env.CIPHERMOTH_SCREENSHOT_DIR) {
                 await page.screenshot({
                     path: resolve(
@@ -2279,7 +2378,9 @@ test("phone task navigation preserves list context, history, drafts and failed e
             .click();
         const row = page.locator('[data-entry-id="129"]');
         await row.scrollIntoViewIfNeeded();
-        const scroll = await page.evaluate(() => window.scrollY);
+        const scroll = await page
+            .locator('[data-qa="page-scroll"]')
+            .evaluate((node) => node.scrollTop);
         assert.ok(scroll > 0);
         await row.focus();
         await page.keyboard.press("Enter");
@@ -2309,7 +2410,11 @@ test("phone task navigation preserves list context, history, drafts and failed e
             true,
         );
         assert.ok(
-            Math.abs((await page.evaluate(() => window.scrollY)) - scroll) < 5,
+            Math.abs(
+                (await page
+                    .locator('[data-qa="page-scroll"]')
+                    .evaluate((node) => node.scrollTop)) - scroll,
+            ) < 5,
             "Back restores list position",
         );
         await page.goForward();
@@ -2472,6 +2577,58 @@ test("phone preferences save, retry and password change return through real rout
     }
 });
 
+for (const [width, height, theme] of [
+    [375, 812, "dark"],
+    [375, 480, "dark"],
+    [320, 812, "light"],
+]) {
+    test(`phone feedback reserves space after double copy and during editing ${width}x${height} ${theme}`, async () => {
+        const t = ruText;
+        const { context, page, errors } = await vault(width, "ru", theme);
+        const button = (name) =>
+            page.getByRole("button", { name, exact: true });
+        try {
+            await page.setViewportSize({ width, height });
+            await page.goto(`${origin}/passwords?entry=1&view=details`);
+            await button(t.vault.columns.copyPassword).click();
+            await button(t.vault.columns.copyPassword).click();
+            await feedbackDoesNotCover(
+                page,
+                button(t.vault.columns.copyPassword),
+                button(t.common.actions.edit),
+            );
+            assert.equal(
+                await page.evaluate(() => navigator.clipboard.readText()),
+                entries[0].password_value,
+            );
+            await viewportScreenshot(
+                page,
+                `feedback-${width}x${height}-${theme}-double-copy.png`,
+            );
+            await button(t.common.actions.edit).click();
+            await page
+                .getByLabel(t.entry.labels.usernameOptional, { exact: true })
+                .fill("feedback@example.test");
+            await feedbackDoesNotCover(
+                page,
+                button(t.common.actions.update),
+                button(t.common.actions.cancel),
+            );
+            await viewportScreenshot(
+                page,
+                `feedback-${width}x${height}-${theme}-edit-actions.png`,
+            );
+            await fits(page);
+            await axe(page);
+            await button(t.common.actions.cancel).click();
+            await page.waitForURL("**/passwords?entry=1&view=details");
+            assert.deepEqual(errors, []);
+        } finally {
+            await context.close();
+        }
+    });
+}
+
 test("phone management tasks exercise folder, group, share and recovery actions", async () => {
     const t = ruText;
     const users = [
@@ -2554,9 +2711,21 @@ test("phone management tasks exercise folder, group, share and recovery actions"
                 exact: true,
             })
             .waitFor();
+        await feedbackDoesNotCover(page, button(t.common.actions.delete));
         await button(t.common.actions.delete).click();
         const confirmation = page.getByRole("dialog");
         assert.equal(await confirmation.count(), 1);
+        await feedbackDoesNotCover(
+            page,
+            confirmation.getByRole("button", {
+                name: t.common.actions.delete,
+                exact: true,
+            }),
+            confirmation.getByRole("button", {
+                name: t.common.actions.cancel,
+                exact: true,
+            }),
+        );
         await capture("folder-delete-confirm");
         await confirmation
             .getByRole("button", { name: t.common.actions.delete, exact: true })
@@ -2621,6 +2790,18 @@ test("phone management tasks exercise folder, group, share and recovery actions"
         await taskSurface(page, { name: t.groups.title, exact: true })
             .getByText("team-member", { exact: true })
             .waitFor();
+        // Successful add clears the selection (and disables Add). Select the
+        // next available user to exercise the next enabled action, not a disabled hit target.
+        await page
+            .getByRole("combobox", { name: t.groups.addMember, exact: true })
+            .click();
+        await page.getByRole("option", { name: /^synthetic/ }).click();
+        await feedbackDoesNotCover(
+            page,
+            button(t.common.actions.add),
+            button(t.common.actions.delete).first(),
+            button(t.common.actions.remove).last(),
+        );
         await capture("group-member-added");
         await taskSurface(page, { name: t.groups.title, exact: true })
             .getByText("team-member", { exact: true })
@@ -3976,12 +4157,21 @@ if (process.env.CIPHERMOTH_LAYOUT_MATRIX) {
                         })
                         .click();
                     await capture("copy-feedback");
-                    // Keep the feedback capture, but do not let its transient
-                    // toasts obscure the independent sharing/expiry states.
-                    for (const toast of await page
-                        .locator('[data-toast="true"]')
-                        .all()) {
-                        await toast.getByRole("button").click();
+                    if (width < 576) {
+                        await feedbackDoesNotCover(
+                            page,
+                            detail.getByRole("button", {
+                                name: t.vault.columns.copyPassword,
+                                exact: true,
+                            }),
+                            detail.getByRole("button", {
+                                name: /^(Copy 2FA code|Скопировать код 2FA)/,
+                            }),
+                            detail.getByRole("button", {
+                                name: t.sharing.manage,
+                                exact: true,
+                            }),
+                        );
                     }
                     await detail
                         .getByRole("button", {

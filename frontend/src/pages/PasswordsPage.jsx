@@ -31,6 +31,7 @@ import TrashDialog from "../components/vault/TrashDialog";
 import EntryBrowser from "../components/vault/EntryBrowser";
 import useClipboard from "../hooks/useClipboard";
 import { useSnackbar } from "../hooks/useNotify";
+import { getPageScrollTarget, getPageScrollTop } from "../lib/pageScroll";
 import apiClient from "../api/client";
 import { createEntryDraftStore } from "../lib/entryDraft";
 import { getCurrentUser } from "../utils";
@@ -124,17 +125,18 @@ const PasswordsPage = () => {
   }, [vaultView, sortOrder, search, folderFilter]);
 
   useEffect(() => {
+    const target = getPageScrollTarget();
     const scroll = vaultView.current.scroll ?? 0;
-    const frame = requestAnimationFrame(() => window.scrollTo(0, scroll));
+    const frame = requestAnimationFrame(() => target.scrollTo(0, scroll));
     const rememberScroll = () => {
-      vaultView.current.scroll = window.scrollY;
+      vaultView.current.scroll = getPageScrollTop();
     };
-    window.addEventListener("scroll", rememberScroll);
+    target.addEventListener("scroll", rememberScroll);
     return () => {
       cancelAnimationFrame(frame);
-      window.removeEventListener("scroll", rememberScroll);
+      target.removeEventListener("scroll", rememberScroll);
     };
-  }, [vaultView]);
+  }, [vaultView, mobile]);
 
   useEffect(() => {
     let active = true;

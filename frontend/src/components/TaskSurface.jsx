@@ -12,6 +12,7 @@ import {
 } from "@gravity-ui/uikit";
 import { useTranslation } from "react-i18next";
 import { useLocation } from "react-router-dom";
+import { getPageScrollTarget, getPageScrollTop } from "../lib/pageScroll";
 
 const PageContext = createContext(null);
 
@@ -28,12 +29,13 @@ const TaskSurface = ({ open, children, onOpenChange, page: inline = false, ...pr
 
   useEffect(() => {
     if (!open || !page) return undefined;
-    const scroll = location.state?.taskScroll ?? window.scrollY;
+    const target = getPageScrollTarget();
+    const scroll = location.state?.taskScroll ?? getPageScrollTop();
     const trigger = document.activeElement;
-    window.scrollTo(0, 0);
+    target.scrollTo(0, 0);
     heading.current?.focus({ preventScroll: true });
     return () => {
-      window.scrollTo(0, scroll);
+      target.scrollTo(0, scroll);
       if (trigger?.isConnected) trigger.focus({ preventScroll: true });
     };
   }, [open, page, location.key, location.state?.taskScroll]);

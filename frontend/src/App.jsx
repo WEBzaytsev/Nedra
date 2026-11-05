@@ -24,6 +24,7 @@ const AppContent = () => {
   const location = useLocation();
   const { isMediaActive } = useLayoutContext();
   const desktopShell = isMediaActive("l");
+  const phone = !isMediaActive("s");
   const vaultRoute = location.pathname === "/passwords";
   const [currentUser, setUser] = useState(getCurrentUser);
   const passwordChangeRequired = Boolean(currentUser?.must_change_password);
@@ -55,7 +56,7 @@ const AppContent = () => {
   return (
     <VaultViewContext.Provider value={vaultView}>
       <Flex
-        minHeight="100dvh"
+        minHeight={phone ? "100%" : "100dvh"}
         height={desktopShell ? "100dvh" : undefined}
         overflow={desktopShell ? "hidden" : undefined}
         direction={{ xs: "column", l: "row" }}
@@ -96,13 +97,48 @@ const AppContent = () => {
   );
 };
 
+const AppFrame = () => {
+  const { isMediaActive } = useLayoutContext();
+  const phone = !isMediaActive("s");
+  return (
+    <Flex
+      direction="column"
+      height={phone ? "100dvh" : undefined}
+      overflow={phone ? "hidden" : undefined}
+    >
+      <Box
+        flexGrow={1}
+        minHeight="0"
+        overflow={phone ? "auto" : undefined}
+        qa={phone ? "page-scroll" : undefined}
+      >
+        <DesktopGate>
+          <AppContent />
+        </DesktopGate>
+      </Box>
+      {phone ? (
+        <Box
+          flexShrink={0}
+          maxHeight="40dvh"
+          overflow="auto"
+          paddingInline="spacing-2"
+          aria-live="polite"
+          aria-relevant="additions text"
+          qa="notification-shelf"
+        >
+          <ToasterComponent hasPortal={false} mobile />
+        </Box>
+      ) : (
+        <ToasterComponent />
+      )}
+    </Flex>
+  );
+};
+
 const App = () => (
   <Router>
     <ColorModeProvider>
-      <DesktopGate>
-        <AppContent />
-      </DesktopGate>
-      <ToasterComponent />
+      <AppFrame />
     </ColorModeProvider>
   </Router>
 );
