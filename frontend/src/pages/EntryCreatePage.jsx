@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Flex, Alert, Button, Loader } from "@gravity-ui/uikit";
+import { Flex, Alert, Button, Loader, Text, useLayoutContext } from "@gravity-ui/uikit";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useSnackbar } from "../hooks/useNotify";
@@ -7,11 +7,14 @@ import { useStoreActions, useStoreState } from "easy-peasy";
 
 import apiClient from "../api/client";
 import PasswordFormDialog from "../components/vault/PasswordFormDialog";
+import TaskSurface from "../components/TaskSurface";
 import { createEntryDraftStore } from "../lib/entryDraft";
 import { getCurrentUser } from "../utils";
 
 const EntryCreatePage = () => {
   const { t } = useTranslation();
+  const { isMediaActive } = useLayoutContext();
+  const mobile = !isMediaActive("s");
   const { enqueueSnackbar } = useSnackbar();
   const navigate = useNavigate();
   const location = useLocation();
@@ -103,6 +106,27 @@ const EntryCreatePage = () => {
   };
 
   if (initialDraft === undefined) {
+    if (mobile)
+      return (
+        <TaskSurface
+          open
+          aria-label={t("entry.title.addPassword")}
+          onOpenChange={(open) => !open && close()}
+        >
+          <TaskSurface.Header caption={t("entry.title.addPassword")} />
+          <TaskSurface.Body>
+            <Flex gap="spacing-3" justifyContent="center" paddingBlock="spacing-10" role="status">
+              <Loader size="l" />
+              <Text>{t("common.labels.loading")}</Text>
+            </Flex>
+          </TaskSurface.Body>
+          <TaskSurface.Footer
+            onClickButtonCancel={close}
+            textButtonCancel={t("navigation.back")}
+            propsButtonCancel={{ qa: "task-back" }}
+          />
+        </TaskSurface>
+      );
     return (
       <Flex
         direction="column"
@@ -118,6 +142,48 @@ const EntryCreatePage = () => {
   }
 
   if (draftError) {
+    if (mobile)
+      return (
+        <TaskSurface
+          open
+          aria-label={t("entry.title.addPassword")}
+          onOpenChange={(open) => !open && close()}
+        >
+          <TaskSurface.Header caption={t("entry.title.addPassword")} />
+          <TaskSurface.Body>
+            <Alert
+              theme="danger"
+              view="outlined"
+              message={t("entry.draft.unavailable")}
+              actions={
+                draftStore && (
+                  <Button
+                    size="xl"
+                    view="flat-danger"
+                    onClick={() => {
+                      try {
+                        draftStore.clear();
+                        setDraftAttempt((n) => n + 1);
+                      } catch {
+                        enqueueSnackbar(t("entry.draft.unavailable"), { variant: "error" });
+                      }
+                    }}
+                  >
+                    {t("entry.draft.discard")}
+                  </Button>
+                )
+              }
+            />
+          </TaskSurface.Body>
+          <TaskSurface.Footer
+            onClickButtonApply={() => setDraftAttempt((n) => n + 1)}
+            textButtonApply={t("common.actions.retry")}
+            onClickButtonCancel={close}
+            textButtonCancel={t("navigation.back")}
+            propsButtonCancel={{ qa: "task-back" }}
+          />
+        </TaskSurface>
+      );
     return (
       <Flex
         direction="column"
@@ -179,6 +245,7 @@ const EntryCreatePage = () => {
       draftError={draftError}
       folderOptions={folderOptions}
       onClose={cancel}
+      onBack={close}
       onSubmit={submit}
     />
   );

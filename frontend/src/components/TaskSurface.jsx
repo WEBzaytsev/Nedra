@@ -25,7 +25,7 @@ const TaskSurface = ({
   children,
   onOpenChange,
   page: inline = false,
-  dockActions = false,
+  dockActions = true,
   ...props
 }) => {
   const { isMediaActive } = useLayoutContext();
@@ -35,6 +35,8 @@ const TaskSurface = ({
 
   const page = inline || !isMediaActive("s");
   const heading = useRef(null);
+  const root = useRef(null);
+  const previousView = useRef(null);
   const dismiss = () => onOpenChange?.(false);
   const canDismiss = !props.disableEscapeKeyDown;
 
@@ -43,9 +45,28 @@ const TaskSurface = ({
     const target = getPageScrollTarget();
     const scroll = location.state?.taskScroll ?? getPageScrollTop();
     const trigger = document.activeElement;
-    target.scrollTo(0, 0);
-    heading.current?.focus({ preventScroll: true });
+    const section = root.current;
+    const controls = () =>
+      section?.querySelectorAll("button, input, textarea, select, a[href], [tabindex='0']");
+    const saved = previousView.current?.key === location.key ? previousView.current : null;
+    const view = { key: location.key, scroll: saved?.scroll ?? 0, focusIndex: saved?.focusIndex };
+    const rememberScroll = () => {
+      view.scroll = getPageScrollTop();
+    };
+    const rememberFocus = (event) => {
+      view.focusIndex = Array.from(controls() ?? []).indexOf(event.target);
+      rememberScroll();
+    };
+    target.scrollTo(0, view.scroll);
+    (controls()?.[view.focusIndex] ?? heading.current)?.focus({ preventScroll: true });
+    target.addEventListener("scroll", rememberScroll);
+    section?.addEventListener("focusin", rememberFocus);
     return () => {
+      // A parent task remains mounted while its child owns the route. Keep its
+      // own position/focus separately from the position to restore on dismissal.
+      previousView.current = view;
+      target.removeEventListener("scroll", rememberScroll);
+      section?.removeEventListener("focusin", rememberFocus);
       target.scrollTo(0, scroll);
       if (trigger?.isConnected) trigger.focus({ preventScroll: true });
     };
@@ -62,6 +83,7 @@ const TaskSurface = ({
     <PageContext.Provider value={{ heading, dismiss, canDismiss, footerTarget }}>
       <Flex
         as="section"
+        ref={root}
         direction="column"
         gap="spacing-5"
         minWidth="0"
@@ -106,7 +128,9 @@ const Header = ({ caption, id, insertAfter }) => {
 const Body = ({ children, ...props }) => {
   const page = useContext(PageContext);
   return page ? (
-    <Box minWidth="0">{children}</Box>
+    <Box minWidth="0" qa="task-body">
+      {children}
+    </Box>
   ) : (
     <Dialog.Body {...props}>{children}</Dialog.Body>
   );
@@ -120,6 +144,7 @@ const Footer = ({
   textButtonCancel,
   propsButtonApply,
   propsButtonCancel,
+  onClickButtonBack,
   ...props
 }) => {
   const page = useContext(PageContext);
@@ -158,11 +183,45 @@ const Footer = ({
           view="action"
           width="max"
           loading={loading}
-          disabled={loading}
           onClick={onClickButtonApply}
           {...propsButtonApply}
+          disabled={loading || propsButtonApply?.disabled}
         >
           {textButtonApply}
+        </Button>
+      )}
+      <SecondaryActions
+        {...{ page, loading, textButtonCancel, onClickButtonCancel, propsButtonCancel }}
+        onBack={page.footerTarget ? onClickButtonBack : undefined}
+      />
+    </Flex>
+  );
+  return page.footerTarget ? createPortal(footer, page.footerTarget) : footer;
+};
+
+const SecondaryActions = ({
+  page,
+  loading,
+  textButtonCancel,
+  onClickButtonCancel,
+  propsButtonCancel,
+  onBack,
+}) => {
+  const { t } = useTranslation();
+  if (!textButtonCancel && !onBack) return null;
+  return (
+    <Flex gap="spacing-3" minWidth="0">
+      {onBack && (
+        <Button
+          size="xl"
+          view="flat-secondary"
+          width="max"
+          disabled={loading || !page.canDismiss}
+          onClick={onBack}
+          qa="task-back"
+        >
+          <Icon data={ArrowLeft} />
+          {t("navigation.back")}
         </Button>
       )}
       {textButtonCancel && (
@@ -170,16 +229,15 @@ const Footer = ({
           size="xl"
           view="flat-secondary"
           width="max"
-          disabled={loading}
           onClick={onClickButtonCancel}
           {...propsButtonCancel}
+          disabled={loading || propsButtonCancel?.disabled}
         >
           {textButtonCancel}
         </Button>
       )}
     </Flex>
   );
-  return page.footerTarget ? createPortal(footer, page.footerTarget) : footer;
 };
 
 TaskSurface.Header = Header;

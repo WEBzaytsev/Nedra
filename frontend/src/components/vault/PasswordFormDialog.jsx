@@ -213,6 +213,7 @@ const PasswordFormDialog = ({
   open,
   editTarget,
   onClose,
+  onBack,
   onSubmit,
   onCopy,
   initialDraft,
@@ -768,6 +769,7 @@ const PasswordFormDialog = ({
   const footer = (
     <Dialog.Footer
       onClickButtonCancel={onClose}
+      onClickButtonBack={onBack}
       textButtonCancel={t("common.actions.cancel")}
       onClickButtonApply={handleSubmit}
       textButtonApply={submitLabel}

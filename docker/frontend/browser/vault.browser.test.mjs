@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 import { after, before, test } from "node:test";
 import { chromium } from "playwright";
 import { startFrontend, stopFrontend } from "./frontend.mjs";
+import { registerBottomActionChecks } from "./bottom-actions.mjs";
 const require = createRequire(import.meta.url);
 const axePath = require.resolve("axe-core/axe.min.js");
 import enText from "../../../frontend/src/i18n/en.js";
@@ -101,6 +102,7 @@ async function vault(
 ) {
     const context = await browser.newContext({
         viewport: { width, height: width < 600 ? 812 : 900 },
+        hasTouch: options.touch ?? false,
         bypassCSP: true,
         permissions: ["clipboard-read", "clipboard-write"],
     });
@@ -318,7 +320,13 @@ async function vault(
             body: JSON.stringify(data),
         });
     });
-    await page.goto(`${origin}/passwords`);
+    try {
+        await page.goto(`${origin}/passwords`);
+    } catch (error) {
+        // Docker can briefly notify Chromium of a network change on first navigation.
+        if (!error.message.includes("net::ERR_NETWORK_CHANGED")) throw error;
+        await page.goto(`${origin}/passwords`);
+    }
     await page
         .getByPlaceholder(
             language === "ru" ? "Поиск записей…" : "Search entries…",
@@ -437,20 +445,39 @@ function taskSurface(page, options = {}) {
         );
 }
 
+function taskAction(page, surface, name) {
+    // Phone task controls now live in the shell, not the scrolling region.
+    const root =
+        page.viewportSize().width < 576
+            ? page.locator('[data-qa="mobile-task-actions"]')
+            : surface;
+    return root.getByRole("button", { name, exact: true });
+}
+
 async function leaveSurface(page) {
     if (await page.getByRole("dialog").count()) {
         await page.keyboard.press("Escape");
         await page.getByRole("dialog").waitFor({ state: "hidden" });
-    } else if (await page.locator('[data-qa="task-back"]').count()) {
-        await page.locator('[data-qa="task-back"]').click();
-        await page.waitForTimeout(100);
     } else if (
         await page.locator('[data-qa="mobile-task-actions"] button').count()
     ) {
-        await page
-            .locator('[data-qa="mobile-task-actions"]')
-            .getByRole("button", { name: /^(Cancel|Отмена)$/, exact: true })
-            .click();
+        const dock = page.locator('[data-qa="mobile-task-actions"]');
+        const cancel = dock.getByRole("button", {
+            name: /^(Cancel|Отмена)$/,
+            exact: true,
+        });
+        if (await cancel.count()) await cancel.click();
+        else
+            await dock
+                .getByRole("button", {
+                    name: /^(Back|Назад|Close|Закрыть|Done|Готово)$/,
+                    exact: true,
+                })
+                .click();
+        await page.waitForTimeout(100);
+    } else if (await page.locator('[data-qa="task-back"]').count()) {
+        await page.locator('[data-qa="task-back"]').click();
+        await page.waitForTimeout(100);
     } else {
         await page.keyboard.press("Escape");
     }
@@ -759,9 +786,7 @@ for (const [width, reason] of [
             );
             assert.deepEqual(mutations, []);
             await screenshot(page, `draft-restored-${width}-${reason}.png`);
-            await editor
-                .getByRole("button", { name: "Create", exact: true })
-                .click();
+            await taskAction(page, editor, "Create").click();
             await editor.waitFor({ state: "hidden" });
             assert.equal(mutations.length, 1);
             assert.equal(mutations[0].postDataJSON().password_value, secret);
@@ -781,9 +806,7 @@ for (const [width, reason] of [
             await editor
                 .getByRole("textbox", { name: /^Name/ })
                 .fill("Cancel this draft");
-            await editor
-                .getByRole("button", { name: "Cancel", exact: true })
-                .click();
+            await taskAction(page, editor, "Cancel").click();
             assert.equal(
                 await page.evaluate(() =>
                     sessionStorage.getItem("ciphermoth-entry-draft:v1:1"),
@@ -840,9 +863,7 @@ test("a damaged draft is kept until explicit discard, and does not permanently b
         await openAdd(page, 375);
         const editor = entryEditor(page, 375);
         await editor.waitFor();
-        await editor
-            .getByRole("button", { name: "Cancel", exact: true })
-            .click();
+        await taskAction(page, editor, "Cancel").click();
         assert.deepEqual(errors, []);
     } finally {
         await context.close();
@@ -881,10 +902,7 @@ for (const width of [375, 1440]) {
             await page.keyboard.press("Escape");
             await screenshot(page, `entry-create-${width}.png`);
 
-            const createButton = editor.getByRole("button", {
-                name: "Create",
-                exact: true,
-            });
+            const createButton = taskAction(page, editor, "Create");
             assert.equal(await createButton.isDisabled(), true);
             await editor
                 .getByRole("textbox", { name: /^Name/ })
@@ -926,9 +944,7 @@ for (const width of [375, 1440]) {
                 "Personal",
             ]);
             await page.keyboard.press("Escape");
-            await editor
-                .getByRole("button", { name: "Cancel", exact: true })
-                .click();
+            await taskAction(page, editor, "Cancel").click();
             assert.deepEqual(errors, []);
         } finally {
             await context.close();
@@ -1029,10 +1045,7 @@ for (const width of [375, 1440]) {
                 ),
                 true,
             );
-            const groupsClose = groupsDialog.getByRole("button", {
-                name: "Close",
-                exact: true,
-            });
+            const groupsClose = taskAction(page, groupsDialog, "Close");
             await visibleTouchAction(page, groupsClose);
             await viewportScreenshot(page, `group-management-${width}.png`);
             await groupsClose.click();
@@ -1078,10 +1091,7 @@ for (const width of [375, 1440]) {
                 ),
                 true,
             );
-            const close = dialog.getByRole("button", {
-                name: "Close",
-                exact: true,
-            });
+            const close = taskAction(page, dialog, "Close");
             await visibleTouchAction(page, close);
             await viewportScreenshot(page, `user-folder-access-${width}.png`);
 
@@ -1240,10 +1250,7 @@ for (const width of [375, 1440]) {
                 ),
                 true,
             );
-            await visibleTouchAction(
-                page,
-                dialog.getByRole("button", { name: "Close", exact: true }),
-            );
+            await visibleTouchAction(page, taskAction(page, dialog, "Close"));
             await viewportScreenshot(page, `folder-group-access-${width}.png`);
             await grantAudit.scrollIntoViewIfNeeded();
             await viewportScreenshot(page, `folder-group-audit-${width}.png`);
@@ -1639,9 +1646,11 @@ for (const width of [375, 1440]) {
             const geometry = await dialog.evaluate((node) => {
                 const body =
                     node.querySelector(".g-dialog-body") ?? node.children[1];
-                const footer = node.querySelector(
-                    ".g-dialog-footer, [data-qa='task-actions']",
-                );
+                const footer =
+                    node.querySelector(".g-dialog-footer") ??
+                    document.querySelector(
+                        '[data-qa="mobile-task-actions"] [data-qa="task-actions"]',
+                    );
                 const group = node.querySelector(
                     '[data-qa="health-issue-group"]',
                 );
@@ -1661,6 +1670,7 @@ for (const width of [375, 1440]) {
                     dialog: rect(node),
                     body: rect(body),
                     footer: rect(footer),
+                    scroll: pageScroll ? rect(pageScroll) : null,
                     group: rect(group),
                     bodyScrollable: node.hasAttribute("data-qa")
                         ? pageScroll.scrollHeight > pageScroll.clientHeight
@@ -1682,11 +1692,13 @@ for (const width of [375, 1440]) {
                 JSON.stringify(geometry),
             );
             assert.ok(
-                geometry.footer.top >= geometry.body.bottom - 1,
+                geometry.footer.top >=
+                    (geometry.scroll ?? geometry.body).bottom - 1,
                 JSON.stringify(geometry),
             );
             assert.ok(
-                geometry.footer.bottom <= geometry.dialog.bottom + 1,
+                geometry.footer.bottom <=
+                    (width < 576 ? 812 : geometry.dialog.bottom) + 1,
                 JSON.stringify(geometry),
             );
             assert.equal(
@@ -1707,6 +1719,12 @@ for (const width of [375, 1440]) {
             }
             await rows.last().scrollIntoViewIfNeeded();
             await rows.last().waitFor({ state: "visible" });
+            if (width < 576) {
+                const last = await rows.last().boundingBox();
+                assert.ok(
+                    last.y >= 0 && last.y + last.height <= geometry.footer.top,
+                );
+            }
             const done = page.getByRole("button", {
                 name: "Готово",
                 exact: true,
@@ -1878,7 +1896,7 @@ test("mobile vault opens an accessible read view without exposing secrets", asyn
             await page.evaluate(() => navigator.clipboard.readText()),
             /^\d{6}$/,
         );
-        await detail.getByRole("button", { name: "Back", exact: true }).click();
+        await taskAction(page, detail, "Back").click();
 
         await list.getByRole("row", { name: /^Read-only account/ }).click();
         const readOnly = taskSurface(page, {
@@ -1897,9 +1915,7 @@ test("mobile vault opens an accessible read view without exposing secrets", asyn
         await readOnly.getByText("Attachments (1)", { exact: true }).click();
         await readOnly.getByText("Readme.txt", { exact: true }).waitFor();
         assert.equal(await readOnly.locator('input[type="file"]').count(), 0);
-        await readOnly
-            .getByRole("button", { name: "Back", exact: true })
-            .click();
+        await taskAction(page, readOnly, "Back").click();
 
         await list.getByRole("row", { name: /^Recovery notes/ }).click();
         const note = taskSurface(page, {
@@ -3530,6 +3546,17 @@ async function captureMatrixState(page, prefix) {
     }
     return images;
 }
+registerBottomActionChecks({
+    vault,
+    entries,
+    fits,
+    axe,
+    settleAnimations,
+    viewportScreenshot,
+    enText,
+    ruText,
+});
+
 if (process.env.CIPHERMOTH_LAYOUT_MATRIX) {
     const combinations =
         process.env.CIPHERMOTH_LAYOUT_MATRIX === "baseline"
@@ -4607,12 +4634,22 @@ if (process.env.CIPHERMOTH_LAYOUT_MATRIX) {
                               })
                             : route.fallback(),
                     );
-                    await form
-                        .getByRole("button", {
-                            name: t.common.actions.create,
-                            exact: true,
-                        })
-                        .click();
+                    const createService = (width < 576
+                        ? page.locator('[data-qa="mobile-task-actions"]')
+                        : form
+                    ).getByRole("button", {
+                        name: t.common.actions.create,
+                        exact: true,
+                    });
+                    assert.equal(await createService.count(), 1);
+                    assert.equal(
+                        await createService.evaluate(
+                            (control) => control.form === document.querySelector("form"),
+                        ),
+                        true,
+                        "service creation keeps its form owner after mobile portaling",
+                    );
+                    await createService.click();
                     await page
                         .getByText(t.users.serviceTokenOnce, { exact: true })
                         .waitFor();

@@ -398,7 +398,11 @@ for (const [width, language] of [
                     r.method() === "POST" &&
                     new URL(r.url()).pathname === "/api/users",
             );
-            await create
+            await (
+                width < 576
+                    ? page.locator('[data-qa="mobile-task-actions"]')
+                    : create
+            )
                 .getByRole("button", {
                     name: t.common.actions.create,
                     exact: true,
@@ -539,7 +543,11 @@ for (const [width, language] of [
                     }),
                 });
             });
-            await create
+            await (
+                width < 576
+                    ? page.locator('[data-qa="mobile-task-actions"]')
+                    : create
+            )
                 .getByRole("button", {
                     name: t.common.actions.create,
                     exact: true,
@@ -699,7 +707,8 @@ test("existing vault generator stays singular; backup, restore and TOTP never ge
             })
             .click();
         assert.equal(await existingPassword.inputValue(), "synthetic-only");
-        await editForm
+        await page
+            .locator('[data-qa="mobile-task-actions"]')
             .getByRole("button", {
                 name: t.common.actions.cancel,
                 exact: true,
@@ -732,17 +741,13 @@ test("existing vault generator stays singular; backup, restore and TOTP never ge
                     .count(),
                 0,
             );
-            if (tool === "backup") {
-                await page
-                    .locator('[data-qa="mobile-task-actions"]')
-                    .getByRole("button", {
-                        name: t.common.actions.cancel,
-                        exact: true,
-                    })
-                    .click();
-            } else {
-                await page.locator('[data-qa="task-back"]').click();
-            }
+            await page
+                .locator('[data-qa="mobile-task-actions"]')
+                .getByRole("button", {
+                    name: t.common.actions.cancel,
+                    exact: true,
+                })
+                .click();
             await dialog.waitFor({ state: "hidden" });
         }
         await page

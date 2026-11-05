@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { ArrowLeft, EllipsisVertical, Persons, Plus } from "@gravity-ui/icons";
 import {
   Flex,
@@ -66,6 +66,7 @@ const UsersPage = () => {
   const [temporaryPassword, setTemporaryPassword] = useState("");
   const [temporaryPasswordError, setTemporaryPasswordError] = useState(false);
   const temporaryPasswordRef = useRef(null);
+  const createFormId = useId();
 
   const closeUserAction = (setter, target) => {
     if (view === "access") {
@@ -421,6 +422,7 @@ const UsersPage = () => {
                   gap="spacing-3"
                   minWidth="0"
                   as="form"
+                  id={createFormId}
                   noValidate
                   onSubmit={add}
                 >
@@ -485,16 +487,32 @@ const UsersPage = () => {
                       setTemporaryPasswordError(false);
                     }}
                   />
-                  <Button
-                    type="submit"
-                    view="action"
-                    size="xl"
-                    disabled={busy || !form.username.trim()}
-                    loading={busy}
-                  >
-                    {t("common.actions.create")}
-                  </Button>
+                  {!mobile && (
+                    <Button
+                      type="submit"
+                      view="action"
+                      size="xl"
+                      disabled={busy || !form.username.trim()}
+                      loading={busy}
+                    >
+                      {t("common.actions.create")}
+                    </Button>
+                  )}
                 </Flex>
+                {mobile && (
+                  <TaskSurface.Footer
+                    textButtonApply={t("common.actions.create")}
+                    propsButtonApply={{
+                      type: "submit",
+                      form: createFormId,
+                      disabled: busy || !form.username.trim(),
+                      loading: busy,
+                    }}
+                    textButtonCancel={t("navigation.back")}
+                    onClickButtonCancel={closeTask}
+                    propsButtonCancel={{ disabled: busy, qa: "task-back" }}
+                  />
+                )}
               </Flex>
             </CreateSurface>
           </Box>
@@ -527,6 +545,11 @@ const UsersPage = () => {
               <Alert theme="warning" message={t("users.unavailable")} />
             )}
           </TaskSurface.Body>
+          <TaskSurface.Footer
+            onClickButtonCancel={closeTask}
+            textButtonCancel={t("navigation.back")}
+            propsButtonCancel={{ qa: "task-back" }}
+          />
         </TaskSurface>
       )}
 

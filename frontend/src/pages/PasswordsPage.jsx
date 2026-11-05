@@ -644,6 +644,7 @@ const PasswordsPage = () => {
               onDelete={setDeleteTarget}
               onShare={openShare}
               mobileEntry={view === "details" ? routeEntry : null}
+              taskActive={view === "details" && !entryUnavailable && !toolTask}
               onOpenEntry={(entry) => openTask({ entry: entry.id, view: "details" })}
               onCloseEntry={closeTask}
               onToggleFavorite={handleToggleFavorite}
@@ -663,6 +664,11 @@ const PasswordsPage = () => {
           <TaskSurface.Body>
             <Alert theme="warning" message={t("entry.unavailable")} />
           </TaskSurface.Body>
+          <TaskSurface.Footer
+            onClickButtonCancel={closeTask}
+            textButtonCancel={t("navigation.back")}
+            propsButtonCancel={{ qa: "task-back" }}
+          />
         </TaskSurface>
       )}
       {(dialogOpen || (view === "edit" && routeEntry?.access !== "read" && routeEntry)) && (
