@@ -1,5 +1,6 @@
 import { useEffect, useId, useState } from "react";
-import { Alert, Flex, Text, Dialog } from "@gravity-ui/uikit";
+import { Alert, Flex, Text } from "@gravity-ui/uikit";
+import Dialog from "../TaskSurface";
 import { useTranslation } from "react-i18next";
 
 import PasswordField from "../PasswordField";

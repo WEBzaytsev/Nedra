@@ -6,13 +6,13 @@ import {
   Alert,
   Button,
   Col,
-  Dialog,
   Icon,
   RadioGroup,
   Row,
   useFileInput,
 } from "@gravity-ui/uikit";
 import { Trans, useTranslation } from "react-i18next";
+import Dialog from "../TaskSurface";
 
 import { IS_DESKTOP, chooseBackup } from "../../platform";
 import PasswordField from "../PasswordField";

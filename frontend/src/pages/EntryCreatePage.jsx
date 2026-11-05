@@ -83,7 +83,10 @@ const EntryCreatePage = () => {
     }
   };
 
-  const close = () => navigate("/passwords", { replace: true });
+  const close = () => {
+    if (location.state?.taskReturn) navigate(-1);
+    else navigate("/passwords", { replace: true });
+  };
   const cancel = () => {
     draftStore?.clear();
     close();

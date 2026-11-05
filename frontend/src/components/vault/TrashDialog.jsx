@@ -1,6 +1,7 @@
 import { useId, useState } from "react";
 import { ArrowUturnCcwLeft, TrashBin } from "@gravity-ui/icons";
-import { Text, Flex, Button, Dialog, Icon, Tooltip } from "@gravity-ui/uikit";
+import { Text, Flex, Button, Icon, Tooltip } from "@gravity-ui/uikit";
+import Dialog from "../TaskSurface";
 import { Trans, useTranslation } from "react-i18next";
 
 import ConfirmDialog from "../ConfirmDialog";

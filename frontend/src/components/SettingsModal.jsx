@@ -1,19 +1,10 @@
 import { useEffect, useId, useState } from "react";
 
-import {
-  Flex,
-  Text,
-  Alert,
-  Col,
-  Divider,
-  Dialog,
-  NumberInput,
-  Row,
-  Switch,
-} from "@gravity-ui/uikit";
+import { Flex, Text, Alert, Col, Divider, NumberInput, Row, Switch } from "@gravity-ui/uikit";
 import { toaster } from "@gravity-ui/uikit/toaster-singleton";
 import { useStoreActions, useStoreState } from "easy-peasy";
 import { useTranslation } from "react-i18next";
+import Dialog from "./TaskSurface";
 
 const FIELDS = [
   {
@@ -75,12 +66,14 @@ const SettingsModal = ({ open, onClose }) => {
 
   const [form, setForm] = useState(() => toForm(settings));
   const [formError, setFormError] = useState("");
+  const [invalidKey, setInvalidKey] = useState("");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (open) {
       setForm(toForm(settings));
       setFormError("");
+      setInvalidKey("");
     }
   }, [open, settings]);
 
@@ -90,6 +83,8 @@ const SettingsModal = ({ open, onClose }) => {
       return !Number.isInteger(value) || value < min || value > max;
     });
     if (invalidField) {
+      setInvalidKey(invalidField.key);
+      document.getElementById(`${titleId}-${invalidField.key}`)?.focus();
       setFormError(
         t("settings.rangeValidation", {
           label: t(invalidField.labelKey),
@@ -100,6 +95,8 @@ const SettingsModal = ({ open, onClose }) => {
       return;
     }
     if (Number(form.warn_before_ms) >= Number(form.inactivity_ms)) {
+      setInvalidKey("warn_before_ms");
+      document.getElementById(`${titleId}-warn_before_ms`)?.focus();
       setFormError(t("settings.warningValidation"));
       return;
     }
@@ -156,12 +153,15 @@ const SettingsModal = ({ open, onClose }) => {
                   <NumberInput
                     endContent={<Text color="secondary">{t("common.labels.secondsShort")}</Text>}
                     id={inputId}
+                    validationState={invalidKey === key ? "invalid" : undefined}
+                    errorMessage={invalidKey === key ? formError : undefined}
                     min={min}
                     max={max}
                     step={1}
                     onUpdate={(value) => {
                       setForm((prev) => ({ ...prev, [key]: value }));
                       setFormError("");
+                      setInvalidKey("");
                     }}
                     size="xl"
                     value={form[key]}
@@ -189,7 +189,7 @@ const SettingsModal = ({ open, onClose }) => {
               size="l"
             />
           </Flex>
-          {formError && (
+          {formError && !invalidKey && (
             <Flex direction="column" gap="spacing-3" minWidth="0" role="alert">
               <Alert message={formError} size="s" theme="danger" />
             </Flex>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { Plus } from "@gravity-ui/icons";
 import {
   Box,
@@ -34,6 +34,9 @@ import { useSnackbar } from "../hooks/useNotify";
 import apiClient from "../api/client";
 import { createEntryDraftStore } from "../lib/entryDraft";
 import { getCurrentUser } from "../utils";
+import useTaskRoute from "../hooks/useTaskRoute";
+import { VaultViewContext } from "../hooks/VaultViewContext";
+import TaskSurface from "../components/TaskSurface";
 
 const buildSubtitle = (loading, passwords, t) => {
   if (loading) return t("common.labels.loading");
@@ -46,6 +49,8 @@ const PasswordsPage = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const { openTask, closeTask } = useTaskRoute();
+  const vaultView = useContext(VaultViewContext);
   const { isMediaActive } = useLayoutContext();
   const mobile = !isMediaActive("s");
   const desktopShell = isMediaActive("l");
@@ -73,28 +78,63 @@ const PasswordsPage = () => {
   );
   const folders = useStoreState((state) => state.ciphermothModels.access.folders);
 
-  const [sortOrder, setSortOrder] = useState("created-desc");
+  const [sortOrder, setSortOrder] = useState(vaultView.current.sortOrder ?? "created-desc");
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [editTarget, setEditTarget] = useState(null);
+  const [desktopEditTarget, setEditTarget] = useState(null);
   const [shareTarget, setShareTarget] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [removeDamagedOpen, setRemoveDamagedOpen] = useState(false);
-  const [search, setSearch] = useState("");
-  const [folderFilter, setFolderFilter] = useState("");
+  const [search, setSearch] = useState(vaultView.current.search ?? "");
+  const [folderFilter, setFolderFilter] = useState(vaultView.current.folderFilter ?? "");
   const [draftStore, setDraftStore] = useState(null);
   const [initialDraft, setInitialDraft] = useState(null);
   const [draftError, setDraftError] = useState(false);
   const [draftReady, setDraftReady] = useState(false);
   const [draftAttempt, setDraftAttempt] = useState(0);
   const [requestedEntryId, setRequestedEntryId] = useState(null);
+  const view = searchParams.get("view");
+  const routeEntry = passwords.find((entry) => String(entry.id) === searchParams.get("entry"));
+  const editTarget = view === "edit" ? routeEntry : desktopEditTarget;
+  const entryTask = mobile && routeEntry && ["details", "edit", "share"].includes(view);
+  const entryUnavailable =
+    mobile &&
+    !loading &&
+    !error &&
+    ["details", "edit", "share"].includes(view) &&
+    (!routeEntry ||
+      (view === "edit" && routeEntry.access === "read") ||
+      (view === "share" && routeEntry.access !== "owner"));
+  const toolTask =
+    mobile && ["folders", "backup", "import", "health", "trash"].includes(searchParams.get("tool"));
 
   const clearToolRoute = useCallback(() => {
+    if (mobile) {
+      closeTask();
+      return;
+    }
     if (!searchParams.has("tool")) return;
     const next = new URLSearchParams(searchParams);
     next.delete("tool");
     setSearchParams(next, { replace: true });
-  }, [searchParams, setSearchParams]);
+  }, [mobile, closeTask, searchParams, setSearchParams]);
   const activeTool = searchParams.get("tool");
+
+  useEffect(() => {
+    Object.assign(vaultView.current, { sortOrder, search, folderFilter });
+  }, [vaultView, sortOrder, search, folderFilter]);
+
+  useEffect(() => {
+    const scroll = vaultView.current.scroll ?? 0;
+    const frame = requestAnimationFrame(() => window.scrollTo(0, scroll));
+    const rememberScroll = () => {
+      vaultView.current.scroll = window.scrollY;
+    };
+    window.addEventListener("scroll", rememberScroll);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", rememberScroll);
+    };
+  }, [vaultView]);
 
   useEffect(() => {
     let active = true;
@@ -110,6 +150,10 @@ const PasswordsPage = () => {
         const draft = store.read();
         setDraftReady(true);
         if (draft) {
+          if (mobile) {
+            setInitialDraft(draft);
+            return;
+          }
           setInitialDraft(draft);
           setEditTarget(null);
           setDialogOpen(true);
@@ -122,7 +166,7 @@ const PasswordsPage = () => {
     return () => {
       active = false;
     };
-  }, [draftAttempt]);
+  }, [draftAttempt, mobile, navigate]);
 
   const saveDraft = useCallback(
     (form) => {
@@ -139,6 +183,10 @@ const PasswordsPage = () => {
   );
 
   const closeEntryForm = () => {
+    if (view === "edit") {
+      closeTask();
+      return;
+    }
     if (!editTarget) {
       draftStore?.clear();
       setInitialDraft(null);
@@ -180,7 +228,9 @@ const PasswordsPage = () => {
   const openAdd = () => {
     const folder = writableFolderOptions.find((item) => item.id === Number(folderFilter));
     if (mobile) {
-      navigate("/entries/new", { state: { folderId: folder?.id ?? null } });
+      navigate("/entries/new", {
+        state: { folderId: folder?.id ?? null, taskReturn: "/passwords" + window.location.search },
+      });
       return;
     }
     if (!draftReady) {
@@ -192,11 +242,23 @@ const PasswordsPage = () => {
     setDialogOpen(true);
   };
 
-  const openEdit = useCallback((row) => {
-    if (row.access === "read") return;
-    setEditTarget(row);
-    setDialogOpen(true);
-  }, []);
+  const openEdit = useCallback(
+    (row) => {
+      if (row.access === "read") return;
+      if (mobile || searchParams.has("entry")) {
+        openTask({ entry: row.id, view: "edit" });
+        return;
+      }
+      setEditTarget(row);
+      setDialogOpen(true);
+    },
+    [mobile, openTask, searchParams]
+  );
+
+  const openShare = (row) => {
+    if (mobile || searchParams.has("entry")) openTask({ entry: row.id, view: "share" });
+    else setShareTarget(row);
+  };
 
   const handleToggleFavorite = useCallback(
     async (row) => {
@@ -328,207 +390,284 @@ const PasswordsPage = () => {
       as="section"
       qa="vault-page"
     >
-      <Flex
-        direction={{ xs: "column", xl: "row" }}
-        gap="spacing-3"
+      <Box
+        hidden={toolTask || entryUnavailable || (entryTask && view !== "details")}
         minWidth="0"
-        as="header"
-        alignItems={{ xl: "center" }}
-        justifyContent="space-between"
+        minHeight="0"
+        flexGrow={desktopShell ? 1 : undefined}
       >
-        <Flex alignItems="baseline" gap="spacing-3" wrap="wrap" minWidth="0">
-          <Box as="h1" margin="0">
-            <Text variant="header-1">{t("vault.title")}</Text>
-          </Box>
-          <Text color="secondary" wordBreak="break-word" role="status">
-            {subtitle}
-          </Text>
-        </Flex>
-        {!isEmpty && (
-          <Flex>
-            <Button type="button" view="action" size="xl" disabled={!draftReady} onClick={openAdd}>
-              <Icon data={Plus} />
-              {t("common.actions.add")}
-            </Button>
-          </Flex>
-        )}
-      </Flex>
-
-      {(error || (draftError && !draftReady) || damageCheckError || damagedCount > 0) && (
-        <Flex direction="column" gap="spacing-3" minWidth="0">
-          {error && (
-            <Alert
-              theme="danger"
-              view="outlined"
-              message={error}
-              actions={
-                <Button
-                  type="button"
-                  size="xl"
-                  view="outlined"
-                  onClick={() => get()}
-                  disabled={loading}
-                >
-                  {t("common.actions.retry")}
-                </Button>
-              }
-            />
-          )}
-          {draftError && !draftReady && (
-            <Alert
-              theme="danger"
-              view="outlined"
-              message={t("entry.draft.unavailable")}
-              actions={
-                <>
-                  <Button
-                    type="button"
-                    view="flat-danger"
-                    onClick={() => setDraftAttempt((n) => n + 1)}
-                  >
-                    {t("common.actions.retry")}
-                  </Button>
-                  {draftStore && (
-                    <Button
-                      type="button"
-                      view="flat-danger"
-                      onClick={() => {
-                        draftStore.clear();
-                        setDraftError(false);
-                        setDraftReady(true);
-                      }}
-                    >
-                      {t("entry.draft.discard")}
-                    </Button>
-                  )}
-                </>
-              }
-              actionsLayout="horizontal"
-            />
-          )}
-          {damageCheckError && (
-            <Alert
-              theme="warning"
-              view="outlined"
-              message={damageCheckError}
-              actions={
-                <Button type="button" view="flat-warning" onClick={() => getDamaged()}>
-                  {t("common.actions.retry")}
-                </Button>
-              }
-            />
-          )}
-          {damagedCount > 0 && (
-            <Alert
-              theme="warning"
-              view="outlined"
-              message={t("vault.damage.message", { count: damagedCount })}
-              actions={
-                <Button
-                  type="button"
-                  view="flat-warning"
-                  onClick={() => setRemoveDamagedOpen(true)}
-                >
-                  {t("common.actions.remove")}
-                </Button>
-              }
-            />
-          )}
-        </Flex>
-      )}
-
-      {passwords.length > 0 && (
-        <Row gap="spacing-3">
-          <Col
-            size={{ xs: 12, m: folderOptions.length ? 12 : 8, xl: folderOptions.length ? 6 : 8 }}
-          >
-            <TextInput
-              size="xl"
-              type="search"
-              placeholder={t("vault.searchPlaceholder")}
-              value={search}
-              onUpdate={setSearch}
-              hasClear
-              qa="vault-search"
-              controlProps={{ "aria-label": t("vault.searchPlaceholder") }}
-            />
-          </Col>
-          {folderOptions.length > 0 && (
-            <Col size={{ xs: 12, m: 6, xl: 3 }}>
-              <Select
-                size="xl"
-                width="max"
-                aria-label={t("common.fields.folder")}
-                value={[activeFolder]}
-                onUpdate={([value = ""]) => setFolderFilter(value)}
-                options={[
-                  { value: "", content: t("vault.allFolders") },
-                  ...folderOptions.map((folder) => ({
-                    value: String(folder.id),
-                    content: `${folder.name} · ${folder.owner_username ?? folder.owner_id}`,
-                  })),
-                ]}
-              />
-            </Col>
-          )}
-          <Col size={{ xs: 12, m: folderOptions.length ? 6 : 4, xl: folderOptions.length ? 3 : 4 }}>
-            <Select
-              size="xl"
-              width="max"
-              aria-label={t("vault.browser.sort")}
-              value={[sortOrder]}
-              onUpdate={([value = "created-desc"]) => setSortOrder(value)}
-              options={[
-                { value: "favorites", content: t("vault.browser.favoritesFirst") },
-                { value: "name", content: t("vault.browser.nameAscending") },
-                { value: "name-desc", content: t("vault.browser.nameDescending") },
-                { value: "created-desc", content: t("vault.browser.dateAdded") },
-              ]}
-            />
-          </Col>
-        </Row>
-      )}
-
-      {loading && (
         <Flex
           direction="column"
-          gap="spacing-3"
+          gap="spacing-5"
           minWidth="0"
-          alignItems="center"
-          justifyContent="center"
-          paddingBlock="spacing-10"
+          minHeight="0"
+          height={desktopShell ? "100%" : undefined}
+          overflow={desktopShell ? "hidden" : undefined}
         >
-          <Loader size="l" />
+          {!entryTask && (
+            <>
+              <Flex
+                direction={{ xs: "row", s: "column", xl: "row" }}
+                gap="spacing-3"
+                minWidth="0"
+                as="header"
+                wrap="wrap"
+                alignItems={{ xs: "center", s: "stretch", xl: "center" }}
+                justifyContent="space-between"
+              >
+                <Flex
+                  direction={{ xs: "column", s: "row" }}
+                  alignItems={{ s: "baseline" }}
+                  gap={{ xs: "spacing-1", s: "spacing-3" }}
+                  wrap="wrap"
+                  minWidth="0"
+                >
+                  <Box as="h1" margin="0">
+                    <Text variant="header-1">{t("vault.title")}</Text>
+                  </Box>
+                  <Text color="secondary" wordBreak="break-word" role="status">
+                    {subtitle}
+                  </Text>
+                </Flex>
+                {!isEmpty && (
+                  <Flex>
+                    <Button
+                      type="button"
+                      view="action"
+                      size="xl"
+                      disabled={!draftReady}
+                      onClick={openAdd}
+                    >
+                      <Icon data={Plus} />
+                      {t("common.actions.add")}
+                    </Button>
+                  </Flex>
+                )}
+              </Flex>
+
+              {mobile && initialDraft && (
+                <Alert
+                  theme="info"
+                  message={t("entry.draft.available")}
+                  actions={
+                    <Button
+                      size="xl"
+                      onClick={() =>
+                        navigate("/entries/new", { state: { taskReturn: "/passwords" } })
+                      }
+                    >
+                      {t("entry.draft.resume")}
+                    </Button>
+                  }
+                />
+              )}
+              {(error || (draftError && !draftReady) || damageCheckError || damagedCount > 0) && (
+                <Flex direction="column" gap="spacing-3" minWidth="0">
+                  {error && (
+                    <Alert
+                      theme="danger"
+                      view="outlined"
+                      message={error}
+                      actions={
+                        <Button
+                          type="button"
+                          size="xl"
+                          view="outlined"
+                          onClick={() => get()}
+                          disabled={loading}
+                        >
+                          {t("common.actions.retry")}
+                        </Button>
+                      }
+                    />
+                  )}
+                  {draftError && !draftReady && (
+                    <Alert
+                      theme="danger"
+                      view="outlined"
+                      message={t("entry.draft.unavailable")}
+                      actions={
+                        <>
+                          <Button
+                            type="button"
+                            view="flat-danger"
+                            onClick={() => setDraftAttempt((n) => n + 1)}
+                          >
+                            {t("common.actions.retry")}
+                          </Button>
+                          {draftStore && (
+                            <Button
+                              type="button"
+                              view="flat-danger"
+                              onClick={() => {
+                                draftStore.clear();
+                                setDraftError(false);
+                                setDraftReady(true);
+                              }}
+                            >
+                              {t("entry.draft.discard")}
+                            </Button>
+                          )}
+                        </>
+                      }
+                      actionsLayout="horizontal"
+                    />
+                  )}
+                  {damageCheckError && (
+                    <Alert
+                      theme="warning"
+                      view="outlined"
+                      message={damageCheckError}
+                      actions={
+                        <Button type="button" view="flat-warning" onClick={() => getDamaged()}>
+                          {t("common.actions.retry")}
+                        </Button>
+                      }
+                    />
+                  )}
+                  {damagedCount > 0 && (
+                    <Alert
+                      theme="warning"
+                      view="outlined"
+                      message={t("vault.damage.message", { count: damagedCount })}
+                      actions={
+                        <Button
+                          type="button"
+                          view="flat-warning"
+                          onClick={() => setRemoveDamagedOpen(true)}
+                        >
+                          {t("common.actions.remove")}
+                        </Button>
+                      }
+                    />
+                  )}
+                </Flex>
+              )}
+
+              {passwords.length > 0 && (
+                <Row gap="spacing-3">
+                  <Col
+                    size={{
+                      xs: 12,
+                      m: folderOptions.length ? 12 : 8,
+                      xl: folderOptions.length ? 6 : 8,
+                    }}
+                  >
+                    <TextInput
+                      size="xl"
+                      type="search"
+                      placeholder={t("vault.searchPlaceholder")}
+                      value={search}
+                      onUpdate={setSearch}
+                      hasClear
+                      qa="vault-search"
+                      controlProps={{ "aria-label": t("vault.searchPlaceholder") }}
+                    />
+                  </Col>
+                  {folderOptions.length > 0 && (
+                    <Col size={{ xs: 6, m: 6, xl: 3 }} minWidth="0">
+                      <Select
+                        size="xl"
+                        width="max"
+                        aria-label={t("common.fields.folder")}
+                        value={[activeFolder]}
+                        onUpdate={([value = ""]) => setFolderFilter(value)}
+                        options={[
+                          { value: "", content: t("vault.allFolders") },
+                          ...folderOptions.map((folder) => ({
+                            value: String(folder.id),
+                            content: `${folder.name} · ${folder.owner_username ?? folder.owner_id}`,
+                          })),
+                        ]}
+                      />
+                    </Col>
+                  )}
+                  <Col
+                    size={{
+                      xs: folderOptions.length ? 6 : 12,
+                      m: folderOptions.length ? 6 : 4,
+                      xl: folderOptions.length ? 3 : 4,
+                    }}
+                    minWidth="0"
+                  >
+                    <Select
+                      size="xl"
+                      width="max"
+                      aria-label={t("vault.browser.sort")}
+                      value={[sortOrder]}
+                      onUpdate={([value = "created-desc"]) => setSortOrder(value)}
+                      options={[
+                        { value: "favorites", content: t("vault.browser.favoritesFirst") },
+                        { value: "name", content: t("vault.browser.nameAscending") },
+                        { value: "name-desc", content: t("vault.browser.nameDescending") },
+                        { value: "created-desc", content: t("vault.browser.dateAdded") },
+                      ]}
+                    />
+                  </Col>
+                </Row>
+              )}
+
+              {loading && (
+                <Flex
+                  direction="column"
+                  gap="spacing-3"
+                  minWidth="0"
+                  alignItems="center"
+                  justifyContent="center"
+                  paddingBlock="spacing-10"
+                >
+                  <Loader size="l" />
+                </Flex>
+              )}
+
+              {isEmpty && <EmptyVault onAdd={openAdd} disabled={!draftReady} />}
+            </>
+          )}
+
+          {passwords.length > 0 && (
+            <EntryBrowser
+              entries={filteredPasswords}
+              totalCount={passwords.length}
+              emptyMessage={t(search.trim() ? "vault.noSearchResults" : "vault.noFolderResults", {
+                search: search.trim(),
+              })}
+              onResetFilters={() => {
+                setSearch("");
+                setFolderFilter("");
+              }}
+              requestedEntryId={requestedEntryId}
+              onRequestedEntryOpen={() => setRequestedEntryId(null)}
+              onCopy={copy}
+              onEdit={openEdit}
+              onDelete={setDeleteTarget}
+              onShare={openShare}
+              mobileEntry={view === "details" ? routeEntry : null}
+              onOpenEntry={(entry) => openTask({ entry: entry.id, view: "details" })}
+              onCloseEntry={closeTask}
+              onToggleFavorite={handleToggleFavorite}
+            />
+          )}
         </Flex>
-      )}
-
-      {isEmpty && <EmptyVault onAdd={openAdd} disabled={!draftReady} />}
-
-      {passwords.length > 0 && (
-        <EntryBrowser
-          entries={filteredPasswords}
-          totalCount={passwords.length}
-          emptyMessage={t(search.trim() ? "vault.noSearchResults" : "vault.noFolderResults", {
-            search: search.trim(),
-          })}
-          onResetFilters={() => {
-            setSearch("");
-            setFolderFilter("");
+      </Box>
+      {entryUnavailable && (
+        <TaskSurface
+          open
+          aria-label={t("entry.unavailable")}
+          onOpenChange={(open) => {
+            if (!open) closeTask();
           }}
-          requestedEntryId={requestedEntryId}
-          onRequestedEntryOpen={() => setRequestedEntryId(null)}
-          onCopy={copy}
-          onEdit={openEdit}
-          onDelete={setDeleteTarget}
-          onShare={setShareTarget}
-          onToggleFavorite={handleToggleFavorite}
-        />
+        >
+          <TaskSurface.Header caption={t("vault.browser.details")} />
+          <TaskSurface.Body>
+            <Alert theme="warning" message={t("entry.unavailable")} />
+          </TaskSurface.Body>
+        </TaskSurface>
       )}
-
-      {dialogOpen && (
+      {(dialogOpen || (view === "edit" && routeEntry?.access !== "read" && routeEntry)) && (
         <PasswordFormDialog
           key={editTarget?.id ?? "new"}
           open
+          page={mobile}
           editTarget={editTarget}
           initialDraft={initialDraft}
           onDraftChange={saveDraft}
@@ -540,9 +679,9 @@ const PasswordsPage = () => {
         />
       )}
       <ShareDialog
-        open={Boolean(shareTarget)}
-        entry={shareTarget}
-        onClose={() => setShareTarget(null)}
+        open={Boolean((view === "share" && routeEntry?.access === "owner") || shareTarget)}
+        entry={view === "share" ? routeEntry : shareTarget}
+        onClose={() => (view === "share" ? closeTask() : setShareTarget(null))}
       />
       <FolderAccessDialog open={activeTool === "folders"} onClose={clearToolRoute} />
       <BackupDialog
@@ -561,6 +700,10 @@ const PasswordsPage = () => {
         passwords={passwords}
         onClose={clearToolRoute}
         onSelect={(row) => {
+          if (mobile) {
+            openTask({ entry: row.id, view: row.access === "read" ? "details" : "edit" });
+            return;
+          }
           clearToolRoute();
           if (row.access === "read") {
             setFolderFilter("");

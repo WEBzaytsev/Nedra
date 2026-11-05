@@ -4,6 +4,7 @@ import LoginPage from "./pages/LoginPage";
 import PasswordsPage from "./pages/PasswordsPage";
 import UsersPage from "./pages/UsersPage";
 import EntryCreatePage from "./pages/EntryCreatePage";
+import PreferencesPage from "./pages/PreferencesPage";
 import { getCurrentUser, isAuth } from "./utils";
 
 const ProtectedRoute = ({ children, role }) => {
@@ -22,6 +23,18 @@ const ProtectedRoute = ({ children, role }) => {
 };
 
 const routes = [
+  ...[
+    { path: "/settings", section: "settings", role: "admin" },
+    { path: "/account/password", section: "password" },
+    { path: "/updates", section: "updates" },
+  ].map(({ path, section, role }) => ({
+    path,
+    element: (
+      <ProtectedRoute role={role}>
+        <PreferencesPage section={section} />
+      </ProtectedRoute>
+    ),
+  })),
   {
     path: "/login",
     element: <LoginPage />,

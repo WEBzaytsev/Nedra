@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  Alert,
   Flex,
   Text,
   Button,
-  Dialog,
   Divider,
   Grid,
   Label,
@@ -12,6 +12,7 @@ import {
 } from "@gravity-ui/uikit";
 import { useStoreActions, useStoreState } from "easy-peasy";
 import { useTranslation } from "react-i18next";
+import Dialog from "../TaskSurface";
 
 import { useSnackbar } from "../../hooks/useNotify";
 import {
@@ -23,6 +24,7 @@ import {
 import { getCurrentUser } from "../../utils";
 import ConfirmDialog from "../ConfirmDialog";
 import ExpiryField from "./ExpiryField";
+import ManagementSection from "./ManagementSection";
 
 const eventDate = (value, language) => {
   const iso = /[zZ]|[+-]\d\d:\d\d$/.test(value) ? value : `${value}Z`;
@@ -141,6 +143,7 @@ const FolderAccessDialog = ({ open, onClose }) => {
   const [expiresAt, setExpiresAt] = useState("");
   const [expiryRejected, setExpiryRejected] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [loadError, setLoadError] = useState("");
   const [deleteTarget, setDeleteTarget] = useState(null);
   const expiryInvalid = expiryRejected || isInvalidExpiry(expiresAt);
   const currentUserId = getCurrentUser()?.id;
@@ -148,6 +151,7 @@ const FolderAccessDialog = ({ open, onClose }) => {
   const ownsSelected = selected?.owner_id === currentUserId;
 
   const loadBase = useCallback(async () => {
+    setLoadError("");
     const [nextFolders, nextGroups, nextTargets] = await Promise.all([
       getFolders(),
       getGroups(),
@@ -177,13 +181,13 @@ const FolderAccessDialog = ({ open, onClose }) => {
 
   useEffect(() => {
     if (!open) return;
-    loadBase().catch((error) => enqueueSnackbar(error.message, { variant: "error" }));
+    loadBase().catch((error) => setLoadError(error.message));
   }, [open, loadBase, enqueueSnackbar]);
 
   useEffect(() => {
     if (!open || !selected) return;
     setRenameName(selected.name);
-    loadDetails().catch((error) => enqueueSnackbar(error.message, { variant: "error" }));
+    loadDetails().catch((error) => setLoadError(error.message));
   }, [open, selected, loadDetails, enqueueSnackbar]);
 
   const run = async (operation, message, { refreshBase = false } = {}) => {
@@ -283,10 +287,26 @@ const FolderAccessDialog = ({ open, onClose }) => {
         <Dialog.Header caption={t("folderAccess.title")} />
         <Dialog.Body>
           <Flex direction="column" gap="spacing-5" minWidth="0">
-            <Flex direction="column" gap="spacing-3" minWidth="0" as="section">
-              <Text as="div" role="heading" aria-level={3} variant="subheader-2">
-                {t("folderAccess.createFolder")}
-              </Text>
+            {loadError && (
+              <Alert
+                theme="danger"
+                message={loadError}
+                actions={
+                  <Button
+                    size="xl"
+                    onClick={() => {
+                      setLoadError("");
+                      Promise.all([loadBase(), loadDetails()]).catch((error) =>
+                        setLoadError(error.message)
+                      );
+                    }}
+                  >
+                    {t("common.actions.retry")}
+                  </Button>
+                }
+              />
+            )}
+            <ManagementSection title={t("folderAccess.createFolder")}>
               <Flex
                 direction={{ xs: "column", s: "row" }}
                 gap="spacing-3"
@@ -310,13 +330,15 @@ const FolderAccessDialog = ({ open, onClose }) => {
                   {t("common.actions.create")}
                 </Button>
               </Flex>
-            </Flex>
+            </ManagementSection>
 
             <Divider />
             {folders.length === 0 ? (
-              <Text as="div" color="secondary" wordBreak="break-word">
-                {t("folderAccess.empty")}
-              </Text>
+              !loadError && (
+                <Text as="div" color="secondary" wordBreak="break-word">
+                  {t("folderAccess.empty")}
+                </Text>
+              )
             ) : (
               <Flex direction="column" gap="spacing-6" minWidth="0">
                 <Flex direction="column" gap="spacing-4" minWidth="0">
@@ -376,8 +398,7 @@ const FolderAccessDialog = ({ open, onClose }) => {
                         )}
                       </Flex>
                       {ownsSelected && (
-                        <Flex direction="column" gap="spacing-2" minWidth="0">
-                          <Text>{t("folderAccess.rename")}</Text>
+                        <ManagementSection title={t("folderAccess.rename")} heading={false}>
                           <Flex
                             direction={{ xs: "column", s: "row" }}
                             gap="spacing-2"
@@ -423,7 +444,7 @@ const FolderAccessDialog = ({ open, onClose }) => {
                               {t("common.actions.delete")}
                             </Button>
                           </Flex>
-                        </Flex>
+                        </ManagementSection>
                       )}
                     </Flex>
                   </Flex>

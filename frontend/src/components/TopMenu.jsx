@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowRightFromSquare,
   ArrowRotateRight,
@@ -70,10 +70,12 @@ const Brand = ({ version, onClick }) => {
 const TopMenu = () => {
   const { t, i18n } = useTranslation();
   const location = useLocation();
+  const navigate = useNavigate();
   const { mode, setMode } = useColorMode();
 
   const { isMediaActive } = useLayoutContext();
   const desktop = isMediaActive("l");
+  const phone = !isMediaActive("s");
   const currentUser = getCurrentUser();
   const admin = currentUser?.role === "admin";
   const language = (i18n.resolvedLanguage ?? i18n.language)?.startsWith("ru") ? "ru" : "en";
@@ -116,16 +118,28 @@ const TopMenu = () => {
   const openSettings = (event) => {
     rememberUtilityTrigger(event);
     closeMobileNav();
+    if (phone) {
+      navigate("/settings", { state: { taskReturn: location.pathname + location.search } });
+      return;
+    }
     setSettingsOpen(true);
   };
   const openPassword = (event) => {
     rememberUtilityTrigger(event);
     closeMobileNav();
+    if (phone) {
+      navigate("/account/password", { state: { taskReturn: location.pathname + location.search } });
+      return;
+    }
     setPasswordOpen(true);
   };
   const openUpdate = (event) => {
     rememberUtilityTrigger(event);
     closeMobileNav();
+    if (phone) {
+      navigate("/updates", { state: { taskReturn: location.pathname + location.search } });
+      return;
+    }
     setUpdateOpen(true);
   };
   const logOut = () => {
@@ -159,6 +173,7 @@ const TopMenu = () => {
                 data-navigation-id={item.id}
                 startContent={<Icon data={item.icon} />}
                 onClick={closeMobileNav}
+                state={{ taskReturn: location.pathname + location.search }}
               >
                 {item.label}
               </List.ItemView>
@@ -339,9 +354,19 @@ const TopMenu = () => {
         {navigation}
         <Divider />
         {utilities}
+        {mobile && (
+          <>
+            <Divider />
+            {profile}
+          </>
+        )}
       </Flex>
-      <Divider />
-      {profile}
+      {!mobile && (
+        <>
+          <Divider />
+          {profile}
+        </>
+      )}
     </Flex>
   );
 

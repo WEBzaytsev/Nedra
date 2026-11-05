@@ -1,6 +1,7 @@
 import { useId, useMemo } from "react";
 import { Check, ChevronRight, Clock, Copy, ShieldExclamation } from "@gravity-ui/icons";
-import { Dialog, Divider, Flex, Icon, List, Progress, Text } from "@gravity-ui/uikit";
+import { Divider, Flex, Icon, List, Progress, Text, useLayoutContext } from "@gravity-ui/uikit";
+import Dialog from "../TaskSurface";
 import { useTranslation } from "react-i18next";
 
 import { analyzeVault } from "../../lib/vaultHealth";
@@ -48,6 +49,8 @@ const StatTile = ({ icon, label, count, color }) => (
 );
 
 const IssueGroup = ({ icon, title, hint, color, entries, onSelect }) => {
+  const { isMediaActive } = useLayoutContext();
+  const phone = !isMediaActive("s");
   if (entries.length === 0) return null;
 
   return (
@@ -71,10 +74,16 @@ const IssueGroup = ({ icon, title, hint, color, entries, onSelect }) => {
             type="button"
             size="xl"
             style={{ textAlign: "start" }}
-            description={<Text wordBreak="break-all">{entry.username}</Text>}
+            description={
+              <Text wordBreak="break-all" ellipsis={phone}>
+                {entry.username}
+              </Text>
+            }
             endContent={<Icon data={ChevronRight} />}
           >
-            <Text wordBreak="break-word">{entry.password_name}</Text>
+            <Text wordBreak="break-word" ellipsisLines={phone ? 2 : undefined}>
+              {entry.password_name}
+            </Text>
           </List.ItemView>
         ))}
       </Flex>

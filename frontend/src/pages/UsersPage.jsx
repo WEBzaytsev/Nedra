@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, EllipsisVertical, Persons } from "@gravity-ui/icons";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ArrowLeft, EllipsisVertical, Persons, Plus } from "@gravity-ui/icons";
 import {
   Flex,
+  Box,
   Text,
   Alert,
   Button,
@@ -16,6 +17,7 @@ import {
   TextInput,
   Row,
   Col,
+  useLayoutContext,
 } from "@gravity-ui/uikit";
 import { useStoreActions, useStoreState } from "easy-peasy";
 import { Link } from "react-router-dom";
@@ -28,11 +30,17 @@ import PasswordField from "../components/PasswordField";
 import useClipboard from "../hooks/useClipboard";
 import { useSnackbar } from "../hooks/useNotify";
 import { getCurrentUser } from "../utils";
+import TaskSurface from "../components/TaskSurface";
+import useTaskRoute from "../hooks/useTaskRoute";
 
 const EMPTY_FORM = { username: "", temporary_password: "", role: "member" };
 
 const UsersPage = () => {
   const { t } = useTranslation();
+  const { isMediaActive } = useLayoutContext();
+  const mobile = !isMediaActive("s");
+  const { params, openTask, closeTask } = useTaskRoute();
+  const view = params.get("view");
   const { enqueueSnackbar } = useSnackbar();
   const copy = useClipboard();
   const users = useStoreState((state) => state.ciphermothModels.users.users);
@@ -41,16 +49,29 @@ const UsersPage = () => {
   const currentUserId = getCurrentUser()?.id;
   const [form, setForm] = useState(EMPTY_FORM);
   const [busy, setBusy] = useState(false);
+  const [listLoading, setListLoading] = useState(true);
+  const [listError, setListError] = useState("");
   const [serviceToken, setServiceToken] = useState("");
   const [resetTarget, setResetTarget] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
-  const [folderAccessTarget, setFolderAccessTarget] = useState(null);
-  const [groupsOpen, setGroupsOpen] = useState(false);
+  const [desktopFolderTarget, setFolderAccessTarget] = useState(null);
+  const [desktopGroupsOpen, setGroupsOpen] = useState(false);
+  const folderAccessTarget =
+    view === "access"
+      ? users.find((user) => String(user.id) === params.get("user"))
+      : desktopFolderTarget;
+  const groupsOpen = view === "groups" || desktopGroupsOpen;
+  const taskOpen = mobile && ["create", "groups", "access"].includes(view);
+  const CreateSurface = mobile ? TaskSurface : Box;
   const [temporaryPassword, setTemporaryPassword] = useState("");
   const [temporaryPasswordError, setTemporaryPasswordError] = useState(false);
   const temporaryPasswordRef = useRef(null);
 
   const closeUserAction = (setter, target) => {
+    if (view === "access") {
+      closeTask();
+      return;
+    }
     const userId = target?.id;
     setter(null);
     if (userId) {
@@ -60,9 +81,20 @@ const UsersPage = () => {
     }
   };
 
+  const loadUsers = useCallback(async () => {
+    setListLoading(true);
+    setListError("");
+    try {
+      await get();
+    } catch (error) {
+      setListError(error.message);
+    } finally {
+      setListLoading(false);
+    }
+  }, [get]);
   useEffect(() => {
-    get().catch((error) => enqueueSnackbar(error.message, { variant: "error" }));
-  }, [get, enqueueSnackbar]);
+    loadUsers();
+  }, [loadUsers]);
 
   const run = async (operation, message = "") => {
     setBusy(true);
@@ -115,42 +147,58 @@ const UsersPage = () => {
 
   return (
     <Flex direction="column" gap="spacing-5" minWidth="0" as="section">
-      <Flex
-        direction={{ xs: "column", m: "row" }}
-        gap="spacing-5"
-        minWidth="0"
-        wrap="wrap"
-        alignItems={{ m: "center" }}
-        as="header"
-        justifyContent="space-between"
-      >
-        <Flex direction="column" gap="spacing-3" minWidth="0">
-          <Text as="div" role="heading" aria-level={1} variant="header-1">
-            {t("users.title")}
-          </Text>
-          <Text as="div" color="secondary" wordBreak="break-word">
-            {t("users.subtitle")}
-          </Text>
-        </Flex>
+      {!taskOpen && (
         <Flex
           direction={{ xs: "column", m: "row" }}
-          gap="spacing-3"
+          gap="spacing-5"
           minWidth="0"
           wrap="wrap"
           alignItems={{ m: "center" }}
+          as="header"
           justifyContent="space-between"
         >
-          <Button type="button" view="outlined" onClick={() => setGroupsOpen(true)}>
-            <Icon data={Persons} />
-            {t("groups.title")}
-          </Button>
-          <Button component={Link} to="/passwords" view="flat-secondary">
-            <Icon data={ArrowLeft} />
-            {t("users.backToVault")}
-          </Button>
+          <Flex direction="column" gap="spacing-3" minWidth="0">
+            <Text as="div" role="heading" aria-level={1} variant="header-1">
+              {t("users.title")}
+            </Text>
+            {!mobile && (
+              <Text as="div" color="secondary" wordBreak="break-word">
+                {t("users.subtitle")}
+              </Text>
+            )}
+          </Flex>
+          <Flex
+            direction="row"
+            gap="spacing-3"
+            minWidth="0"
+            wrap="wrap"
+            alignItems={{ m: "center" }}
+            justifyContent="space-between"
+          >
+            {mobile && (
+              <Button size="xl" view="action" onClick={() => openTask({ view: "create" })}>
+                <Icon data={Plus} />
+                {t("common.actions.add")}
+              </Button>
+            )}
+            <Button
+              size={mobile ? "xl" : undefined}
+              type="button"
+              view="outlined"
+              onClick={() => (mobile ? openTask({ view: "groups" }) : setGroupsOpen(true))}
+            >
+              <Icon data={Persons} />
+              {t("groups.title")}
+            </Button>
+            {!mobile && (
+              <Button component={Link} to="/passwords" view="flat-secondary">
+                <Icon data={ArrowLeft} />
+                {t("users.backToVault")}
+              </Button>
+            )}
+          </Flex>
         </Flex>
-      </Flex>
-
+      )}
       {serviceToken && (
         <Alert
           theme="warning"
@@ -180,8 +228,23 @@ const UsersPage = () => {
       )}
 
       <Row gap="spacing-6">
-        <Col size={{ xs: 12, xl: 7 }}>
+        <Col size={{ xs: 12, xl: 7 }} hidden={taskOpen}>
           <Flex direction="column" gap="spacing-3" minWidth="0">
+            {listLoading && <Text role="status">{t("common.labels.loading")}</Text>}
+            {listError && (
+              <Alert
+                theme="danger"
+                message={listError}
+                actions={
+                  <Button size="xl" onClick={loadUsers}>
+                    {t("common.actions.retry")}
+                  </Button>
+                }
+              />
+            )}
+            {!listLoading && !listError && users.length === 0 && (
+              <Text color="secondary">{t("users.empty")}</Text>
+            )}
             {users.map((user) => {
               const isCurrent = user.id === currentUserId;
               return (
@@ -280,7 +343,14 @@ const UsersPage = () => {
                               </Button>
                             }
                           >
-                            <MenuItem disabled={busy} onClick={() => setFolderAccessTarget(user)}>
+                            <MenuItem
+                              disabled={busy}
+                              onClick={() =>
+                                mobile
+                                  ? openTask({ view: "access", user: user.id })
+                                  : setFolderAccessTarget(user)
+                              }
+                            >
                               {t("folderAccess.manage")}
                             </MenuItem>
                             {user.role === "service" ? (
@@ -325,90 +395,140 @@ const UsersPage = () => {
           </Flex>
         </Col>
         <Col size={{ xs: 12, xl: 5 }}>
-          <Flex direction="column" gap="spacing-4" minWidth="0" as="section">
-            <Text as="div" role="heading" aria-level={2} variant="subheader-3">
-              {t("users.createAccount")}
-            </Text>
-            <Flex
-              direction="column"
-              gap="spacing-3"
-              minWidth="0"
-              as="form"
-              noValidate
-              onSubmit={add}
+          <Box hidden={mobile && view !== "create"}>
+            <CreateSurface
+              {...(mobile
+                ? {
+                    open: view === "create",
+                    "aria-label": t("users.createAccount"),
+                    onOpenChange: (open) => {
+                      if (!open && !busy) closeTask();
+                    },
+                    disableEscapeKeyDown: busy,
+                  }
+                : {})}
             >
-              <Flex as="label" direction="column" gap="spacing-2">
-                <Text>{t("auth.username")}</Text>
-                <TextInput
-                  size="xl"
-                  placeholder={t("auth.username")}
-                  required
-                  value={form.username}
-                  onUpdate={(username) => setForm((current) => ({ ...current, username }))}
-                  autoComplete="off"
-                  note={t("auth.usernameRules")}
-                  controlProps={{
-                    "aria-label": t("auth.username"),
-                    autoCapitalize: "none",
-                    spellCheck: false,
-                  }}
-                />
+              <Flex direction="column" gap="spacing-4" minWidth="0" as="section">
+                {mobile ? (
+                  <TaskSurface.Header caption={t("users.createAccount")} />
+                ) : (
+                  <Text as="div" role="heading" aria-level={2} variant="subheader-3">
+                    {t("users.createAccount")}
+                  </Text>
+                )}
+                <Flex
+                  direction="column"
+                  gap="spacing-3"
+                  minWidth="0"
+                  as="form"
+                  noValidate
+                  onSubmit={add}
+                >
+                  <Flex as="label" direction="column" gap="spacing-2">
+                    <Text>{t("auth.username")}</Text>
+                    <TextInput
+                      size="xl"
+                      placeholder={t("auth.username")}
+                      required
+                      value={form.username}
+                      onUpdate={(username) => setForm((current) => ({ ...current, username }))}
+                      autoComplete="off"
+                      note={t("auth.usernameRules")}
+                      controlProps={{
+                        "aria-label": t("auth.username"),
+                        autoCapitalize: "none",
+                        spellCheck: false,
+                      }}
+                    />
+                  </Flex>
+                  {form.role === "service" ? (
+                    <Flex direction="column" gap="spacing-3" minWidth="0" />
+                  ) : (
+                    <PasswordField
+                      label={t("users.temporaryPassword")}
+                      size="xl"
+                      inputRef={temporaryPasswordRef}
+                      error={temporaryPasswordError}
+                      helperText={
+                        temporaryPasswordError ? t("users.temporaryPasswordRequired") : ""
+                      }
+                      value={form.temporary_password}
+                      onGenerate={(temporary_password) => {
+                        setForm((current) => ({ ...current, temporary_password }));
+                        setTemporaryPasswordError(false);
+                      }}
+                      disabled={busy}
+                      onChange={(event) => {
+                        setForm((current) => ({
+                          ...current,
+                          temporary_password: event.target.value,
+                        }));
+                        setTemporaryPasswordError(false);
+                      }}
+                      autoComplete="new-password"
+                    />
+                  )}
+                  <Select
+                    size="xl"
+                    aria-label={t("users.role")}
+                    value={[form.role]}
+                    options={["admin", "member", "service"].map((role) => ({
+                      value: role,
+                      content: t(`users.roles.${role}`),
+                    }))}
+                    onUpdate={([role = "member"]) => {
+                      setForm((current) => ({
+                        ...current,
+                        role,
+                        temporary_password: role === "service" ? "" : current.temporary_password,
+                      }));
+                      setTemporaryPasswordError(false);
+                    }}
+                  />
+                  <Button
+                    type="submit"
+                    view="action"
+                    size="xl"
+                    disabled={busy || !form.username.trim()}
+                    loading={busy}
+                  >
+                    {t("common.actions.create")}
+                  </Button>
+                </Flex>
               </Flex>
-              {form.role === "service" ? (
-                <Flex direction="column" gap="spacing-3" minWidth="0" />
-              ) : (
-                <PasswordField
-                  label={t("users.temporaryPassword")}
-                  size="xl"
-                  inputRef={temporaryPasswordRef}
-                  error={temporaryPasswordError}
-                  helperText={temporaryPasswordError ? t("users.temporaryPasswordRequired") : ""}
-                  value={form.temporary_password}
-                  onGenerate={(temporary_password) => {
-                    setForm((current) => ({ ...current, temporary_password }));
-                    setTemporaryPasswordError(false);
-                  }}
-                  disabled={busy}
-                  onChange={(event) => {
-                    setForm((current) => ({
-                      ...current,
-                      temporary_password: event.target.value,
-                    }));
-                    setTemporaryPasswordError(false);
-                  }}
-                  autoComplete="new-password"
-                />
-              )}
-              <Select
-                size="xl"
-                aria-label={t("users.role")}
-                value={[form.role]}
-                options={["admin", "member", "service"].map((role) => ({
-                  value: role,
-                  content: t(`users.roles.${role}`),
-                }))}
-                onUpdate={([role = "member"]) => {
-                  setForm((current) => ({
-                    ...current,
-                    role,
-                    temporary_password: role === "service" ? "" : current.temporary_password,
-                  }));
-                  setTemporaryPasswordError(false);
-                }}
-              />
-              <Button
-                type="submit"
-                view="action"
-                size="xl"
-                disabled={busy || !form.username.trim()}
-                loading={busy}
-              >
-                {t("common.actions.create")}
-              </Button>
-            </Flex>
-          </Flex>
+            </CreateSurface>
+          </Box>
         </Col>
       </Row>
+
+      {taskOpen && view === "access" && !folderAccessTarget && (
+        <TaskSurface
+          open
+          aria-label={t("folderAccess.manage")}
+          onOpenChange={(open) => {
+            if (!open) closeTask();
+          }}
+        >
+          <TaskSurface.Header caption={t("folderAccess.manage")} />
+          <TaskSurface.Body>
+            {listLoading ? (
+              <Text role="status">{t("common.labels.loading")}</Text>
+            ) : listError ? (
+              <Alert
+                theme="danger"
+                message={listError}
+                actions={
+                  <Button size="xl" onClick={loadUsers}>
+                    {t("common.actions.retry")}
+                  </Button>
+                }
+              />
+            ) : (
+              <Alert theme="warning" message={t("users.unavailable")} />
+            )}
+          </TaskSurface.Body>
+        </TaskSurface>
+      )}
 
       <Dialog
         aria-label={t("users.resetPasswordFor", { username: resetTarget?.username })}
@@ -463,7 +583,10 @@ const UsersPage = () => {
         user={folderAccessTarget}
         onClose={() => closeUserAction(setFolderAccessTarget, folderAccessTarget)}
       />
-      <GroupManagementDialog open={groupsOpen} onClose={() => setGroupsOpen(false)} />
+      <GroupManagementDialog
+        open={groupsOpen}
+        onClose={() => (view === "groups" ? closeTask() : setGroupsOpen(false))}
+      />
     </Flex>
   );
 };

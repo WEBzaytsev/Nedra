@@ -102,6 +102,7 @@ const en = {
     settings: "Settings",
   },
   navigation: {
+    back: "Back",
     privateVault: "Private vault",
     workspace: "Workspace",
     manage: "Manage",
@@ -187,7 +188,10 @@ const en = {
     },
   },
   entry: {
+    unavailable: "This entry is unavailable or you do not have permission for this action.",
     draft: {
+      available: "You have an unfinished entry in this tab.",
+      resume: "Continue editing",
       savedLocally:
         "This tab stores an encrypted draft and restores it when you unlock the vault. Closing the tab deletes the draft.",
       failed: "Draft not saved. Keep this tab open until you save the entry.",
@@ -418,6 +422,8 @@ const en = {
     savedWithEntry: "Save the entry to apply access changes.",
   },
   users: {
+    unavailable: "This account is unavailable. Go back to select another account.",
+    empty: "No accounts yet. Add an account to grant access.",
     title: "Users",
     subtitle: "Create accounts, assign roles and manage access and sessions.",
     backToVault: "Back to vault",

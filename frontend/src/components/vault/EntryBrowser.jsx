@@ -16,6 +16,7 @@ import { useTranslation } from "react-i18next";
 
 import EntryDetails from "./EntryDetails";
 import EntryListActions from "./EntryListActions";
+import TaskSurface from "../TaskSurface";
 
 const EntryBrowser = ({
   entries,
@@ -25,19 +26,36 @@ const EntryBrowser = ({
   onCopy,
   requestedEntryId,
   onRequestedEntryOpen,
+  mobileEntry,
+  onOpenEntry,
+  onCloseEntry,
   ...actions
 }) => {
   const { t } = useTranslation();
   const { isMediaActive } = useLayoutContext();
   const fixedViewport = isMediaActive("l");
   const desktop = isMediaActive("xl");
+  const phone = !isMediaActive("s");
   const [selectedId, setSelectedId] = useState(null);
   const [menuEntryId, setMenuEntryId] = useState(null);
   const [revealedEntryId, setRevealedEntryId] = useState(null);
   const listRef = useRef(null);
   const closeRef = useRef(null);
   const selectedTrigger = useRef(null);
-  const selected = entries.find((entry) => entry.id === selectedId);
+  const previousMobileEntry = useRef(null);
+  const selected = mobileEntry ?? entries.find((entry) => entry.id === selectedId);
+
+  useEffect(() => {
+    const previous = previousMobileEntry.current;
+    previousMobileEntry.current = mobileEntry?.id ?? null;
+    if (!phone || mobileEntry || previous == null) return undefined;
+    const frame = requestAnimationFrame(() => {
+      listRef.current
+        ?.querySelector(`[data-entry-id="${previous}"]`)
+        ?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [phone, mobileEntry]);
 
   useEffect(() => {
     if (selectedId !== null && !selected) setSelectedId(null);
@@ -64,6 +82,10 @@ const EntryBrowser = ({
   }, [selectedId, desktop]);
 
   const closeDetails = () => {
+    if (mobileEntry) {
+      onCloseEntry();
+      return;
+    }
     setSelectedId(null);
     window.requestAnimationFrame(() => selectedTrigger.current?.focus());
   };
@@ -75,21 +97,21 @@ const EntryBrowser = ({
       onCopy={onCopy}
       {...actions}
       onEdit={(entry) => {
-        if (desktop) actions.onEdit(entry);
+        if (desktop || phone || mobileEntry) actions.onEdit(entry);
         else {
           setSelectedId(null);
           window.requestAnimationFrame(() => actions.onEdit(entry));
         }
       }}
       onDelete={(entry) => {
-        if (desktop) actions.onDelete(entry);
+        if (desktop || phone) actions.onDelete(entry);
         else {
           setSelectedId(null);
           window.requestAnimationFrame(() => actions.onDelete(entry));
         }
       }}
       onShare={(entry) => {
-        if (desktop) actions.onShare(entry);
+        if (desktop || phone || mobileEntry) actions.onShare(entry);
         else {
           setSelectedId(null);
           window.requestAnimationFrame(() => actions.onShare(entry));
@@ -97,6 +119,20 @@ const EntryBrowser = ({
       }}
     />
   );
+
+  if (phone && selected)
+    return (
+      <TaskSurface
+        open
+        aria-label={selected.password_name}
+        onOpenChange={(open) => {
+          if (!open) onCloseEntry();
+        }}
+      >
+        <TaskSurface.Header caption={selected.password_name} />
+        <TaskSurface.Body>{details}</TaskSurface.Body>
+      </TaskSurface>
+    );
 
   return (
     <Flex
@@ -162,7 +198,8 @@ const EntryBrowser = ({
             onItemAction={(_id, entry, event) => {
               selectedTrigger.current = event.currentTarget;
               setRevealedEntryId(null);
-              setSelectedId(entry.id);
+              if (phone) onOpenEntry(entry);
+              else setSelectedId(entry.id);
             }}
             renderItem={(ctx, { getItemProps, getItemViewProps, getCellProps }) => (
               <List.ItemView
@@ -173,7 +210,7 @@ const EntryBrowser = ({
                 description={
                   <Flex direction="column" gap="spacing-2" minWidth="0" width="100%">
                     <Flex gap="spacing-2" wrap="wrap" alignItems="center" qa="entry-metadata">
-                      <Text wordBreak="break-all" qa="entry-primary-value">
+                      <Text wordBreak="break-all" ellipsis={phone} qa="entry-primary-value">
                         {ctx.item.kind === "note"
                           ? t("entry.kind.note")
                           : ctx.item.username || ctx.item.url || t("entry.kind.login")}
@@ -182,7 +219,7 @@ const EntryBrowser = ({
                         <Text color="secondary">{t("sharing.readOnlyAccess")}</Text>
                       )}
                       {ctx.item.folder && (
-                        <Text wordBreak="break-word" color="secondary">
+                        <Text wordBreak="break-word" ellipsis={phone} color="secondary">
                           {ctx.item.folder}
                         </Text>
                       )}
@@ -237,7 +274,11 @@ const EntryBrowser = ({
                 }
               >
                 <Flex {...getCellProps()} alignItems="center" gap="spacing-1" minWidth="0">
-                  <Text wordBreak="break-word" qa="entry-name">
+                  <Text
+                    wordBreak="break-word"
+                    ellipsisLines={phone ? 2 : undefined}
+                    qa="entry-name"
+                  >
                     {ctx.item.password_name}
                   </Text>
                   {ctx.item.favorite && <Icon data={StarFill} size={12} />}
@@ -273,7 +314,7 @@ const EntryBrowser = ({
           {details}
         </Flex>
       )}
-      {!desktop && (
+      {!desktop && !phone && (
         <Dialog
           open={Boolean(selected)}
           onOpenChange={(open) => {

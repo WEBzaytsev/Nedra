@@ -244,6 +244,23 @@ function strong(password) {
         assert.match(password, pattern);
 }
 
+const taskSurface = (page, options = {}) =>
+    page
+        .getByRole("dialog", options)
+        .or(
+            page
+                .locator('[data-qa="task-page"]')
+                .and(page.getByRole("region", options)),
+        );
+
+async function userCreate(page, width, t) {
+    if (width < 576)
+        await page
+            .getByRole("button", { name: t.common.actions.add, exact: true })
+            .click();
+    return page.locator("form");
+}
+
 async function fits(page) {
     await page.waitForTimeout(300);
     await page.evaluate(() => window.scrollTo(0, window.scrollY));
@@ -333,7 +350,7 @@ for (const [width, language] of [
             "/users",
         );
         try {
-            const create = page.locator("form");
+            const create = await userCreate(page, width, t);
             const password = create.getByLabel(t.users.temporaryPassword, {
                 exact: false,
             });
@@ -403,6 +420,8 @@ for (const [width, language] of [
                         'form input[autocomplete="new-password"]',
                     )?.value === "",
             );
+            if (width < 576)
+                await page.locator('[data-qa="task-back"]').click();
 
             await page
                 .getByRole("button", {
@@ -448,6 +467,7 @@ for (const [width, language] of [
                 .all()) {
                 await toast.getByRole("button").click();
             }
+            if (width < 576) await userCreate(page, width, t);
             await create
                 .getByRole("combobox", { name: t.users.role, exact: true })
                 .click();
@@ -483,7 +503,7 @@ for (const [width, language] of [
             "/users",
         );
         try {
-            const create = page.locator("form");
+            const create = await userCreate(page, width, t);
             await create
                 .getByText(t.auth.usernameRules, { exact: true })
                 .waitFor();
@@ -558,7 +578,7 @@ for (const [width, language] of [
                     exact: true,
                 })
                 .click();
-            const dialog = page.getByRole("dialog");
+            const dialog = taskSurface(page);
             const generate = dialog.getByRole("button", {
                 name: t.entry.actions.generatePassword,
                 exact: true,
@@ -649,7 +669,7 @@ test("existing vault generator stays singular; backup, restore and TOTP never ge
             .getByRole("row")
             .first()
             .click();
-        const detail = page.getByRole("dialog", { name: "Synthetic entry" });
+        const detail = taskSurface(page, { name: "Synthetic entry" });
         await detail
             .getByRole("button", { name: t.common.actions.edit, exact: true })
             .click();
@@ -657,9 +677,7 @@ test("existing vault generator stays singular; backup, restore and TOTP never ge
             .locator('input[autocomplete="new-password"]')
             .last();
         await existingPassword.waitFor();
-        const editForm = page
-            .getByRole("dialog")
-            .filter({ has: existingPassword });
+        const editForm = taskSurface(page).filter({ has: existingPassword });
         await editForm
             .getByRole("button", {
                 name: t.entry.actions.generatePassword,
@@ -688,7 +706,7 @@ test("existing vault generator stays singular; backup, restore and TOTP never ge
             })
             .click();
         await editForm.waitFor({ state: "hidden" });
-        await page.keyboard.press("Escape");
+        await page.locator('[data-qa="task-back"]').click();
         await detail.waitFor({ state: "hidden" });
 
         for (const [tool, label] of [
@@ -704,7 +722,7 @@ test("existing vault generator stays singular; backup, restore and TOTP never ge
                 exact: true,
             });
             await field.waitFor();
-            const dialog = page.getByRole("dialog").filter({ has: field });
+            const dialog = taskSurface(page).filter({ has: field });
             assert.equal(
                 await dialog
                     .getByRole("button", {
@@ -714,7 +732,7 @@ test("existing vault generator stays singular; backup, restore and TOTP never ge
                     .count(),
                 0,
             );
-            await page.keyboard.press("Escape");
+            await page.locator('[data-qa="task-back"]').click();
             await dialog.waitFor({ state: "hidden" });
         }
         await page
@@ -856,6 +874,7 @@ for (const [width, authenticated] of [
                   });
             await toggle.waitFor();
             const toggleHandle = await toggle.elementHandle();
+            await toggle.scrollIntoViewIfNeeded();
             assert.ok(toggleHandle);
             await page.waitForFunction((button) => {
                 const rect = button.getBoundingClientRect();
@@ -1102,15 +1121,14 @@ if (process.env.CIPHERMOTH_LAYOUT_MATRIX) {
                     },
                 );
                 try {
-                    await page
-                        .getByRole("dialog", {
-                            name: t.auth.changeTemporaryPassword,
-                            exact: true,
-                        })
-                        .waitFor();
+                    const required = taskSurface(page, {
+                        name: t.auth.changeTemporaryPassword,
+                        exact: true,
+                    });
+                    await required.waitFor();
                     await capture(page, "required-password-change");
                     await page.keyboard.press("Escape");
-                    assert.equal(await page.getByRole("dialog").count(), 1);
+                    assert.equal(await required.count(), 1);
                     assert.deepEqual(errors, []);
                 } finally {
                     await context.close();

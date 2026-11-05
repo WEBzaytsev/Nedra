@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { Alert, Button, Card, Dialog, Divider, Flex, Grid, Select, Text } from "@gravity-ui/uikit";
+import { Alert, Button, Card, Divider, Flex, Grid, Select, Text } from "@gravity-ui/uikit";
+import Dialog from "../TaskSurface";
 import { useStoreActions } from "easy-peasy";
 import { useTranslation } from "react-i18next";
 

@@ -427,6 +427,28 @@ async function settleAnimations(page) {
     });
 }
 
+function taskSurface(page, options = {}) {
+    return page
+        .getByRole("dialog", options)
+        .or(
+            page
+                .locator('[data-qa="task-page"]')
+                .and(page.getByRole("region", options)),
+        );
+}
+
+async function leaveSurface(page) {
+    if (await page.getByRole("dialog").count()) {
+        await page.keyboard.press("Escape");
+        await page.getByRole("dialog").waitFor({ state: "hidden" });
+    } else if (await page.locator('[data-qa="task-back"]').count()) {
+        await page.locator('[data-qa="task-back"]').click();
+        await page.waitForTimeout(100);
+    } else {
+        await page.keyboard.press("Escape");
+    }
+}
+
 async function axe(page) {
     await settleAnimations(page);
     await page.addScriptTag({ path: axePath });
@@ -463,6 +485,7 @@ async function axe(page) {
 }
 
 async function visibleTouchAction(page, locator) {
+    await locator.scrollIntoViewIfNeeded();
     await page.waitForTimeout(300);
     const box = await locator.boundingBox();
     const viewport = page.viewportSize();
@@ -613,6 +636,14 @@ for (const [width, reason] of [
             await page
                 .getByRole("button", { name: "Unlock vault", exact: true })
                 .click();
+            if (width < 576) {
+                const resume = page.getByRole("button", {
+                    name: "Continue editing",
+                    exact: true,
+                });
+                await editor.or(resume).waitFor();
+                if (await resume.isVisible()) await resume.click();
+            }
             await editor.waitFor();
             assert.equal(
                 await editor
@@ -893,7 +924,7 @@ for (const width of [375, 1440]) {
             await page
                 .getByRole("button", { name: "Groups", exact: true })
                 .click();
-            const groupsDialog = page.getByRole("dialog", {
+            const groupsDialog = taskSurface(page, {
                 name: "Groups",
                 exact: true,
             });
@@ -928,7 +959,7 @@ for (const width of [375, 1440]) {
                     exact: true,
                 })
                 .click();
-            const dialog = page.getByRole("dialog", {
+            const dialog = taskSurface(page, {
                 name: "Folder access for team-member",
                 exact: true,
             });
@@ -1024,7 +1055,7 @@ for (const width of [375, 1440]) {
                     .getByRole("dialog", { name: "Workspace", exact: true })
                     .waitFor({ state: "hidden" });
             }
-            const dialog = page.getByRole("dialog", {
+            const dialog = taskSurface(page, {
                 name: "Folder access",
                 exact: true,
             });
@@ -1037,9 +1068,16 @@ for (const width of [375, 1440]) {
                 await dialog.getByText("Owner", { exact: true }).count(),
                 0,
             );
+            if (width < 576)
+                await dialog
+                    .getByRole("button", { name: "Rename folder", exact: true })
+                    .click();
             const [renameBox, grantsBox] = await Promise.all([
                 dialog
-                    .getByLabel("Rename folder", { exact: true })
+                    .getByRole("textbox", {
+                        name: "Rename folder",
+                        exact: true,
+                    })
                     .boundingBox(),
                 dialog
                     .getByRole("heading", {
@@ -1158,7 +1196,7 @@ for (const [width, language, theme] of [
                     })
                     .waitFor({ state: "hidden" });
             }
-            const dialog = page.getByRole("dialog", {
+            const dialog = taskSurface(page, {
                 name: copy.folderAccess.title,
                 exact: true,
             });
@@ -1202,7 +1240,9 @@ for (const [width, language, theme] of [
                     .first()
                     .boundingBox();
                 assert.ok(
-                    dayBounds && dayBounds.width >= 39 && dayBounds.height >= 39,
+                    dayBounds &&
+                        dayBounds.width >= 39 &&
+                        dayBounds.height >= 39,
                     JSON.stringify({ dayBounds, width }),
                 );
                 const openFieldStyle = await page
@@ -1255,7 +1295,12 @@ test("Gravity composites replace native settings, form validation, and confirmat
             role: "admin",
             users: [
                 { id: 1, username: "synthetic", role: "admin", active: true },
-                { id: 2, username: "team-member", role: "member", active: true },
+                {
+                    id: 2,
+                    username: "team-member",
+                    role: "member",
+                    active: true,
+                },
             ],
         },
     );
@@ -1328,7 +1373,10 @@ test("Gravity composites replace native settings, form validation, and confirmat
             await confirmation.getAttribute("aria-label"),
             enText.common.actions.delete,
         );
-        assert.equal(await confirmation.locator(".gc-confirm-dialog__body").count(), 1);
+        assert.equal(
+            await confirmation.locator(".gc-confirm-dialog__body").count(),
+            1,
+        );
         const cancel = confirmation.getByRole("button", {
             name: enText.common.actions.cancel,
             exact: true,
@@ -1381,7 +1429,7 @@ for (const width of [375, 1440]) {
             await page
                 .locator('a[data-navigation-id="/passwords?tool=backup"]')
                 .click();
-            const backupDialog = page.getByRole("dialog", {
+            const backupDialog = taskSurface(page, {
                 name: "Создать резервную копию",
                 exact: true,
             });
@@ -1398,16 +1446,11 @@ for (const width of [375, 1440]) {
             await backupDialog.waitFor();
             await page.goto(`${origin}/passwords?tool=health`);
             await backupDialog.waitFor({ state: "hidden" });
-            await page
-                .getByRole("dialog", {
-                    name: "Проверка паролей",
-                    exact: true,
-                })
-                .waitFor();
-            assert.equal(
-                await page.locator('[role="dialog"]:visible').count(),
-                1,
-            );
+            await taskSurface(page, {
+                name: "Проверка паролей",
+                exact: true,
+            }).waitFor();
+            assert.equal(await taskSurface(page).count(), 1);
             assert.deepEqual(errors, []);
         } finally {
             await context.close();
@@ -1455,11 +1498,11 @@ for (const width of [375, 899, 900, 1024, 1440]) {
                 );
                 await action.click();
                 const dialog = page.locator(
-                    '[role="dialog"]:not([aria-label="Рабочая область"])',
+                    '[role="dialog"]:not([aria-label="Рабочая область"]), [data-qa="task-page"]',
                 );
                 await dialog.waitFor();
                 await fits(page);
-                await page.keyboard.press("Escape");
+                await leaveSurface(page);
                 await dialog.waitFor({ state: "hidden" });
             }
             assert.deepEqual(errors, []);
@@ -1496,7 +1539,7 @@ for (const width of [375, 1440]) {
         );
         try {
             await page.goto(`${origin}/passwords?tool=health`);
-            const dialog = page.getByRole("dialog", {
+            const dialog = taskSurface(page, {
                 name: "Проверка паролей",
                 exact: true,
             });
@@ -1506,8 +1549,11 @@ for (const width of [375, 1440]) {
             const rows = groups.getByRole("button");
             assert.equal(await rows.count(), 10);
             const geometry = await dialog.evaluate((node) => {
-                const body = node.querySelector(".g-dialog-body");
-                const footer = node.querySelector(".g-dialog-footer");
+                const body =
+                    node.querySelector(".g-dialog-body") ?? node.children[1];
+                const footer = node.querySelector(
+                    ".g-dialog-footer, [data-qa='task-actions']",
+                );
                 const group = node.querySelector(
                     '[data-qa="health-issue-group"]',
                 );
@@ -1525,7 +1571,9 @@ for (const width of [375, 1440]) {
                     body: rect(body),
                     footer: rect(footer),
                     group: rect(group),
-                    bodyScrollable: body.scrollHeight > body.clientHeight,
+                    bodyScrollable: node.hasAttribute("data-qa")
+                        ? document.documentElement.scrollHeight > innerHeight
+                        : body.scrollHeight > body.clientHeight,
                     bodyOverflow: body.scrollWidth > body.clientWidth,
                 };
             });
@@ -1689,7 +1737,7 @@ test("mobile vault opens an accessible read view without exposing secrets", asyn
     try {
         const list = page.locator('[data-qa="entry-list"]');
         await list.getByRole("row", { name: /^GitHub/ }).click();
-        const detail = page.getByRole("dialog", {
+        const detail = taskSurface(page, {
             name: "GitHub",
             exact: true,
         });
@@ -1724,12 +1772,10 @@ test("mobile vault opens an accessible read view without exposing secrets", asyn
             await page.evaluate(() => navigator.clipboard.readText()),
             /^\d{6}$/,
         );
-        await detail
-            .getByRole("button", { name: "Back to entries", exact: true })
-            .click();
+        await detail.getByRole("button", { name: "Back", exact: true }).click();
 
         await list.getByRole("row", { name: /^Read-only account/ }).click();
-        const readOnly = page.getByRole("dialog", {
+        const readOnly = taskSurface(page, {
             name: "Read-only account",
             exact: true,
         });
@@ -1746,11 +1792,11 @@ test("mobile vault opens an accessible read view without exposing secrets", asyn
         await readOnly.getByText("Readme.txt", { exact: true }).waitFor();
         assert.equal(await readOnly.locator('input[type="file"]').count(), 0);
         await readOnly
-            .getByRole("button", { name: "Back to entries", exact: true })
+            .getByRole("button", { name: "Back", exact: true })
             .click();
 
         await list.getByRole("row", { name: /^Recovery notes/ }).click();
-        const note = page.getByRole("dialog", {
+        const note = taskSurface(page, {
             name: "Recovery notes",
             exact: true,
         });
@@ -2079,7 +2125,7 @@ for (const [width, language, theme] of [
                     ? page.getByRole("region", {
                           name: ru ? "Просмотр записи" : "Entry details",
                       })
-                    : page.getByRole("dialog", { name: longName, exact: true });
+                    : taskSurface(page, { name: longName, exact: true });
             await detail.waitFor();
             await axe(page);
             assert.equal(
@@ -2097,7 +2143,7 @@ for (const [width, language, theme] of [
             await detail
                 .getByText(entries[3].password_value, { exact: true })
                 .waitFor();
-            await page.keyboard.press("Escape");
+            await leaveSurface(page);
             await detail.waitFor({ state: "hidden" });
 
             if (await page.locator('[data-qa="mobile-header"]').count()) {
@@ -2109,7 +2155,7 @@ for (const [width, language, theme] of [
                     .click();
             }
             await page.locator('a[href="/passwords?tool=trash"]').click();
-            const trash = page.getByRole("dialog", {
+            const trash = taskSurface(page, {
                 name: ru ? "Корзина" : "Trash",
                 exact: true,
             });
@@ -2188,6 +2234,859 @@ test("profile footer shows and applies current language and theme", async () => 
             { mode: "light", saved: "light" },
         );
         assert.deepEqual(errors, []);
+    } finally {
+        await context.close();
+    }
+});
+
+test("phone task navigation preserves list context, history, drafts and failed edits", async () => {
+    const records = [
+        ...structuredClone(entries),
+        ...Array.from({ length: 30 }, (_, index) => ({
+            ...structuredClone(entries[0]),
+            id: 100 + index,
+            password_name: `GitHub ${String(index).padStart(2, "0")}`,
+        })),
+    ];
+    const { context, page, errors } = await vault(375, "ru", "dark", records, {
+        role: "admin",
+    });
+    const t = ruText;
+    const button = (name) => page.getByRole("button", { name, exact: true });
+    const capture = async (state) => {
+        await fits(page);
+        await axe(page);
+        await viewportScreenshot(page, `navigation-375-ru-dark-${state}.png`);
+    };
+    try {
+        const search = page.getByPlaceholder(t.vault.searchPlaceholder);
+        await search.fill("GitHub");
+        await page
+            .getByRole("combobox", {
+                name: t.common.fields.folder,
+                exact: true,
+            })
+            .click();
+        await page.getByRole("option", { name: /^Work/ }).click();
+        await page
+            .getByRole("combobox", { name: t.vault.browser.sort, exact: true })
+            .click();
+        await page
+            .getByRole("option", {
+                name: t.vault.browser.nameAscending,
+                exact: true,
+            })
+            .click();
+        const row = page.locator('[data-entry-id="129"]');
+        await row.scrollIntoViewIfNeeded();
+        const scroll = await page.evaluate(() => window.scrollY);
+        assert.ok(scroll > 0);
+        await row.focus();
+        await page.keyboard.press("Enter");
+        await page.waitForURL("**/passwords?entry=129&view=details");
+        await taskSurface(page, { name: "GitHub 29", exact: true }).waitFor();
+        await settleAnimations(page);
+        assert.deepEqual(
+            await page
+                .getByRole("dialog")
+                .evaluateAll((nodes) =>
+                    nodes.map((node) => node.getAttribute("aria-label")),
+                ),
+            [],
+        );
+        assert.equal(
+            await search.isVisible(),
+            false,
+            "a task owns main, not a second body below the list",
+        );
+        await capture("details");
+        await page.goBack();
+        await row.waitFor();
+        await page.waitForTimeout(100);
+        assert.equal(await search.inputValue(), "GitHub");
+        assert.equal(
+            await row.evaluate((node) => document.activeElement === node),
+            true,
+        );
+        assert.ok(
+            Math.abs((await page.evaluate(() => window.scrollY)) - scroll) < 5,
+            "Back restores list position",
+        );
+        await page.goForward();
+        await taskSurface(page, { name: "GitHub 29", exact: true }).waitFor();
+        await page.reload();
+        await taskSurface(page, { name: "GitHub 29", exact: true }).waitFor();
+        await button(t.common.actions.edit).click();
+        await page.waitForURL("**/passwords?entry=129&view=edit");
+        const username = page.getByLabel(t.entry.labels.usernameOptional, {
+            exact: true,
+        });
+        await username.fill("changed@example.test");
+        await page.setViewportSize({ width: 768, height: 900 });
+        await taskSurface(page, {
+            name: t.entry.title.editPassword,
+            exact: true,
+        }).waitFor();
+        assert.equal(
+            await username.inputValue(),
+            "changed@example.test",
+            "resize keeps the same task and form state",
+        );
+        await page.setViewportSize({ width: 375, height: 480 });
+        await username.focus();
+        await page.keyboard.press("Tab");
+        await settleAnimations(page);
+        assert.equal(await page.getByRole("dialog").count(), 0);
+        await capture("edit-short-focused");
+        let fail = true;
+        const updates = [];
+        await page.route("**/api/passwords/update", async (route) => {
+            const payload = route.request().postDataJSON();
+            updates.push(payload);
+            if (fail)
+                return route.fulfill({
+                    status: 503,
+                    json: { detail: "Synthetic save failure" },
+                });
+            Object.assign(
+                records.find((entry) => entry.id === 129),
+                payload.new_password,
+            );
+            return route.fulfill({ json: {} });
+        });
+        await button(t.common.actions.update).click();
+        await page
+            .getByText("Synthetic save failure", { exact: true })
+            .waitFor();
+        assert.equal(await username.inputValue(), "changed@example.test");
+        await capture("edit-error-retained");
+        fail = false;
+        await button(t.common.actions.update).click();
+        await page.waitForURL("**/passwords?entry=129&view=details");
+        await page.getByText("changed@example.test", { exact: true }).waitFor();
+        assert.equal(updates.length, 2);
+        await page.locator('[data-qa="task-back"]').click();
+        await page.waitForURL("**/passwords");
+        await page.setViewportSize({ width: 375, height: 812 });
+        await button(t.common.actions.add).click();
+        await page
+            .getByLabel(t.common.fields.name, { exact: true })
+            .fill("Unfinished synthetic draft");
+        await page.goBack();
+        await page.waitForURL("**/passwords");
+        await button(t.entry.draft.resume).click();
+        assert.equal(
+            await page
+                .getByLabel(t.common.fields.name, { exact: true })
+                .inputValue(),
+            "Unfinished synthetic draft",
+        );
+        await capture("draft-resume-page");
+        await button(t.common.actions.cancel).click();
+        assert.equal(
+            await page.evaluate(() =>
+                sessionStorage.getItem("ciphermoth-entry-draft:v1:1"),
+            ),
+            null,
+        );
+        for (const view of ["edit", "share"]) {
+            await page.goto(`${origin}/passwords?entry=2&view=${view}`);
+            await page
+                .getByText(t.entry.unavailable, { exact: true })
+                .waitFor();
+            assert.equal(await button(t.common.actions.update).count(), 0);
+            await capture(`readonly-${view}-denied`);
+        }
+        assert.deepEqual(errors, []);
+    } finally {
+        await context.close();
+    }
+});
+
+test("phone preferences save, retry and password change return through real routes", async () => {
+    const { context, page, errors } = await vault(375, "ru", "dark", entries, {
+        role: "admin",
+    });
+    const t = ruText;
+    const button = (name) => page.getByRole("button", { name, exact: true });
+    try {
+        await page.goto(`${origin}/settings`);
+        await taskSurface(page, {
+            name: t.settings.title,
+            exact: true,
+        }).waitFor();
+        const fields = page.getByRole("spinbutton");
+        assert.equal(await fields.count(), 5);
+        await fields.last().fill("45");
+        let fail = true;
+        let settings;
+        await page.route("**/api/settings", (route) => {
+            if (route.request().method() !== "PATCH") return route.fallback();
+            settings = route.request().postDataJSON();
+            return fail
+                ? route.fulfill({
+                      status: 503,
+                      json: { detail: "Synthetic settings failure" },
+                  })
+                : route.fulfill({ json: settings });
+        });
+        await button(t.common.actions.save).click();
+        await page
+            .getByText("Synthetic settings failure", { exact: true })
+            .waitFor();
+        assert.equal(await fields.last().inputValue(), "45");
+        await viewportScreenshot(page, "navigation-settings-save-error.png");
+        fail = false;
+        await button(t.common.actions.save).click();
+        await page.waitForURL("**/passwords");
+        assert.equal(settings.clipboard_clear_ms, 45000);
+        await page.goto(`${origin}/account/password`);
+        await page
+            .getByLabel(t.auth.currentPassword, { exact: true })
+            .fill("Synthetic-current");
+        const secret = "Synthetic-new-password!2026";
+        await page.getByLabel(t.auth.newPassword, { exact: true }).fill(secret);
+        await page
+            .getByLabel(t.auth.confirmNewPassword, { exact: true })
+            .fill(secret);
+        await page.route("**/api/auth/password", (route) =>
+            route.fulfill({
+                json: {
+                    session_token: "synthetic-rotated-session",
+                    user: {
+                        id: 1,
+                        username: "synthetic",
+                        role: "admin",
+                        must_change_password: false,
+                    },
+                },
+            }),
+        );
+        await button(t.auth.changePassword).click();
+        await page.waitForURL("**/passwords");
+        await fits(page);
+        await axe(page);
+        assert.deepEqual(errors, []);
+    } finally {
+        await context.close();
+    }
+});
+
+test("phone management tasks exercise folder, group, share and recovery actions", async () => {
+    const t = ruText;
+    const users = [
+        { id: 1, username: "synthetic", role: "admin", active: true },
+        { id: 2, username: "team-member", role: "member", active: true },
+    ];
+    const groups = [{ id: 10, name: "Operations", member_count: 0 }];
+    const members = [];
+    const shares = [];
+    const folders = [
+        {
+            id: 1,
+            name: "Work",
+            owner_id: 1,
+            owner_username: "synthetic",
+            access: "owner",
+            can_manage: true,
+        },
+    ];
+    const { context, page, errors } = await vault(375, "ru", "dark", entries, {
+        role: "admin",
+        users,
+        groups,
+        groupMembers: members,
+        shares,
+        shareTargets: [users[1]],
+    });
+    const button = (name) => page.getByRole("button", { name, exact: true });
+    const capture = async (state) => {
+        await fits(page);
+        await axe(page);
+        await viewportScreenshot(page, `management-375-ru-dark-${state}.png`);
+    };
+    const writes = [];
+    try {
+        await page.route(/\/api\/folders(?:\/\d+)?$/, async (route) => {
+            const request = route.request();
+            const method = request.method();
+            if (method === "GET") return route.fulfill({ json: folders });
+            writes.push({ path: new URL(request.url()).pathname, method });
+            if (method === "POST")
+                folders.push({
+                    ...folders[0],
+                    id: 9,
+                    name: request.postDataJSON().name,
+                });
+            if (method === "PATCH")
+                folders.find((folder) => folder.id === 9).name =
+                    request.postDataJSON().name;
+            if (method === "DELETE")
+                folders.splice(
+                    folders.findIndex((folder) => folder.id === 9),
+                    1,
+                );
+            return route.fulfill({ json: { id: 9 } });
+        });
+        await page.goto(`${origin}/passwords?tool=folders`);
+        await button(t.folderAccess.createFolder).click();
+        await page
+            .getByRole("textbox", { name: t.common.fields.name, exact: true })
+            .fill("Synthetic folder");
+        await capture("folder-create-expanded");
+        await button(t.common.actions.create).click();
+        await page
+            .getByRole("combobox", {
+                name: t.common.fields.folder,
+                exact: true,
+            })
+            .click();
+        await page.getByRole("option", { name: /^Synthetic folder/ }).click();
+        await button(t.folderAccess.rename).click();
+        await page
+            .getByRole("textbox", { name: t.folderAccess.rename, exact: true })
+            .fill("Renamed synthetic folder");
+        await capture("folder-rename-expanded");
+        await button(t.common.actions.save).click();
+        await page
+            .getByRole("heading", {
+                name: "Renamed synthetic folder",
+                exact: true,
+            })
+            .waitFor();
+        await button(t.common.actions.delete).click();
+        const confirmation = page.getByRole("dialog");
+        assert.equal(await confirmation.count(), 1);
+        await capture("folder-delete-confirm");
+        await confirmation
+            .getByRole("button", { name: t.common.actions.delete, exact: true })
+            .click();
+        await confirmation.waitFor({ state: "hidden" });
+        assert.equal(folders.length, 1);
+        await page.route(/\/api\/groups(?:\/\d+)?$/, (route) => {
+            const request = route.request();
+            const method = request.method();
+            if (method === "GET") return route.fulfill({ json: groups });
+            writes.push({ path: new URL(request.url()).pathname, method });
+            if (method === "POST")
+                groups.push({
+                    id: 11,
+                    name: request.postDataJSON().name,
+                    member_count: 0,
+                });
+            if (method === "PATCH")
+                groups.find((group) => group.id === 11).name =
+                    request.postDataJSON().name;
+            if (method === "DELETE")
+                groups.splice(
+                    groups.findIndex((group) => group.id === 11),
+                    1,
+                );
+            return route.fulfill({ json: { id: 11 } });
+        });
+        await page.route("**/api/groups/11/members/2", (route) => {
+            const method = route.request().method();
+            writes.push({ path: "/api/groups/11/members/2", method });
+            if (method === "PUT")
+                members.push({
+                    user_id: 2,
+                    username: "team-member",
+                    role: "member",
+                });
+            else members.splice(0);
+            return route.fulfill({ json: {} });
+        });
+        await page.goto(`${origin}/users?view=groups`);
+        await button(t.groups.create).click();
+        await page
+            .getByRole("textbox", { name: t.groups.name, exact: true })
+            .fill("Synthetic group");
+        await capture("group-create-expanded");
+        await button(t.common.actions.create).click();
+        await page
+            .getByRole("combobox", { name: t.groups.group, exact: true })
+            .click();
+        await page
+            .getByRole("option", { name: "Synthetic group", exact: true })
+            .click();
+        await page
+            .getByRole("textbox", { name: t.groups.rename, exact: true })
+            .fill("Renamed synthetic group");
+        await button(t.common.actions.save).click();
+        await page
+            .getByRole("combobox", { name: t.groups.addMember, exact: true })
+            .click();
+        await page.getByRole("option", { name: /^team-member/ }).click();
+        await button(t.common.actions.add).click();
+        await taskSurface(page, { name: t.groups.title, exact: true })
+            .getByText("team-member", { exact: true })
+            .waitFor();
+        await capture("group-member-added");
+        await taskSurface(page, { name: t.groups.title, exact: true })
+            .getByText("team-member", { exact: true })
+            .locator("..")
+            .locator("..")
+            .getByRole("button", { name: t.common.actions.remove, exact: true })
+            .click();
+        await page.getByText(t.groups.noMembers, { exact: true }).waitFor();
+        await button(t.common.actions.delete).click();
+        await page
+            .getByRole("dialog")
+            .getByRole("button", { name: t.common.actions.delete, exact: true })
+            .click();
+        await page.getByRole("dialog").waitFor({ state: "hidden" });
+        assert.equal(groups.length, 1);
+        await page.route("**/api/passwords/1/shares/2", (route) => {
+            const request = route.request();
+            const method = request.method();
+            writes.push({ path: "/api/passwords/1/shares/2", method });
+            if (method === "PUT")
+                shares.push({
+                    user_id: 2,
+                    username: "team-member",
+                    role: "member",
+                    ...request.postDataJSON(),
+                });
+            else shares.splice(0);
+            return route.fulfill({ json: {} });
+        });
+        await page.goto(`${origin}/passwords?entry=1&view=share`);
+        await page
+            .getByRole("combobox", { name: t.sharing.user, exact: true })
+            .click();
+        await page.getByRole("option", { name: /^team-member/ }).click();
+        await button(t.sharing.grant).click();
+        await page.getByText("team-member", { exact: true }).waitFor();
+        await capture("share-added");
+        await button(t.sharing.revoke).click();
+        await page.getByText(t.sharing.ownerOnly, { exact: true }).waitFor();
+        assert.equal(shares.length, 0);
+        await page.route("**/api/passwords", (route) =>
+            route.fulfill({
+                json: entries.map((entry) =>
+                    entry.id === 2 ? { ...entry, password_value: "x" } : entry,
+                ),
+            }),
+        );
+        await page.goto(`${origin}/passwords?tool=health`);
+        await page
+            .locator('[data-qa="health-issue-group"]')
+            .getByRole("button")
+            .filter({ hasText: "Read-only account" })
+            .first()
+            .click();
+        await page.waitForURL("**/passwords?entry=2&view=details");
+        assert.equal(await button(t.common.actions.edit).count(), 0);
+        await page.goBack();
+        await page.waitForURL("**/passwords?tool=health");
+        await capture("health-return");
+        let restored = false;
+        await page.route("**/api/passwords/trash", (route) =>
+            restored ? route.fulfill({ json: [] }) : route.fallback(),
+        );
+        await page.route(
+            /\/api\/passwords\/[^/]+\/restore\?entry_id=11$/,
+            (route) => {
+                assert.equal(route.request().method(), "POST");
+                restored = true;
+                return route.fulfill({ json: {} });
+            },
+        );
+        await page.goto(`${origin}/passwords?tool=trash`);
+        await page
+            .getByRole("button", {
+                name: new RegExp(`^${t.trashDialog.restore}:`),
+            })
+            .click();
+        await page.getByText(t.trashDialog.empty, { exact: true }).waitFor();
+        assert.equal(
+            restored,
+            true,
+            "restore submitted the selected trash entry ID",
+        );
+        await capture("trash-restored-empty");
+        assert.ok(
+            writes.some(
+                (write) =>
+                    write.path === "/api/folders/9" &&
+                    write.method === "DELETE",
+            ),
+        );
+        assert.ok(
+            writes.some(
+                (write) =>
+                    write.path === "/api/groups/11/members/2" &&
+                    write.method === "DELETE",
+            ),
+        );
+        assert.deepEqual(errors, []);
+    } finally {
+        await context.close();
+    }
+});
+
+test("phone management request errors expose retry instead of false empty states", async () => {
+    const t = ruText;
+    const { context, page, errors } = await vault(375, "ru", "dark", entries, {
+        role: "admin",
+    });
+    try {
+        for (const [path, routePath, emptyText] of [
+            ["users", "/users", t.users.empty],
+            ["users", "/users?view=access&user=1", t.users.empty],
+            ["groups", "/users?view=groups", t.groups.empty],
+            ["folders", "/passwords?tool=folders", t.folderAccess.empty],
+            [
+                "users/1/folder-access",
+                "/users?view=access&user=1",
+                t.folderAccess.empty,
+            ],
+        ]) {
+            let fail = true;
+            await page.route(`**/api/${path}`, (route) =>
+                fail
+                    ? route.fulfill({
+                          status: 503,
+                          json: { detail: "Synthetic management load failure" },
+                      })
+                    : route.fallback(),
+            );
+            await page.goto(`${origin}${routePath}`);
+            await page
+                .getByText("Synthetic management load failure", { exact: true })
+                .filter({ visible: true })
+                .first()
+                .waitFor();
+            assert.equal(
+                await page.getByText(emptyText, { exact: true }).count(),
+                0,
+            );
+            await fits(page);
+            await axe(page);
+            await viewportScreenshot(
+                page,
+                `management-error-${path.replaceAll("/", "-")}${path === "users" && routePath.includes("view=") ? "-direct-access" : ""}.png`,
+            );
+            fail = false;
+            await page
+                .getByRole("button", {
+                    name: t.common.actions.retry,
+                    exact: true,
+                })
+                .click();
+            await page
+                .getByText("Synthetic management load failure", { exact: true })
+                .filter({ visible: true })
+                .waitFor({ state: "hidden" });
+        }
+        await page.goto(`${origin}/users?view=access&user=999`);
+        await page.getByText(t.users.unavailable, { exact: true }).waitFor();
+        await fits(page);
+        await axe(page);
+        await viewportScreenshot(
+            page,
+            "management-375-ru-dark-user-unavailable.png",
+        );
+        await page.locator('[data-qa="task-back"]').click();
+        await page.waitForURL("**/users");
+        await page.locator('[data-qa="user-card"]').first().waitFor();
+        assert.deepEqual(errors, []);
+    } finally {
+        await context.close();
+    }
+});
+
+for (const width of [375, 1440]) {
+    test(`complete peer disclosures and note submission at ${width}px`, async () => {
+        const t = ruText;
+        const { context, page, errors } = await vault(width, "ru", "dark");
+        const button = (name) =>
+            page.getByRole("button", { name, exact: true });
+        const capture = async (state) => {
+            await fits(page);
+            await axe(page);
+            await captureMatrixState(
+                page,
+                `supplement-${width}-ru-dark-${state}`,
+            );
+        };
+        try {
+            await button(t.common.actions.add).click();
+            const sections = [
+                t.entry.labels.twoFactor,
+                t.common.fields.tags,
+                t.entry.labels.customFields,
+                t.entry.labels.notes,
+            ];
+            for (const name of sections) {
+                assert.equal(
+                    await button(name).getAttribute("aria-expanded"),
+                    "false",
+                );
+                await button(name).click();
+            }
+            await page
+                .getByLabel(t.common.fields.name, { exact: true })
+                .fill("Synthetic complete entry");
+            await page
+                .getByRole("textbox", {
+                    name: t.common.fields.password,
+                    exact: true,
+                })
+                .fill("Synthetic-complete!2026");
+            await page
+                .getByLabel(t.entry.labels.twoFactorSecret, { exact: true })
+                .fill(entries[0].totp_secret);
+            await page
+                .getByRole("textbox", {
+                    name: t.common.fields.tags,
+                    exact: true,
+                })
+                .fill("работа, личное");
+            await button(t.entry.actions.addField).click();
+            await page
+                .getByLabel(t.entry.labels.label, { exact: true })
+                .fill("Длинное название дополнительного поля");
+            await page
+                .getByLabel(t.entry.labels.value, { exact: true })
+                .fill("Synthetic-custom-value");
+            await page
+                .getByLabel(t.common.fields.description, { exact: true })
+                .fill(
+                    "Длинное примечание для проверки мобильной формы. ".repeat(
+                        6,
+                    ),
+                );
+            await capture("all-peers-expanded");
+            for (const name of sections) {
+                await page
+                    .getByRole("button", { name: new RegExp(`^${name}`) })
+                    .click();
+            }
+            await capture("all-peers-collapsed-filled");
+            const submissions = [];
+            await page.route("**/api/passwords/create", (route) => {
+                submissions.push(route.request().postDataJSON());
+                return route.fulfill({ json: {} });
+            });
+            await button(t.common.actions.create).click();
+            await taskSurface(page).waitFor({ state: "hidden" });
+            assert.equal(submissions[0].totp_secret, entries[0].totp_secret);
+            assert.deepEqual(submissions[0].tags, ["работа", "личное"]);
+            assert.equal(
+                submissions[0].custom_fields[0].value,
+                "Synthetic-custom-value",
+            );
+            await button(t.common.actions.add).click();
+            await page
+                .getByRole("radio", { name: t.entry.labels.note, exact: true })
+                .check();
+            await page
+                .getByLabel(t.common.fields.name, { exact: true })
+                .fill("Synthetic submitted note");
+            await page
+                .getByRole("textbox", {
+                    name: t.entry.labels.note,
+                    exact: true,
+                })
+                .fill("Synthetic note content\nSecond line");
+            await capture("note-filled");
+            await button(t.common.actions.create).click();
+            await taskSurface(page).waitFor({ state: "hidden" });
+            assert.equal(submissions[1].kind, "note");
+            assert.equal(
+                submissions[1].password_value,
+                "Synthetic note content\nSecond line",
+            );
+            assert.deepEqual(errors, []);
+        } finally {
+            await context.close();
+        }
+    });
+}
+
+test("phone uncommon states keep management-only access, encrypted import recovery and purge retry usable", async () => {
+    const t = ruText;
+    const { context, page, errors } = await vault(375, "ru", "dark", entries, {
+        role: "admin",
+    });
+    const button = (name) => page.getByRole("button", { name, exact: true });
+    const capture = async (state) => {
+        await fits(page);
+        await axe(page);
+        await captureMatrixState(page, `supplement-375-ru-dark-${state}`);
+    };
+    try {
+        await page.route("**/api/folders", (route) =>
+            route.fulfill({
+                json: [
+                    {
+                        id: 1,
+                        name: "Management only",
+                        owner_id: 2,
+                        owner_username: "owner",
+                        access: null,
+                        can_manage: true,
+                    },
+                ],
+            }),
+        );
+        await page.goto(`${origin}/passwords?tool=folders`);
+        await page
+            .getByText(t.folderAccess.managementOnly, { exact: true })
+            .waitFor();
+        assert.equal(await button(t.folderAccess.rename).count(), 0);
+        await page
+            .getByRole("combobox", { name: t.folderAccess.target, exact: true })
+            .waitFor();
+        await capture("folder-management-only");
+        await page.route("**/api/passwords", (route) =>
+            route.fulfill({
+                json: [{ ...entries[0], updated: new Date().toISOString() }],
+            }),
+        );
+        await page.goto(`${origin}/passwords?tool=health`);
+        await page.getByText(t.health.allClear, { exact: true }).waitFor();
+        await capture("health-all-clear");
+        await page.route("**/api/users", (route) =>
+            route.fulfill({ json: [] }),
+        );
+        await page.goto(`${origin}/users`);
+        await page.getByText(t.users.empty, { exact: true }).waitFor();
+        await capture("users-empty");
+        await page.goto(`${origin}/passwords?tool=import`);
+        await page.locator('input[type="file"]').setInputFiles({
+            name: "Synthetic.cmbackup",
+            mimeType: "application/octet-stream",
+            buffer: Buffer.from("synthetic UI fixture only"),
+        });
+        await page
+            .getByLabel(t.importDialog.backupPassword, { exact: true })
+            .fill("Synthetic-password-only");
+        let release;
+        const pending = new Promise((resolve) => {
+            release = resolve;
+        });
+        let fail = true;
+        await page.route("**/api/passwords/import", async (route) => {
+            await pending;
+            return route.fulfill(
+                fail
+                    ? {
+                          status: 422,
+                          json: {
+                              detail: "Synthetic encrypted import failure",
+                          },
+                      }
+                    : { json: { total: 1, imported: 1 } },
+            );
+        });
+        const request = page.waitForRequest("**/api/passwords/import");
+        await button(t.common.actions.import).click();
+        await request;
+        assert.equal(await button(t.common.actions.import).isDisabled(), true);
+        await capture("encrypted-import-busy");
+        release();
+        await page
+            .getByText("Synthetic encrypted import failure", { exact: true })
+            .waitFor();
+        await capture("encrypted-import-error");
+        fail = false;
+        await button(t.common.actions.import).click();
+        await taskSurface(page, {
+            name: t.importDialog.completeTitle,
+            exact: true,
+        }).waitFor();
+        await capture("encrypted-import-recovered");
+        let purged = false;
+        let purgeFail = true;
+        let purgeRequests = 0;
+        await page.route("**/api/passwords/trash", (route) =>
+            purged ? route.fulfill({ json: [] }) : route.fallback(),
+        );
+        await page.route(
+            /\/api\/passwords\/[^/]+\/purge\?entry_id=11$/,
+            (route) => {
+                purgeRequests++;
+                assert.equal(route.request().method(), "DELETE");
+                if (purgeFail)
+                    return route.fulfill({
+                        status: 503,
+                        json: { detail: "Synthetic purge failure" },
+                    });
+                purged = true;
+                return route.fulfill({ json: {} });
+            },
+        );
+        await page.goto(`${origin}/passwords?tool=trash`);
+        await page
+            .getByRole("button", {
+                name: new RegExp(`^${t.trashDialog.deleteForever}:`),
+            })
+            .click();
+        const confirmation = page.getByRole("dialog", {
+            name: t.trashDialog.deleteForeverTitle,
+            exact: true,
+        });
+        await confirmation
+            .getByRole("button", {
+                name: t.trashDialog.deleteForever,
+                exact: true,
+            })
+            .click();
+        await page
+            .getByText(t.trashDialog.purgeFailed, { exact: true })
+            .waitFor();
+        await capture("purge-retry");
+        purgeFail = false;
+        await confirmation
+            .getByRole("button", { name: t.common.actions.retry, exact: true })
+            .click();
+        await confirmation.waitFor({ state: "hidden" });
+        await page.getByText(t.trashDialog.empty, { exact: true }).waitFor();
+        assert.equal(purgeRequests, 2);
+        await capture("purge-recovered-empty");
+        assert.deepEqual(errors, []);
+    } finally {
+        await context.close();
+    }
+});
+
+test("console errors stay absent across final phone task routes", async () => {
+    const { context, page, errors } = await vault(375, "ru", "dark", entries, {
+        role: "admin",
+        updateAvailable: true,
+        users: [{ id: 1, username: "synthetic", role: "admin", active: true }],
+    });
+    const consoleErrors = [];
+    page.on("console", (message) => {
+        if (message.type() === "error") consoleErrors.push(message.text());
+    });
+    try {
+        for (const path of [
+            "/passwords",
+            "/passwords?entry=1&view=details",
+            "/passwords?entry=1&view=edit",
+            "/passwords?entry=1&view=share",
+            "/entries/new",
+            "/passwords?tool=folders",
+            "/passwords?tool=backup",
+            "/passwords?tool=import",
+            "/passwords?tool=health",
+            "/passwords?tool=trash",
+            "/settings",
+            "/account/password",
+            "/updates",
+            "/users",
+            "/users?view=create",
+            "/users?view=groups",
+            "/users?view=access&user=1",
+        ]) {
+            await page.goto(`${origin}${path}`);
+            await page.waitForLoadState("networkidle");
+            assert.deepEqual(consoleErrors, [], path);
+            assert.deepEqual(errors, [], path);
+        }
     } finally {
         await context.close();
     }
@@ -2414,8 +3313,7 @@ if (process.env.CIPHERMOTH_LAYOUT_MATRIX) {
             const button = (name) =>
                 page.getByRole("button", { name, exact: true });
             const dismiss = async () => {
-                await page.keyboard.press("Escape");
-                await page.getByRole("dialog").waitFor({ state: "hidden" });
+                await leaveSurface(page);
             };
             const utility = async (name) => {
                 if (width < 1080) await button(t.navigation.more).click();
@@ -2515,12 +3413,44 @@ if (process.env.CIPHERMOTH_LAYOUT_MATRIX) {
                                 geometry.header.bottom <= geometry.body.top + 1,
                             );
                             assert.ok(
-                                geometry.body.bottom <= geometry.footer.top + 1,
+                                geometry.body.height > 100,
+                                "navigation owns the available scroll area",
                             );
+                            // Every drawer (<1080), including tablet, uses one
+                            // scroll owner for destinations, utilities and account.
                             assert.ok(
-                                Math.abs(geometry.footer.bottom - height) <= 1,
+                                Math.abs(geometry.body.bottom - height) <= 1,
                                 JSON.stringify(geometry),
                             );
+                            assert.equal(
+                                await page
+                                    .locator('[data-qa="navigation-body"]')
+                                    .evaluate((body) =>
+                                        body.contains(
+                                            body.querySelector(
+                                                '[data-qa="navigation-footer"]',
+                                            ),
+                                        ),
+                                    ),
+                                true,
+                            );
+                            for (const name of [
+                                t.language.label,
+                                t.theme.label,
+                                t.auth.logOut,
+                            ]) {
+                                const action = page.getByRole("button", {
+                                    name: new RegExp(`^${name}`),
+                                });
+                                await action.scrollIntoViewIfNeeded();
+                                await visibleTouchAction(page, action);
+                            }
+                            // A scrolled footer must not strand the destinations.
+                            const firstDestination = page.locator(
+                                'a[data-navigation-id="/passwords"]',
+                            );
+                            await firstDestination.scrollIntoViewIfNeeded();
+                            await visibleTouchAction(page, firstDestination);
                             assert.ok(
                                 geometry.controls.every(
                                     (height) => height >= 44,
@@ -2569,10 +3499,16 @@ if (process.env.CIPHERMOTH_LAYOUT_MATRIX) {
                     };
                 });
                 for (const value of Object.values(wrappedValues)) {
-                    assert.ok(
-                        value.scrollWidth <= value.clientWidth + 1,
-                        JSON.stringify(wrappedValues),
-                    );
+                    if (width < 576)
+                        assert.ok(
+                            value.height <= value.lineHeight * 2 + 1,
+                            "phone summary is at most two lines; full value is in details",
+                        );
+                    else
+                        assert.ok(
+                            value.scrollWidth <= value.clientWidth + 1,
+                            JSON.stringify(wrappedValues),
+                        );
                 }
                 for (const [name, state] of [
                     ["GitHub", "details"],
@@ -2585,7 +3521,7 @@ if (process.env.CIPHERMOTH_LAYOUT_MATRIX) {
                         .filter({ hasText: name })
                         .click({ position: { x: 24, y: 24 } });
                     await capture(state);
-                    await page.keyboard.press("Escape");
+                    await leaveSurface(page);
                 }
                 await list
                     .getByRole("row")
@@ -2594,7 +3530,7 @@ if (process.env.CIPHERMOTH_LAYOUT_MATRIX) {
                 await button(t.sharing.manage).click();
                 await capture("share");
                 await dismiss();
-                await page.keyboard.press("Escape");
+                await leaveSurface(page);
                 await list
                     .getByRole("row")
                     .filter({ hasText: "GitHub" })
@@ -2603,7 +3539,7 @@ if (process.env.CIPHERMOTH_LAYOUT_MATRIX) {
                 await button(t.vault.moveToTrash.action).waitFor();
                 await capture("delete-confirm");
                 await dismiss();
-                await page.keyboard.press("Escape");
+                await leaveSurface(page);
                 for (const tool of [
                     "backup",
                     "health",
@@ -2612,7 +3548,7 @@ if (process.env.CIPHERMOTH_LAYOUT_MATRIX) {
                     "import",
                 ]) {
                     await page.goto(`${origin}/passwords?tool=${tool}`);
-                    await page.getByRole("dialog").waitFor();
+                    await taskSurface(page).waitFor();
                     await capture(tool);
                     if (tool === "trash") {
                         await page
@@ -2627,8 +3563,7 @@ if (process.env.CIPHERMOTH_LAYOUT_MATRIX) {
                 }
                 await utility(t.topMenu.settings);
                 await capture("settings");
-                await page
-                    .getByRole("dialog")
+                await taskSurface(page)
                     .getByRole("spinbutton")
                     .first()
                     .fill("0");
@@ -2681,7 +3616,7 @@ if (process.env.CIPHERMOTH_LAYOUT_MATRIX) {
                         .filter({ hasText: entryName })
                         .click();
                     await button(t.common.actions.edit).click();
-                    const editor = page.getByRole("dialog", {
+                    const editor = taskSurface(page, {
                         name:
                             state === "edit-login"
                                 ? t.entry.title.editPassword
@@ -2735,7 +3670,7 @@ if (process.env.CIPHERMOTH_LAYOUT_MATRIX) {
                     }
                     await button(t.common.actions.cancel).click();
                     await editor.waitFor({ state: "hidden" });
-                    await page.keyboard.press("Escape");
+                    await leaveSurface(page);
                 }
                 await page.goto(`${origin}/users`);
                 await page.getByText("team-member", { exact: true }).waitFor();
@@ -2754,8 +3689,7 @@ if (process.env.CIPHERMOTH_LAYOUT_MATRIX) {
                 assert.deepEqual(clippedAccounts, []);
                 await capture("users");
                 await button(t.groups.title).click();
-                await page
-                    .getByRole("dialog")
+                await taskSurface(page)
                     .getByText("team-member", { exact: true })
                     .waitFor();
                 await capture("groups");
@@ -2767,8 +3701,7 @@ if (process.env.CIPHERMOTH_LAYOUT_MATRIX) {
                         exact: true,
                     })
                     .click();
-                await page
-                    .getByRole("dialog")
+                await taskSurface(page)
                     .getByText("Work", { exact: true })
                     .waitFor();
                 await capture("user-acl");
@@ -2958,18 +3891,19 @@ if (process.env.CIPHERMOTH_LAYOUT_MATRIX) {
                         `${origin}/passwords${tool ? `?tool=${tool}` : ""}`,
                     );
                     if (tool) {
-                        await page.getByRole("dialog").waitFor();
+                        await taskSurface(page).waitFor();
                         // Wait for the overlay's real focus handoff. With reduced
                         // motion CSS can finish before the modal focus lifecycle.
                         await page.waitForFunction(() =>
-                            document.activeElement?.closest('[role="dialog"]'),
+                            document.activeElement?.closest(
+                                '[role="dialog"], [data-qa="task-page"]',
+                            ),
                         );
                     } else
                         await page.locator('[data-qa="entry-list"]').waitFor();
                 };
                 const dismiss = async () => {
-                    await page.keyboard.press("Escape");
-                    await page.getByRole("dialog").waitFor({ state: "hidden" });
+                    await leaveSurface(page);
                 };
                 const override = async (path, json, status = 200) =>
                     page.route(`**/api/${path}`, (route) =>
@@ -2997,7 +3931,7 @@ if (process.env.CIPHERMOTH_LAYOUT_MATRIX) {
                                   name: t.vault.browser.details,
                                   exact: true,
                               })
-                            : page.getByRole("dialog", {
+                            : taskSurface(page, {
                                   name: "GitHub",
                                   exact: true,
                               });
@@ -3055,18 +3989,15 @@ if (process.env.CIPHERMOTH_LAYOUT_MATRIX) {
                             exact: true,
                         })
                         .click();
-                    await page
-                        .getByRole("dialog", {
-                            name: t.sharing.manage,
-                            exact: true,
-                        })
-                        .waitFor();
+                    await taskSurface(page, {
+                        name: t.sharing.manage,
+                        exact: true,
+                    }).waitFor();
                     await capture("share-current");
-                    await page
-                        .getByRole("dialog", {
-                            name: t.sharing.manage,
-                            exact: true,
-                        })
+                    await taskSurface(page, {
+                        name: t.sharing.manage,
+                        exact: true,
+                    })
                         .getByLabel(t.folderAccess.expiresAt, { exact: true })
                         .fill("2000-01-01T10:00");
                     await capture("share-expiry-error");
@@ -3184,12 +4115,10 @@ if (process.env.CIPHERMOTH_LAYOUT_MATRIX) {
                     );
                     await capture("csv-busy");
                     releaseImport();
-                    await page
-                        .getByRole("dialog", {
-                            name: t.importDialog.completeTitle,
-                            exact: true,
-                        })
-                        .waitFor();
+                    await taskSurface(page, {
+                        name: t.importDialog.completeTitle,
+                        exact: true,
+                    }).waitFor();
                     await capture("csv-result");
                     await dismiss();
                     await go("import");
@@ -3212,21 +4141,17 @@ if (process.env.CIPHERMOTH_LAYOUT_MATRIX) {
                         settings_restored: true,
                     });
                     await button(t.common.actions.import).click();
-                    await page
-                        .getByRole("dialog", {
-                            name: t.importDialog.completeTitle,
-                            exact: true,
-                        })
-                        .waitFor();
+                    await taskSurface(page, {
+                        name: t.importDialog.completeTitle,
+                        exact: true,
+                    }).waitFor();
                     await capture("restore-result");
                     await dismiss();
                     await go("folders");
-                    await page
-                        .getByRole("dialog")
+                    await taskSurface(page)
                         .getByRole("heading", { name: "Work", exact: true })
                         .waitFor();
-                    await page
-                        .getByRole("dialog")
+                    await taskSurface(page)
                         .getByRole("combobox", {
                             name: t.common.fields.folder,
                             exact: true,
@@ -3273,6 +4198,7 @@ if (process.env.CIPHERMOTH_LAYOUT_MATRIX) {
                         .click();
                     await capture("user-delete-confirm");
                     await dismiss();
+                    if (width < 576) await button(t.common.actions.add).click();
                     const form = page.locator("form");
                     await form
                         .getByRole("combobox", {

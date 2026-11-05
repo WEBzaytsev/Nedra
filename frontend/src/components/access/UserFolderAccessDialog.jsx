@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { Flex, Text, Button, Col, Dialog, Row, Select } from "@gravity-ui/uikit";
+import { Alert, Flex, Text, Button, Col, Row, Select } from "@gravity-ui/uikit";
+import Dialog from "../TaskSurface";
 import { useStoreActions } from "easy-peasy";
 import { useTranslation } from "react-i18next";
 
@@ -146,15 +147,17 @@ const UserFolderAccessDialog = ({ open, user, onClose }) => {
   );
   const [items, setItems] = useState([]);
   const [busy, setBusy] = useState(false);
+  const [loadError, setLoadError] = useState("");
 
   const load = useCallback(async () => {
+    setLoadError("");
     if (!user) return;
     setItems(await userFolderAccess(user.id));
   }, [user, userFolderAccess]);
 
   useEffect(() => {
     if (!open) return;
-    load().catch((error) => enqueueSnackbar(error.message, { variant: "error" }));
+    load().catch((error) => setLoadError(error.message));
   }, [open, load, enqueueSnackbar]);
 
   const run = async (operation, message) => {
@@ -186,46 +189,60 @@ const UserFolderAccessDialog = ({ open, user, onClose }) => {
       <Dialog.Header caption={t("folderAccess.userTitle", { username: user?.username })} />
       <Dialog.Body>
         <Flex direction="column" gap="spacing-5" minWidth="0">
+          {loadError && (
+            <Alert
+              theme="danger"
+              message={loadError}
+              actions={
+                <Button
+                  size="xl"
+                  onClick={() => load().catch((error) => setLoadError(error.message))}
+                >
+                  {t("common.actions.retry")}
+                </Button>
+              }
+            />
+          )}
           <Text as="div" color="secondary" wordBreak="break-word">
             {t("folderAccess.userDescription")}
           </Text>
-          {items.length === 0 ? (
-            <Text as="div" color="secondary" wordBreak="break-word">
-              {t("folderAccess.empty")}
-            </Text>
-          ) : (
-            items.map((item) => (
-              <AccessRow
-                key={item.folder.id}
-                item={{ ...item, userId: user?.id }}
-                busy={busy}
-                onSave={(folderId, permission, expiresAt) =>
-                  run(
-                    () =>
-                      setFolderGrant({
-                        folderId,
-                        targetType: "user",
-                        targetId: user.id,
-                        permission,
-                        expiresAt,
-                      }),
-                    t("folderAccess.saved")
-                  )
-                }
-                onRevoke={(folderId) =>
-                  run(
-                    () =>
-                      revokeFolderGrant({
-                        folderId,
-                        targetType: "user",
-                        targetId: user.id,
-                      }),
-                    t("folderAccess.revoked")
-                  )
-                }
-              />
-            ))
-          )}
+          {items.length === 0
+            ? !loadError && (
+                <Text as="div" color="secondary" wordBreak="break-word">
+                  {t("folderAccess.empty")}
+                </Text>
+              )
+            : items.map((item) => (
+                <AccessRow
+                  key={item.folder.id}
+                  item={{ ...item, userId: user?.id }}
+                  busy={busy}
+                  onSave={(folderId, permission, expiresAt) =>
+                    run(
+                      () =>
+                        setFolderGrant({
+                          folderId,
+                          targetType: "user",
+                          targetId: user.id,
+                          permission,
+                          expiresAt,
+                        }),
+                      t("folderAccess.saved")
+                    )
+                  }
+                  onRevoke={(folderId) =>
+                    run(
+                      () =>
+                        revokeFolderGrant({
+                          folderId,
+                          targetType: "user",
+                          targetId: user.id,
+                        }),
+                      t("folderAccess.revoked")
+                    )
+                  }
+                />
+              ))}
         </Flex>
       </Dialog.Body>
       <Dialog.Footer

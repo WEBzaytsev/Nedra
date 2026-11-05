@@ -1,5 +1,6 @@
 import { ArrowRight } from "@gravity-ui/icons";
-import { Dialog, Flex, Icon, Link, Text } from "@gravity-ui/uikit";
+import { Flex, Icon, Link, Text } from "@gravity-ui/uikit";
+import Dialog from "./TaskSurface";
 import { useStoreState } from "easy-peasy";
 import { useTranslation } from "react-i18next";
 

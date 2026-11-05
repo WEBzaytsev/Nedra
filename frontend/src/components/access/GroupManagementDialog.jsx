@@ -1,20 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  Flex,
-  Text,
-  Button,
-  Col,
-  Dialog,
-  Divider,
-  Row,
-  Select,
-  TextInput,
-} from "@gravity-ui/uikit";
+import { Alert, Flex, Text, Button, Col, Divider, Row, Select, TextInput } from "@gravity-ui/uikit";
 import { useStoreActions, useStoreState } from "easy-peasy";
 import { useTranslation } from "react-i18next";
+import Dialog from "../TaskSurface";
 
 import { useSnackbar } from "../../hooks/useNotify";
 import ConfirmDialog from "../ConfirmDialog";
+import ManagementSection from "./ManagementSection";
 
 const GroupManagementDialog = ({ open, onClose }) => {
   const { t, i18n } = useTranslation();
@@ -38,10 +30,12 @@ const GroupManagementDialog = ({ open, onClose }) => {
   const [audit, setAudit] = useState([]);
   const [userId, setUserId] = useState("");
   const [busy, setBusy] = useState(false);
+  const [loadError, setLoadError] = useState("");
   const [deleteTarget, setDeleteTarget] = useState(null);
   const selected = groups.find((group) => group.id === Number(groupId)) ?? null;
 
   const loadGroups = useCallback(async () => {
+    setLoadError("");
     const next = await getGroups();
     setGroupId((current) =>
       next.some((group) => group.id === Number(current)) ? current : String(next[0]?.id ?? "")
@@ -64,13 +58,13 @@ const GroupManagementDialog = ({ open, onClose }) => {
 
   useEffect(() => {
     if (!open) return;
-    loadGroups().catch((error) => enqueueSnackbar(error.message, { variant: "error" }));
+    loadGroups().catch((error) => setLoadError(error.message));
   }, [open, loadGroups, enqueueSnackbar]);
 
   useEffect(() => {
     if (!open || !selected) return;
     setRenameName(selected.name);
-    loadDetails().catch((error) => enqueueSnackbar(error.message, { variant: "error" }));
+    loadDetails().catch((error) => setLoadError(error.message));
   }, [open, selected, loadDetails, enqueueSnackbar]);
 
   const run = async (operation, message, refreshGroups = false) => {
@@ -138,16 +132,26 @@ const GroupManagementDialog = ({ open, onClose }) => {
         <Dialog.Header caption={t("groups.title")} />
         <Dialog.Body>
           <Flex direction="column" gap="spacing-5" minWidth="0">
-            <Flex
-              direction="column"
-              gap="spacing-3"
-              minWidth="0"
-              as="section"
-              paddingBlock="spacing-3"
-            >
-              <Text as="div" role="heading" aria-level={3} variant="subheader-2">
-                {t("groups.create")}
-              </Text>
+            {loadError && (
+              <Alert
+                theme="danger"
+                message={loadError}
+                actions={
+                  <Button
+                    size="xl"
+                    onClick={() => {
+                      setLoadError("");
+                      Promise.all([loadGroups(), loadDetails()]).catch((error) =>
+                        setLoadError(error.message)
+                      );
+                    }}
+                  >
+                    {t("common.actions.retry")}
+                  </Button>
+                }
+              />
+            )}
+            <ManagementSection title={t("groups.create")}>
               <Flex
                 direction={{ xs: "column", s: "row" }}
                 gap="spacing-3"
@@ -171,12 +175,14 @@ const GroupManagementDialog = ({ open, onClose }) => {
                   {t("common.actions.create")}
                 </Button>
               </Flex>
-            </Flex>
+            </ManagementSection>
 
             {groups.length === 0 ? (
-              <Text as="div" color="secondary" wordBreak="break-word">
-                {t("groups.empty")}
-              </Text>
+              !loadError && (
+                <Text as="div" color="secondary" wordBreak="break-word">
+                  {t("groups.empty")}
+                </Text>
+              )
             ) : (
               <Row gap="spacing-6">
                 <Col size={{ xs: 12, m: 5 }} minWidth="0">

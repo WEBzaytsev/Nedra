@@ -20,6 +20,7 @@ body.nedra-theme {
   margin: 0;
   --g-font-family-sans: "Martian Grotesk", "Helvetica Neue", Arial, sans-serif;
   --g-font-family-monospace: "Martian Mono", Menlo, Consolas, monospace;
+  --g-color-text-hint: var(--g-color-text-secondary);
 }
 
 /* A type selector also beats the stock root's single-class specificity. */

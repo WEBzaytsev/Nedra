@@ -17,7 +17,6 @@ import {
   Text,
   Disclosure,
   Button,
-  Dialog,
   Icon,
   SegmentedRadioGroup,
   Select,
@@ -26,6 +25,7 @@ import {
   Tooltip,
 } from "@gravity-ui/uikit";
 import { useTranslation } from "react-i18next";
+import Dialog from "../TaskSurface";
 
 import { useSnackbar } from "../../hooks/useNotify";
 import { DEFAULT_PASSWORD_OPTIONS, generatePassword } from "../../lib/passwordGenerator";
@@ -495,7 +495,7 @@ const PasswordFormDialog = ({
               onUpdate={setValue("password_name")}
               disabled={Boolean(editTarget)}
               required
-              autoFocus
+              autoFocus={!page}
               controlRef={nameInputRef}
               controlProps={{ maxLength: 255, "aria-label": t("common.fields.name") }}
               placeholder={
@@ -786,22 +786,19 @@ const PasswordFormDialog = ({
 
   if (page) {
     return (
-      <Flex direction="column" gap="spacing-5" minWidth="0" as="section" aria-label={t(titleKey)}>
-        <Flex
-          alignItems="center"
-          justifyContent="space-between"
-          gap="spacing-3"
-          minWidth="0"
-          as="header"
-        >
-          <Text as="div" role="heading" aria-level={1} variant="header-1">
-            {t(titleKey)}
-          </Text>
-          {favoriteButton}
-        </Flex>
-        {body}
+      <Dialog
+        page
+        open
+        aria-label={t(titleKey)}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen && !submitting) onClose();
+        }}
+        disableEscapeKeyDown={submitting}
+      >
+        <Dialog.Header caption={t(titleKey)} insertAfter={favoriteButton} />
+        <Dialog.Body>{body}</Dialog.Body>
         {footer}
-      </Flex>
+      </Dialog>
     );
   }
 

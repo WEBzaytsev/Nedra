@@ -1,5 +1,6 @@
 import { useEffect, useId, useState } from "react";
-import { Flex, Text, Alert, Dialog, Progress } from "@gravity-ui/uikit";
+import { Flex, Text, Alert, Progress } from "@gravity-ui/uikit";
+import Dialog from "./TaskSurface";
 import { useTranslation } from "react-i18next";
 
 import apiClient from "../api/client";
