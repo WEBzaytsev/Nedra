@@ -732,7 +732,17 @@ test("existing vault generator stays singular; backup, restore and TOTP never ge
                     .count(),
                 0,
             );
-            await page.locator('[data-qa="task-back"]').click();
+            if (tool === "backup") {
+                await page
+                    .locator('[data-qa="mobile-task-actions"]')
+                    .getByRole("button", {
+                        name: t.common.actions.cancel,
+                        exact: true,
+                    })
+                    .click();
+            } else {
+                await page.locator('[data-qa="task-back"]').click();
+            }
             await dialog.waitFor({ state: "hidden" });
         }
         await page

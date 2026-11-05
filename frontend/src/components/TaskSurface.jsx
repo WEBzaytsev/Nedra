@@ -1,5 +1,7 @@
 import { createContext, useContext, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { ArrowLeft } from "@gravity-ui/icons";
+import { MobileTaskActionsContext } from "../hooks/MobileTaskActionsContext";
 import {
   Box,
   Button,
@@ -18,9 +20,18 @@ const PageContext = createContext(null);
 
 // Reuse task bodies and handlers. Only routed phone tasks use document flow;
 // short contextual menus and destructive confirmations still use UIKit Dialog.
-const TaskSurface = ({ open, children, onOpenChange, page: inline = false, ...props }) => {
+const TaskSurface = ({
+  open,
+  children,
+  onOpenChange,
+  page: inline = false,
+  dockActions = false,
+  ...props
+}) => {
   const { isMediaActive } = useLayoutContext();
   const location = useLocation();
+  const actionsTarget = useContext(MobileTaskActionsContext);
+  const footerTarget = dockActions && !isMediaActive("s") ? actionsTarget : null;
 
   const page = inline || !isMediaActive("s");
   const heading = useRef(null);
@@ -48,7 +59,7 @@ const TaskSurface = ({ open, children, onOpenChange, page: inline = false, ...pr
     );
   if (!open) return null;
   return (
-    <PageContext.Provider value={{ heading, dismiss, canDismiss }}>
+    <PageContext.Provider value={{ heading, dismiss, canDismiss, footerTarget }}>
       <Flex
         as="section"
         direction="column"
@@ -70,7 +81,7 @@ const Header = ({ caption, id, insertAfter }) => {
   if (!page) return <Dialog.Header caption={caption} id={id} insertAfter={insertAfter} />;
   return (
     <Flex as="header" direction="column" gap="spacing-3" minWidth="0">
-      {page.canDismiss && (
+      {page.canDismiss && !page.footerTarget && (
         <Flex>
           <Button size="xl" view="flat-secondary" onClick={page.dismiss} qa="task-back">
             <Icon data={ArrowLeft} />
@@ -127,13 +138,17 @@ const Footer = ({
         }}
       />
     );
-  return (
+  const footer = (
     <Flex
       as="footer"
       direction="column"
       gap="spacing-3"
       minWidth="0"
-      paddingBlockEnd="spacing-6"
+      paddingInline={page.footerTarget ? "spacing-3" : undefined}
+      paddingBlockStart={page.footerTarget ? "spacing-3" : undefined}
+      paddingBlockEnd={
+        page.footerTarget ? "max(var(--g-spacing-3), env(safe-area-inset-bottom))" : "spacing-6"
+      }
       qa="task-actions"
     >
       <Divider />
@@ -164,6 +179,7 @@ const Footer = ({
       )}
     </Flex>
   );
+  return page.footerTarget ? createPortal(footer, page.footerTarget) : footer;
 };
 
 TaskSurface.Header = Header;

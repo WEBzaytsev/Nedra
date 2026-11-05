@@ -12,6 +12,7 @@ import useAutoLogout from "./hooks/useAutoLogout";
 import routes from "./routes";
 import { getCurrentUser, isAuth, setCurrentUser } from "./utils";
 import { VaultViewContext } from "./hooks/VaultViewContext";
+import { MobileTaskActionsContext } from "./hooks/MobileTaskActionsContext";
 
 const AppContent = () => {
   useAutoLogout();
@@ -100,38 +101,60 @@ const AppContent = () => {
 const AppFrame = () => {
   const { isMediaActive } = useLayoutContext();
   const phone = !isMediaActive("s");
+  const [actionsTarget, setActionsTarget] = useState(null);
+  const [viewportHeight, setViewportHeight] = useState();
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!phone || !viewport) return undefined;
+    // The on-screen keyboard may resize only the visual viewport, not 100dvh.
+    // Leave pinch zoom to the browser rather than reflowing the magnified page.
+    const resize = () =>
+      setViewportHeight(
+        viewport.scale === 1 ? `${viewport.height + viewport.offsetTop}px` : undefined
+      );
+    resize();
+    viewport.addEventListener("resize", resize);
+    viewport.addEventListener("scroll", resize);
+    return () => {
+      viewport.removeEventListener("resize", resize);
+      viewport.removeEventListener("scroll", resize);
+    };
+  }, [phone]);
   return (
-    <Flex
-      direction="column"
-      height={phone ? "100dvh" : undefined}
-      overflow={phone ? "hidden" : undefined}
-    >
-      <Box
-        flexGrow={1}
-        minHeight="0"
-        overflow={phone ? "auto" : undefined}
-        qa={phone ? "page-scroll" : undefined}
+    <MobileTaskActionsContext.Provider value={actionsTarget}>
+      <Flex
+        direction="column"
+        height={phone ? (viewportHeight ?? "100dvh") : undefined}
+        overflow={phone ? "hidden" : undefined}
       >
-        <DesktopGate>
-          <AppContent />
-        </DesktopGate>
-      </Box>
-      {phone ? (
         <Box
-          flexShrink={0}
-          maxHeight="40dvh"
-          overflow="auto"
-          paddingInline="spacing-2"
-          aria-live="polite"
-          aria-relevant="additions text"
-          qa="notification-shelf"
+          flexGrow={1}
+          minHeight="0"
+          overflow={phone ? "auto" : undefined}
+          qa={phone ? "page-scroll" : undefined}
         >
-          <ToasterComponent hasPortal={false} mobile />
+          <DesktopGate>
+            <AppContent />
+          </DesktopGate>
         </Box>
-      ) : (
-        <ToasterComponent />
-      )}
-    </Flex>
+        {phone ? (
+          <Box
+            flexShrink={0}
+            maxHeight="40dvh"
+            overflow="auto"
+            paddingInline="spacing-2"
+            aria-live="polite"
+            aria-relevant="additions text"
+            qa="notification-shelf"
+          >
+            <ToasterComponent hasPortal={false} mobile />
+          </Box>
+        ) : (
+          <ToasterComponent />
+        )}
+        {phone && <Box ref={setActionsTarget} flexShrink={0} qa="mobile-task-actions" />}
+      </Flex>
+    </MobileTaskActionsContext.Provider>
   );
 };
 

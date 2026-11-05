@@ -38,6 +38,7 @@ const BackupDialog = ({ open, onClose, onBackup }) => {
 
   return (
     <Dialog
+      dockActions
       aria-labelledby={titleId}
 
       contentOverflow="auto"

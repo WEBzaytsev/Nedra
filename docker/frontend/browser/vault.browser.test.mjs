@@ -444,6 +444,13 @@ async function leaveSurface(page) {
     } else if (await page.locator('[data-qa="task-back"]').count()) {
         await page.locator('[data-qa="task-back"]').click();
         await page.waitForTimeout(100);
+    } else if (
+        await page.locator('[data-qa="mobile-task-actions"] button').count()
+    ) {
+        await page
+            .locator('[data-qa="mobile-task-actions"]')
+            .getByRole("button", { name: /^(Cancel|Отмена)$/, exact: true })
+            .click();
     } else {
         await page.keyboard.press("Escape");
     }
@@ -2576,6 +2583,189 @@ test("phone preferences save, retry and password change return through real rout
         await context.close();
     }
 });
+
+for (const [width, language, theme] of [
+    [375, "ru", "dark"],
+    [320, "en", "light"],
+    [1440, "ru", "dark"],
+]) {
+    test(`backup bottom actions stay reachable through validation, keyboard viewport and retry at ${width}px`, async () => {
+        const t = language === "ru" ? ruText : enText;
+        const { context, page, errors } = await vault(width, language, theme);
+        let release;
+        try {
+            await page.goto(`${origin}/passwords?tool=backup`);
+            const apply = page.getByRole("button", {
+                name: t.backup.title,
+                exact: true,
+            });
+            const cancel = page.getByRole("button", {
+                name: t.common.actions.cancel,
+                exact: true,
+            });
+            const field = page.getByLabel(t.auth.masterPassword, {
+                exact: true,
+            });
+            const reachable = async () => {
+                for (const control of [apply, cancel]) {
+                    await visibleTouchAction(page, control);
+                    assert.ok(
+                        await control.evaluate((node) => {
+                            const b = node.getBoundingClientRect();
+                            return node.contains(
+                                document.elementFromPoint(
+                                    b.x + b.width / 2,
+                                    b.y + b.height / 2,
+                                ),
+                            );
+                        }),
+                    );
+                }
+            };
+            const dock = page.locator('[data-qa="mobile-task-actions"]');
+            await apply.waitFor();
+            if (width < 600) {
+                await dock
+                    .getByRole("button", { name: t.backup.title, exact: true })
+                    .waitFor();
+                assert.equal(
+                    await page.locator('[data-qa="task-back"]').count(),
+                    0,
+                );
+                const bounds = await dock.boundingBox();
+                assert.ok(Math.abs(bounds.y + bounds.height - 812) < 2);
+                const scroll = await page
+                    .locator('[data-qa="page-scroll"]')
+                    .boundingBox();
+                assert.ok(scroll.y + scroll.height <= bounds.y);
+            } else {
+                assert.equal(await dock.count(), 0);
+                await page
+                    .getByRole("dialog", { name: t.backup.title, exact: true })
+                    .getByRole("button", { name: t.backup.title, exact: true })
+                    .waitFor();
+            }
+            await viewportScreenshot(
+                page,
+                `backup-bottom-${width}-${language}-${theme}.png`,
+            );
+            let requests = 0;
+            let fail = true;
+            const pending = new Promise((resolve) => {
+                release = resolve;
+            });
+            await page.route("**/api/passwords/backup", async (route) => {
+                requests++;
+                assert.equal(route.request().method(), "POST");
+                assert.deepEqual(route.request().postDataJSON(), {
+                    master_password: "Synthetic-only",
+                });
+                await pending;
+                await route.fulfill(
+                    fail
+                        ? {
+                              status: 422,
+                              json: { detail: t.errors.backupFailed },
+                          }
+                        : {
+                              contentType: "application/octet-stream",
+                              body: "synthetic-backup-test-only",
+                          },
+                );
+            });
+            await apply.click();
+            await page
+                .getByText(t.backup.passwordRequired, { exact: true })
+                .waitFor();
+            assert.equal(requests, 0);
+            await field.fill("Synthetic-only");
+            if (width < 600) {
+                // Model a keyboard changing only VisualViewport, not LayoutViewport.
+                // This is not a claim of an actual Android/iOS keyboard test.
+                await page.evaluate(() => {
+                    Object.defineProperty(window.visualViewport, "height", {
+                        configurable: true,
+                        value: 400,
+                    });
+                    window.visualViewport.dispatchEvent(new Event("resize"));
+                });
+                await page.waitForFunction(() => {
+                    const b = document
+                        .querySelector('[data-qa="mobile-task-actions"]')
+                        .getBoundingClientRect();
+                    return Math.abs(b.bottom - 400) < 2;
+                });
+                await field.scrollIntoViewIfNeeded();
+                await field.focus();
+                await reachable();
+                const fieldBounds = await field.boundingBox();
+                const dockBounds = await dock.boundingBox();
+                assert.ok(
+                    fieldBounds.y >= 0 &&
+                        fieldBounds.y + fieldBounds.height <= dockBounds.y,
+                );
+                await viewportScreenshot(
+                    page,
+                    `backup-bottom-${width}-visual-viewport.png`,
+                );
+                await page.evaluate(() => {
+                    delete window.visualViewport.height;
+                    window.visualViewport.dispatchEvent(new Event("resize"));
+                });
+            }
+            const request = page.waitForRequest("**/api/passwords/backup");
+            await apply.click();
+            await request;
+            assert.equal(await apply.isDisabled(), true);
+            assert.equal(await cancel.isDisabled(), true);
+            release();
+            await page
+                .getByText(t.errors.backupFailed, { exact: true })
+                .waitFor();
+            assert.equal(await field.inputValue(), "Synthetic-only");
+            await reachable();
+            await fits(page);
+            await axe(page);
+            fail = false;
+            const download = page.waitForEvent("download");
+            await apply.click();
+            assert.match((await download).suggestedFilename(), /\.cmbackup$/);
+            await page.waitForURL("**/passwords");
+            assert.equal(requests, 2);
+            if (width < 600) {
+                await dock
+                    .locator("button")
+                    .first()
+                    .waitFor({ state: "detached" });
+                assert.equal(await dock.locator("button").count(), 0);
+            }
+            // Re-enter while the success notification is still visible, then cancel.
+            await page.evaluate(() => {
+                history.pushState({}, "", "/passwords?tool=backup");
+                dispatchEvent(new PopStateEvent("popstate"));
+            });
+            await apply.waitFor();
+            await reachable();
+            await viewportScreenshot(
+                page,
+                `backup-bottom-${width}-notification.png`,
+            );
+            await cancel.click();
+            await page.waitForURL("**/passwords");
+            if (width < 600) {
+                await dock
+                    .locator("button")
+                    .first()
+                    .waitFor({ state: "detached" });
+                assert.equal(await dock.locator("button").count(), 0);
+            }
+            assert.deepEqual(errors, []);
+        } finally {
+            release?.();
+            await context.close();
+        }
+    });
+}
 
 for (const [width, height, theme] of [
     [375, 812, "dark"],
