@@ -61,7 +61,7 @@ const BackupDialog = ({ open, onClose, onBackup }) => {
           <PasswordField
             autoComplete="current-password"
             autoFocus
-            helperText={error}
+            errorMessage={error || undefined}
             label={t("auth.masterPassword")}
             onChange={(event) => {
               setPassword(event.target.value);

@@ -23,9 +23,7 @@ export default [
       "react-refresh": reactRefresh,
     },
     rules: {
-      // Classic, stable hooks rules. I intentionally don't enable the newer
-      // React Compiler ruleset (set-state-in-effect, etc.) -> this app isn't
-      // compiled and those rules flag idiomatic MUI dialog/render patterns.
+      // Keep the classic hooks rules: this app does not use React Compiler.
       "react-hooks/rules-of-hooks": "error",
       "react-hooks/exhaustive-deps": "warn",
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],

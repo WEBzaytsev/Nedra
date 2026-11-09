@@ -4,7 +4,7 @@ import { Button, Flex, Icon, Text, Tooltip, useFileInput } from "@gravity-ui/uik
 import { useStoreActions } from "easy-peasy";
 import { useTranslation } from "react-i18next";
 
-import { useSnackbar } from "../../hooks/useNotify";
+import { useNotify } from "../../hooks/useNotify";
 import ConfirmDialog from "../ConfirmDialog";
 
 const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
@@ -18,7 +18,7 @@ const formatBytes = (bytes, language) => {
 
 const AttachmentsSection = ({ passwordName, onChanged, readOnly = false }) => {
   const { t, i18n } = useTranslation();
-  const { enqueueSnackbar } = useSnackbar();
+  const { notify } = useNotify();
   const fetchAttachments = useStoreActions((a) => a.ciphermothModels.passwords.fetchAttachments);
   const uploadAttachment = useStoreActions((a) => a.ciphermothModels.passwords.uploadAttachment);
   const downloadAttachment = useStoreActions(
@@ -35,9 +35,9 @@ const AttachmentsSection = ({ passwordName, onChanged, readOnly = false }) => {
       const result = await fetchAttachments(passwordName);
       setAttachments(Array.isArray(result) ? result : []);
     } catch (error) {
-      enqueueSnackbar(error.message, { variant: "error" });
+      notify(error.message, { theme: "danger" });
     }
-  }, [fetchAttachments, passwordName, enqueueSnackbar]);
+  }, [fetchAttachments, passwordName, notify]);
 
   useEffect(() => {
     refresh();
@@ -48,20 +48,20 @@ const AttachmentsSection = ({ passwordName, onChanged, readOnly = false }) => {
     try {
       for (const file of files) {
         if (file.size > MAX_ATTACHMENT_BYTES) {
-          enqueueSnackbar(t("attachments.tooLarge", { filename: file.name }), {
-            variant: "warning",
+          notify(t("attachments.tooLarge", { filename: file.name }), {
+            theme: "warning",
           });
           continue;
         }
         await uploadAttachment({ passwordName, file });
-        enqueueSnackbar(t("attachments.attached", { filename: file.name }), {
-          variant: "success",
+        notify(t("attachments.attached", { filename: file.name }), {
+          theme: "success",
         });
         onChanged?.();
       }
       await refresh();
     } catch (error) {
-      enqueueSnackbar(error.message, { variant: "error" });
+      notify(error.message, { theme: "danger" });
     } finally {
       setBusy(false);
     }
@@ -81,7 +81,7 @@ const AttachmentsSection = ({ passwordName, onChanged, readOnly = false }) => {
         filename: attachment.filename,
       });
     } catch (error) {
-      enqueueSnackbar(error.message, { variant: "error" });
+      notify(error.message, { theme: "danger" });
     }
   };
 
@@ -90,13 +90,13 @@ const AttachmentsSection = ({ passwordName, onChanged, readOnly = false }) => {
     try {
       await deleteAttachment({ passwordName, attachmentId: attachment.id });
       setPendingDelete(null);
-      enqueueSnackbar(t("attachments.removed", { filename: attachment.filename }), {
-        variant: "success",
+      notify(t("attachments.removed", { filename: attachment.filename }), {
+        theme: "success",
       });
       onChanged?.();
       await refresh();
     } catch (error) {
-      enqueueSnackbar(error.message, { variant: "error" });
+      notify(error.message, { theme: "danger" });
     }
   };
 

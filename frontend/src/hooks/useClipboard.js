@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
-import { useSnackbar } from "./useNotify";
+import { useNotify } from "./useNotify";
 import { useStoreState } from "easy-peasy";
 import { useTranslation } from "react-i18next";
 
@@ -16,7 +16,7 @@ const formatDuration = (ms, t) => {
 
 const useClipboard = () => {
   const { t } = useTranslation();
-  const { enqueueSnackbar } = useSnackbar();
+  const { notify } = useNotify();
   const clearMs = useStoreState((s) => s.ciphermothModels.settings.settings.clipboard_clear_ms);
   const clearAtRef = useRef(null);
 
@@ -35,8 +35,8 @@ const useClipboard = () => {
   return useCallback(
     (value) => {
       (IS_DESKTOP ? copySecret(value, clearMs) : navigator.clipboard.writeText(value)).then(() => {
-        enqueueSnackbar(t("clipboard.copied", { duration: formatDuration(clearMs, t) }), {
-          variant: "success",
+        notify(t("clipboard.copied", { duration: formatDuration(clearMs, t) }), {
+          theme: "success",
         });
         if (IS_DESKTOP) return;
         const clearAt = Date.now() + clearMs;
@@ -49,7 +49,7 @@ const useClipboard = () => {
         }, clearMs);
       });
     },
-    [enqueueSnackbar, clearMs, t]
+    [notify, clearMs, t]
   );
 };
 

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Flex, Alert, Button, Loader, Text, useLayoutContext } from "@gravity-ui/uikit";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
-import { useSnackbar } from "../hooks/useNotify";
+import { useNotify } from "../hooks/useNotify";
 import { useStoreActions, useStoreState } from "easy-peasy";
 
 import apiClient from "../api/client";
@@ -15,7 +15,7 @@ const EntryCreatePage = () => {
   const { t } = useTranslation();
   const { isMediaActive } = useLayoutContext();
   const mobile = !isMediaActive("s");
-  const { enqueueSnackbar } = useSnackbar();
+  const { notify } = useNotify();
   const navigate = useNavigate();
   const location = useLocation();
   const create = useStoreActions((actions) => actions.ciphermothModels.passwords.create);
@@ -37,7 +37,7 @@ const EntryCreatePage = () => {
       try {
         availableFolders = await getFolders();
       } catch (err) {
-        enqueueSnackbar(err.message, { variant: "error" });
+        notify(err.message, { theme: "danger" });
       }
 
       const initialFolder = availableFolders.find(
@@ -65,7 +65,7 @@ const EntryCreatePage = () => {
     return () => {
       active = false;
     };
-  }, [draftAttempt, enqueueSnackbar, getFolders, location.state?.folderId]);
+  }, [draftAttempt, notify, getFolders, location.state?.folderId]);
 
   const folderOptions = useMemo(
     () => folders.filter((folder) => ["owner", "write"].includes(folder.access)),
@@ -98,9 +98,9 @@ const EntryCreatePage = () => {
   const submit = async (payload) => {
     await create(payload);
     draftStore?.clear();
-    enqueueSnackbar(
+    notify(
       t(payload.kind === "note" ? "vault.messages.noteCreated" : "vault.messages.passwordCreated"),
-      { variant: "success" }
+      { theme: "success" }
     );
     close();
   };
@@ -165,7 +165,7 @@ const EntryCreatePage = () => {
                         draftStore.clear();
                         setDraftAttempt((n) => n + 1);
                       } catch {
-                        enqueueSnackbar(t("entry.draft.unavailable"), { variant: "error" });
+                        notify(t("entry.draft.unavailable"), { theme: "danger" });
                       }
                     }}
                   >
@@ -216,7 +216,7 @@ const EntryCreatePage = () => {
                         draftStore.clear();
                         setDraftAttempt((n) => n + 1);
                       } catch {
-                        enqueueSnackbar(t("entry.draft.unavailable"), { variant: "error" });
+                        notify(t("entry.draft.unavailable"), { theme: "danger" });
                       }
                     }}
                   >

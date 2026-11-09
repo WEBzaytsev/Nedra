@@ -171,9 +171,9 @@ const LoginPage = () => {
           </Flex>
           <PasswordField
             label={t("auth.masterPassword")}
-            inputRef={passwordRef}
-            error={Boolean(error && invalidField === "password")}
-            helperText={invalidField === "password" ? error : undefined}
+            controlRef={passwordRef}
+            validationState={error && invalidField === "password" ? "invalid" : undefined}
+            errorMessage={invalidField === "password" ? error : undefined}
             required
             value={value}
             onGenerate={initialized ? undefined : setValue}
@@ -196,9 +196,9 @@ const LoginPage = () => {
             <>
               <PasswordField
                 label={t("auth.confirmMasterPassword")}
-                inputRef={confirmRef}
-                error={Boolean(error && invalidField === "confirm")}
-                helperText={invalidField === "confirm" ? error : undefined}
+                controlRef={confirmRef}
+                validationState={error && invalidField === "confirm" ? "invalid" : undefined}
+                errorMessage={invalidField === "confirm" ? error : undefined}
                 required
                 value={confirm}
                 disabled={loading}

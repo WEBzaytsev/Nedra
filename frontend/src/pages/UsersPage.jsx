@@ -28,7 +28,7 @@ import UserFolderAccessDialog from "../components/access/UserFolderAccessDialog"
 import ConfirmDialog from "../components/ConfirmDialog";
 import PasswordField from "../components/PasswordField";
 import useClipboard from "../hooks/useClipboard";
-import { useSnackbar } from "../hooks/useNotify";
+import { useNotify } from "../hooks/useNotify";
 import { getCurrentUser } from "../utils";
 import TaskSurface from "../components/TaskSurface";
 import useTaskRoute from "../hooks/useTaskRoute";
@@ -41,7 +41,7 @@ const UsersPage = () => {
   const mobile = !isMediaActive("s");
   const { params, openTask, closeTask } = useTaskRoute();
   const view = params.get("view");
-  const { enqueueSnackbar } = useSnackbar();
+  const { notify } = useNotify();
   const copy = useClipboard();
   const users = useStoreState((state) => state.ciphermothModels.users.users);
   const { get, create, update, revokeSessions, resetPassword, rotateServiceToken, remove } =
@@ -101,10 +101,10 @@ const UsersPage = () => {
     setBusy(true);
     try {
       const result = await operation();
-      if (message) enqueueSnackbar(message, { variant: "success" });
+      if (message) notify(message, { theme: "success" });
       return result ?? true;
     } catch (error) {
-      enqueueSnackbar(error.message, { variant: "error" });
+      notify(error.message, { theme: "danger" });
       return false;
     } finally {
       setBusy(false);
@@ -449,10 +449,10 @@ const UsersPage = () => {
                     <PasswordField
                       label={t("users.temporaryPassword")}
                       size="xl"
-                      inputRef={temporaryPasswordRef}
-                      error={temporaryPasswordError}
-                      helperText={
-                        temporaryPasswordError ? t("users.temporaryPasswordRequired") : ""
+                      controlRef={temporaryPasswordRef}
+                      validationState={temporaryPasswordError ? "invalid" : undefined}
+                      errorMessage={
+                        temporaryPasswordError ? t("users.temporaryPasswordRequired") : undefined
                       }
                       value={form.temporary_password}
                       onGenerate={(temporary_password) => {

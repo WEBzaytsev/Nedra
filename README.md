@@ -168,7 +168,7 @@ To report a vulnerability, see [SECURITY.md](./SECURITY.md).
 |---|---|
 | Backend | Python 3.13, FastAPI, SQLAlchemy 2.0, aiosqlite |
 | Database | SQLite 3.53 (one file, WAL, full sync) |
-| Frontend | React 19, Vite, MUI v9, easy-peasy |
+| Frontend | React 19, Vite, Gravity UI 8, easy-peasy |
 | Package manager | uv (backend), npm (frontend) |
 | Desktop | Tauri 2, Rust, PyInstaller onedir |
 | Infrastructure | Docker, Docker Compose v2, GitHub Actions |

@@ -30,7 +30,7 @@ import ShareDialog from "../components/vault/ShareDialog";
 import TrashDialog from "../components/vault/TrashDialog";
 import EntryBrowser from "../components/vault/EntryBrowser";
 import useClipboard from "../hooks/useClipboard";
-import { useSnackbar } from "../hooks/useNotify";
+import { useNotify } from "../hooks/useNotify";
 import { getPageScrollTarget, getPageScrollTop } from "../lib/pageScroll";
 import apiClient from "../api/client";
 import { createEntryDraftStore } from "../lib/entryDraft";
@@ -55,7 +55,7 @@ const PasswordsPage = () => {
   const { isMediaActive } = useLayoutContext();
   const mobile = !isMediaActive("s");
   const desktopShell = isMediaActive("l");
-  const { enqueueSnackbar } = useSnackbar();
+  const { notify } = useNotify();
   const copy = useClipboard();
 
   const {
@@ -201,10 +201,8 @@ const PasswordsPage = () => {
     get();
     getTrash();
     getDamaged();
-    getFolders().catch((requestError) =>
-      enqueueSnackbar(requestError.message, { variant: "error" })
-    );
-  }, [get, getTrash, getDamaged, getFolders, enqueueSnackbar]);
+    getFolders().catch((requestError) => notify(requestError.message, { theme: "danger" }));
+  }, [get, getTrash, getDamaged, getFolders, notify]);
 
   const damagedCount = damaged.entries.length + damaged.attachments.length;
 
@@ -236,7 +234,7 @@ const PasswordsPage = () => {
       return;
     }
     if (!draftReady) {
-      enqueueSnackbar(t("entry.draft.unavailable"), { variant: "error" });
+      notify(t("entry.draft.unavailable"), { theme: "danger" });
       return;
     }
     setEditTarget(null);
@@ -267,10 +265,10 @@ const PasswordsPage = () => {
       try {
         await toggleFavorite({ passwordName: row.password_name, favorite: !row.favorite });
       } catch (requestError) {
-        enqueueSnackbar(requestError.message, { variant: "error" });
+        notify(requestError.message, { theme: "danger" });
       }
     },
-    [toggleFavorite, enqueueSnackbar]
+    [toggleFavorite, notify]
   );
 
   const handleSubmit = async (entry) => {
@@ -284,39 +282,37 @@ const PasswordsPage = () => {
         },
         new_password: entry,
       });
-      enqueueSnackbar(
+      notify(
         t(entry.kind === "note" ? "vault.messages.noteUpdated" : "vault.messages.passwordUpdated"),
-        { variant: "success" }
+        { theme: "success" }
       );
     } else {
       await create(entry);
-      enqueueSnackbar(
+      notify(
         t(entry.kind === "note" ? "vault.messages.noteCreated" : "vault.messages.passwordCreated"),
-        { variant: "success" }
+        { theme: "success" }
       );
     }
     closeEntryForm();
-    await getFolders().catch((requestError) =>
-      enqueueSnackbar(requestError.message, { variant: "error" })
-    );
+    await getFolders().catch((requestError) => notify(requestError.message, { theme: "danger" }));
   };
 
   const handleDelete = async () => {
     try {
       await remove(deleteTarget);
       setDeleteTarget(null);
-      enqueueSnackbar(t("vault.messages.movedToTrash"), { variant: "success" });
+      notify(t("vault.messages.movedToTrash"), { theme: "success" });
     } catch (requestError) {
-      enqueueSnackbar(requestError.message, { variant: "error" });
+      notify(requestError.message, { theme: "danger" });
     }
   };
 
   const handleRestore = async (name) => {
     try {
       await restore(name);
-      enqueueSnackbar(t("vault.messages.restored"), { variant: "success" });
+      notify(t("vault.messages.restored"), { theme: "success" });
     } catch (requestError) {
-      enqueueSnackbar(requestError.message, { variant: "error" });
+      notify(requestError.message, { theme: "danger" });
       throw requestError;
     }
   };
@@ -325,21 +321,21 @@ const PasswordsPage = () => {
     try {
       await removeDamaged(damaged);
       setRemoveDamagedOpen(false);
-      enqueueSnackbar(t("vault.damage.removed"), { variant: "success" });
+      notify(t("vault.damage.removed"), { theme: "success" });
     } catch (requestError) {
-      enqueueSnackbar(requestError.message, { variant: "error" });
+      notify(requestError.message, { theme: "danger" });
     }
   };
 
   const handlePurge = async (name) => {
     // TrashDialog keeps a failed purge inline, alongside Retry and Cancel.
     await purge(name);
-    enqueueSnackbar(t("vault.messages.permanentlyDeleted"), { variant: "success" });
+    notify(t("vault.messages.permanentlyDeleted"), { theme: "success" });
   };
 
   const handleBackup = async (masterPassword) => {
     await backup(masterPassword);
-    enqueueSnackbar(t("vault.messages.backupRequested"), { variant: "info" });
+    notify(t("vault.messages.backupRequested"), { theme: "info" });
   };
 
   const filteredPasswords = useMemo(() => {

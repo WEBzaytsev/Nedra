@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useStoreState } from "easy-peasy";
-import { useSnackbar } from "./useNotify";
+import { useNotify } from "./useNotify";
 import { useTranslation } from "react-i18next";
 
 import { endSession, readSession, touchSession } from "../api/session";
@@ -29,7 +29,7 @@ const CLOCK_CHECK_MS = 5_000;
 const SYNC_EVERY_CHECKS = 3;
 
 const useAutoLogout = () => {
-  const { enqueueSnackbar, closeSnackbar } = useSnackbar();
+  const { notify, dismiss } = useNotify();
 
   const settings = useStoreState((s) => s.ciphermothModels.settings.settings);
   const warnBeforeMs = settings.warn_before_ms;
@@ -49,9 +49,9 @@ const useAutoLogout = () => {
   const synchronizedRef = useRef(false);
 
   const clearWarning = useCallback(() => {
-    if (warnKeyRef.current) closeSnackbar(warnKeyRef.current);
+    if (warnKeyRef.current) dismiss(warnKeyRef.current);
     warnKeyRef.current = null;
-  }, [closeSnackbar]);
+  }, [dismiss]);
 
   const logout = useCallback(() => {
     clearTimeout(inactivityTimerRef.current);
@@ -74,15 +74,15 @@ const useAutoLogout = () => {
       () => {
         if (warnKeyRef.current) return;
         const seconds = Math.round((deadlineRef.current - Date.now()) / 1000);
-        warnKeyRef.current = enqueueSnackbar(<CountdownMessage seconds={seconds} />, {
-          variant: "warning",
-          persist: true,
+        warnKeyRef.current = notify(<CountdownMessage seconds={seconds} />, {
+          theme: "warning",
+          autoHiding: false,
         });
       },
       Math.max(0, remaining - lead)
     );
     inactivityTimerRef.current = setTimeout(logout, remaining);
-  }, [warnBeforeMs, enqueueSnackbar, logout]);
+  }, [warnBeforeMs, notify, logout]);
 
   const adopt = useCallback(
     (status, deadline) => {

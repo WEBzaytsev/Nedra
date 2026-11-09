@@ -27,7 +27,7 @@ import {
 import { useTranslation } from "react-i18next";
 import Dialog from "../TaskSurface";
 
-import { useSnackbar } from "../../hooks/useNotify";
+import { useNotify } from "../../hooks/useNotify";
 import { DEFAULT_PASSWORD_OPTIONS, generatePassword } from "../../lib/passwordGenerator";
 import { isAuth } from "../../utils";
 import PasswordField from "../PasswordField";
@@ -224,7 +224,7 @@ const PasswordFormDialog = ({
   page = false,
 }) => {
   const { t } = useTranslation();
-  const { enqueueSnackbar, closeSnackbar } = useSnackbar();
+  const { notify, dismiss } = useNotify();
   const initialTarget = editTarget ?? initialDraft;
   const initialForm = toForm(initialTarget, entryType);
   const [form, setFormState] = useState(initialForm);
@@ -250,21 +250,20 @@ const PasswordFormDialog = ({
     setFormState(next);
   };
 
-  useEffect(() => () => closeSnackbar("entry-form-error"), [closeSnackbar]);
+  useEffect(() => () => dismiss("entry-form-error"), [dismiss]);
 
   useEffect(() => {
     if (draftError) {
-      enqueueSnackbar(t("entry.draft.failed"), {
-        key: "entry-draft-error",
-        variant: "error",
-        persist: true,
-        preventDuplicate: true,
+      notify(t("entry.draft.failed"), {
+        name: "entry-draft-error",
+        theme: "danger",
+        autoHiding: false,
       });
     } else {
-      closeSnackbar("entry-draft-error");
+      dismiss("entry-draft-error");
     }
-    return () => closeSnackbar("entry-draft-error");
-  }, [draftError, enqueueSnackbar, closeSnackbar, t]);
+    return () => dismiss("entry-draft-error");
+  }, [draftError, notify, dismiss, t]);
 
   useEffect(() => {
     if (editTarget || !dirty) return undefined;
@@ -297,16 +296,15 @@ const PasswordFormDialog = ({
     setSections((previous) => ({ ...previous, [key]: !previous[key] }));
   const setValue = (field) => (value) => {
     setForm((previous) => ({ ...previous, [field]: value }));
-    closeSnackbar("entry-form-error");
+    dismiss("entry-form-error");
   };
   const setField = (field) => (event) => setValue(field)(event.target.value);
 
   const showError = (message, inputRef) => {
-    enqueueSnackbar(message, {
-      key: "entry-form-error",
-      variant: "error",
-      persist: true,
-      preventDuplicate: true,
+    notify(message, {
+      name: "entry-form-error",
+      theme: "danger",
+      autoHiding: false,
     });
     inputRef?.current?.focus();
   };
@@ -567,7 +565,7 @@ const PasswordFormDialog = ({
                   setGeneratorUndo(null);
                   if (showGenerator) setShowGenerator(false);
                 }}
-                inputRef={valueInputRef}
+                controlRef={valueInputRef}
                 required
                 autoComplete="new-password"
                 show={showValue}
@@ -629,7 +627,7 @@ const PasswordFormDialog = ({
                   folder: match?.name ?? (value.startsWith("legacy:") ? previous.folder : ""),
                   folder_id: match?.id ?? null,
                 }));
-                closeSnackbar("entry-form-error");
+                dismiss("entry-form-error");
               }}
             />
           </Flex>
@@ -650,7 +648,7 @@ const PasswordFormDialog = ({
                 autoComplete="off"
                 show={showTotp}
                 onToggleShow={() => setShowTotp((value) => !value)}
-                helperText={t("entry.help.twoFactor")}
+                note={t("entry.help.twoFactor")}
                 adornment={
                   <Tooltip content={t("entry.help.twoFactorTooltip")}>
                     <Icon data={CircleQuestion} />

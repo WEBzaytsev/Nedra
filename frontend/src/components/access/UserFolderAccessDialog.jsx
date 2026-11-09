@@ -4,7 +4,7 @@ import Dialog from "../TaskSurface";
 import { useStoreActions } from "easy-peasy";
 import { useTranslation } from "react-i18next";
 
-import { useSnackbar } from "../../hooks/useNotify";
+import { useNotify } from "../../hooks/useNotify";
 import { isInvalidExpiry, toLocalExpiry, toPersistedExpiry } from "../../lib/accessExpiry";
 import ExpiryField from "./ExpiryField";
 
@@ -141,7 +141,7 @@ const AccessRow = ({ item, busy, onSave, onRevoke }) => {
 
 const UserFolderAccessDialog = ({ open, user, onClose }) => {
   const { t } = useTranslation();
-  const { enqueueSnackbar } = useSnackbar();
+  const { notify } = useNotify();
   const { userFolderAccess, setFolderGrant, revokeFolderGrant } = useStoreActions(
     (actions) => actions.ciphermothModels.access
   );
@@ -158,16 +158,16 @@ const UserFolderAccessDialog = ({ open, user, onClose }) => {
   useEffect(() => {
     if (!open) return;
     load().catch((error) => setLoadError(error.message));
-  }, [open, load, enqueueSnackbar]);
+  }, [open, load, notify]);
 
   const run = async (operation, message) => {
     setBusy(true);
     try {
       await operation();
       await load();
-      enqueueSnackbar(message, { variant: "success" });
+      notify(message, { theme: "success" });
     } catch (error) {
-      enqueueSnackbar(error.message, { variant: "error" });
+      notify(error.message, { theme: "danger" });
     } finally {
       setBusy(false);
     }

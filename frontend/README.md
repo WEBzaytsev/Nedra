@@ -1,6 +1,6 @@
 # CipherMoth frontend
 
-React 19 + [Vite](https://vite.dev/) + MUI v9. State via easy-peasy, toasts via notistack.
+React 19 + [Vite](https://vite.dev/) + [Gravity UI](https://gravity-ui.com/). State via easy-peasy; notifications use the Gravity UI toaster.
 
 ## Scripts
 

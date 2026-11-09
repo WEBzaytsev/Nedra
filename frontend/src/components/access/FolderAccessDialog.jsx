@@ -14,7 +14,7 @@ import { useStoreActions, useStoreState } from "easy-peasy";
 import { useTranslation } from "react-i18next";
 import Dialog from "../TaskSurface";
 
-import { useSnackbar } from "../../hooks/useNotify";
+import { useNotify } from "../../hooks/useNotify";
 import {
   isInvalidExpiry,
   toLocalExpiry,
@@ -115,7 +115,7 @@ const GrantRow = ({ grant, busy, onSave, onRevoke }) => {
 
 const FolderAccessDialog = ({ open, onClose }) => {
   const { t, i18n } = useTranslation();
-  const { enqueueSnackbar } = useSnackbar();
+  const { notify } = useNotify();
   const folders = useStoreState((state) => state.ciphermothModels.access.folders);
   const groups = useStoreState((state) => state.ciphermothModels.access.groups);
   const {
@@ -182,13 +182,13 @@ const FolderAccessDialog = ({ open, onClose }) => {
   useEffect(() => {
     if (!open) return;
     loadBase().catch((error) => setLoadError(error.message));
-  }, [open, loadBase, enqueueSnackbar]);
+  }, [open, loadBase, notify]);
 
   useEffect(() => {
     if (!open || !selected) return;
     setRenameName(selected.name);
     loadDetails().catch((error) => setLoadError(error.message));
-  }, [open, selected, loadDetails, enqueueSnackbar]);
+  }, [open, selected, loadDetails, notify]);
 
   const run = async (operation, message, { refreshBase = false } = {}) => {
     setBusy(true);
@@ -196,10 +196,10 @@ const FolderAccessDialog = ({ open, onClose }) => {
       await operation();
       if (refreshBase) await loadBase();
       else await loadDetails();
-      enqueueSnackbar(message, { variant: "success" });
+      notify(message, { theme: "success" });
       return true;
     } catch (error) {
-      enqueueSnackbar(error.message, { variant: "error" });
+      notify(error.message, { theme: "danger" });
       return false;
     } finally {
       setBusy(false);

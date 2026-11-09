@@ -22,7 +22,6 @@ const ExpiryField = ({ value, onUpdate, disabled, invalid }) => {
       </Text>
       <MobileContext.Provider value={datePickerContext}>
         <DatePicker
-          className="nedra-expiry-picker"
           id={inputId}
           size="xl"
           format={language === "ru" ? "DD.MM.YYYY HH:mm" : "MM/DD/YYYY HH:mm"}
@@ -37,16 +36,7 @@ const ExpiryField = ({ value, onUpdate, disabled, invalid }) => {
           aria-describedby={hintId}
         >
           {(calendarProps) => (
-            <Calendar
-              {...calendarProps}
-              className="nedra-expiry-calendar"
-              size={mobileContext.mobile ? "l" : "m"}
-              style={
-                mobileContext.mobile
-                  ? { "--g-date-calendar-day-size": "40px", "--g-date-calendar-padding": "4px" }
-                  : undefined
-              }
-            />
+            <Calendar {...calendarProps} size={mobileContext.mobile ? "l" : "m"} />
           )}
         </DatePicker>
       </MobileContext.Provider>

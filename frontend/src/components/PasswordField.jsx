@@ -6,37 +6,26 @@ import { useTranslation } from "react-i18next";
 import { IS_DESKTOP } from "../platform";
 import { generatePassword } from "../lib/passwordGenerator";
 
-const SIZE_MAP = { small: "m", medium: "l", large: "xl" };
-
 const PasswordField = ({
   show: showProp,
   onToggleShow,
   onGenerate,
   adornment = null,
-  slotProps,
   label,
-  helperText,
   required = false,
   size = "xl",
   id: idProp,
-  inputRef,
-  error,
-  fullWidth: _fullWidth,
-  sx: _sx,
+  controlRef,
   ...props
 }) => {
-  // Legacy layout props are intentionally consumed here while callers migrate from MUI.
-  void _fullWidth;
-  void _sx;
   const { t } = useTranslation();
   const generatedId = useId();
   const id = idProp ?? `cm-password-${generatedId}`;
-  const controlSize = SIZE_MAP[size] ?? size;
 
   const [showInternal, setShowInternal] = useState(false);
   const controlled = showProp !== undefined;
   const show = controlled ? showProp : showInternal;
-  const readOnly = props.readOnly || slotProps?.input?.readOnly || slotProps?.htmlInput?.readOnly;
+  const readOnly = props.readOnly || props.controlProps?.readOnly;
 
   const updateReveal = (visible) => {
     if (controlled) onToggleShow?.(visible);
@@ -48,7 +37,7 @@ const PasswordField = ({
       <Button
         type="button"
         view="flat-secondary"
-        size={controlSize}
+        size={size}
         aria-label={t("entry.actions.generatePassword")}
         onClick={() => onGenerate(generatePassword())}
         disabled={props.disabled}
@@ -62,13 +51,9 @@ const PasswordField = ({
     <PasswordInput
       {...props}
       required={required}
-      controlRef={inputRef ?? props.controlRef}
-      validationState={error ? "invalid" : props.validationState}
-      errorMessage={error || props.validationState === "invalid" ? helperText : undefined}
-      note={!error && props.validationState !== "invalid" ? helperText : undefined}
-
+      controlRef={controlRef ?? props.controlRef}
       id={id}
-      size={controlSize}
+      size={size}
       hideCopyButton
       hideRevealButton
       revealValue={show}
@@ -81,7 +66,7 @@ const PasswordField = ({
             <Button
               type="button"
               view="flat-secondary"
-              size={controlSize}
+              size={size}
               qa="reveal-button"
               aria-label={t(show ? "passwordField.hide" : "passwordField.show")}
               disabled={props.disabled}
@@ -100,7 +85,6 @@ const PasswordField = ({
         autoCapitalize: "none",
         required,
         ...props.controlProps,
-        ...slotProps?.htmlInput,
       }}
     />
   );

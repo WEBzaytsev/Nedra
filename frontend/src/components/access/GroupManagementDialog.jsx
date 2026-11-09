@@ -4,13 +4,13 @@ import { useStoreActions, useStoreState } from "easy-peasy";
 import { useTranslation } from "react-i18next";
 import Dialog from "../TaskSurface";
 
-import { useSnackbar } from "../../hooks/useNotify";
+import { useNotify } from "../../hooks/useNotify";
 import ConfirmDialog from "../ConfirmDialog";
 import ManagementSection from "./ManagementSection";
 
 const GroupManagementDialog = ({ open, onClose }) => {
   const { t, i18n } = useTranslation();
-  const { enqueueSnackbar } = useSnackbar();
+  const { notify } = useNotify();
   const groups = useStoreState((state) => state.ciphermothModels.access.groups);
   const users = useStoreState((state) => state.ciphermothModels.users.users);
   const {
@@ -59,13 +59,13 @@ const GroupManagementDialog = ({ open, onClose }) => {
   useEffect(() => {
     if (!open) return;
     loadGroups().catch((error) => setLoadError(error.message));
-  }, [open, loadGroups, enqueueSnackbar]);
+  }, [open, loadGroups, notify]);
 
   useEffect(() => {
     if (!open || !selected) return;
     setRenameName(selected.name);
     loadDetails().catch((error) => setLoadError(error.message));
-  }, [open, selected, loadDetails, enqueueSnackbar]);
+  }, [open, selected, loadDetails, notify]);
 
   const run = async (operation, message, refreshGroups = false) => {
     setBusy(true);
@@ -73,10 +73,10 @@ const GroupManagementDialog = ({ open, onClose }) => {
       await operation();
       if (refreshGroups) await loadGroups();
       else await loadDetails();
-      enqueueSnackbar(message, { variant: "success" });
+      notify(message, { theme: "success" });
       return true;
     } catch (error) {
-      enqueueSnackbar(error.message, { variant: "error" });
+      notify(error.message, { theme: "danger" });
       return false;
     } finally {
       setBusy(false);

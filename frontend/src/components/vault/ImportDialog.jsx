@@ -263,8 +263,9 @@ const ImportDialog = ({ open, onClose, onImport, onImportCsv }) => {
                         setPassword(event.target.value);
                         setError("");
                       }}
-                      error={Boolean(error)}
-                      helperText={error || t("importDialog.backupPasswordHelp")}
+                      validationState={error ? "invalid" : undefined}
+                      errorMessage={error || undefined}
+                      note={error ? undefined : t("importDialog.backupPasswordHelp")}
                       required
                       autoFocus
                       autoComplete="current-password"
