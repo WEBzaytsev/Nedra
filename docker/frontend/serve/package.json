@@ -3,7 +3,7 @@
   "private": true,
   "description": "The static file server of the production frontend image, pinned with a lockfile so audits and Dependabot see it.",
   "dependencies": {
-    "serve": "14.2.6"
+    "serve": "14.2.7"
   },
   "overrides": {
     "compression": "1.8.2"

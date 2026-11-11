@@ -10,7 +10,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 cc = "1"
-tauri-build = { version = "2.7.2", features = [] }
+tauri-build = { version = "2.7.4", features = [] }
 
 [dependencies]
 uuid = { version = "1", features = ["v4"] }
@@ -19,14 +19,14 @@ url = "2"
 arboard = { version = "3.6", default-features = false }
 rfd = "0.15"
 open = "5"
-tauri = { version = "2.12.3", features = [] }
+tauri = { version = "2.12.5", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["sync", "time", "macros", "rt"] }
-tauri-plugin-updater = "=2.14.0"
+tauri-plugin-updater = "=2.14.1"
 semver = "1"
 minisign-verify = "0.3"
-base64 = { version = "0.22", default-features = false }
+base64 = { version = "0.22", default-features = false, features = ["std"] }
 reqwest = { version = "0.13", default-features = false }
 
 [target.'cfg(unix)'.dependencies]
