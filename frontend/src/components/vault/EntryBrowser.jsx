@@ -1,5 +1,20 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, FileText, Key, Paperclip, StarFill, TrashBin } from "@gravity-ui/icons";
+import {
+  ArrowLeft,
+  ArrowUpRightFromSquare,
+  ClockArrowRotateLeft,
+  Copy,
+  CopyPlus,
+  EllipsisVertical,
+  FileText,
+  Key,
+  Paperclip,
+  Pencil,
+  Pin,
+  Star,
+  StarFill,
+  TrashBin,
+} from "@gravity-ui/icons";
 import {
   Box,
   Button,
@@ -9,6 +24,9 @@ import {
   Flex,
   Icon,
   List,
+  Menu,
+  MenuDivider,
+  MenuItem,
   PlaceholderContainer,
   Text,
   useLayoutContext,
@@ -18,6 +36,141 @@ import { useTranslation } from "react-i18next";
 import EntryDetails from "./EntryDetails";
 import EntryListActions from "./EntryListActions";
 import TaskSurface from "../TaskSurface";
+import { IS_DESKTOP, openExternal } from "../../platform";
+
+const contextTrigger = (left, top) => ({
+  getBoundingClientRect: () => ({
+    width: 0,
+    height: 0,
+    x: left,
+    y: top,
+    top,
+    right: left,
+    bottom: top,
+    left,
+  }),
+});
+
+const EntryContextMenu = ({ menu, onClose, onCopy, onCopyTotp, ...actions }) => {
+  const { t } = useTranslation();
+  const entry = menu?.entry;
+  const writable = entry?.access === "owner" || entry?.access === "write";
+  const run = (action) => () => {
+    onClose();
+    action();
+  };
+  const openWebsite = () => {
+    const url = /^https?:\/\//i.test(entry.url) ? entry.url : `https://${entry.url}`;
+    if (IS_DESKTOP) openExternal(url).catch(() => {});
+    else window.open(url, "_blank", "noopener,noreferrer");
+  };
+
+  return (
+    <Menu
+      aria-label={
+        menu?.selection > 1
+          ? t("vault.context.selectedActions", { count: menu.selection })
+          : t("vault.context.actions", { name: entry?.password_name })
+      }
+      open={Boolean(menu)}
+      trigger={menu?.trigger ?? null}
+      placement="bottom-start"
+      qa="entry-context-menu"
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      {menu?.selection > 1 ? (
+        <>
+          <MenuItem onClick={run(actions.onBulkMove)}>
+            {t("vault.context.moveSelected", { count: menu.selection })}
+          </MenuItem>
+          <MenuItem theme="danger" onClick={run(actions.onBulkTrash)}>
+            {t("vault.context.trashSelected", { count: menu.selection })}
+          </MenuItem>
+          <MenuDivider />
+          <MenuItem onClick={run(actions.onClearSelection)}>
+            {t("vault.bulk.clearSelection")}
+          </MenuItem>
+        </>
+      ) : (
+        entry && (
+          <>
+            {entry.kind !== "note" && entry.username && (
+              <MenuItem icon={<Icon data={Copy} />} onClick={run(() => onCopy(entry.username))}>
+                {t("vault.columns.copyUsername")}
+              </MenuItem>
+            )}
+            <MenuItem icon={<Icon data={Copy} />} onClick={run(() => onCopy(entry.password_value))}>
+              {t(entry.kind === "note" ? "vault.browser.copyNote" : "vault.columns.copyPassword")}
+            </MenuItem>
+            {entry.totp_secret && (
+              <MenuItem icon={<Icon data={Pin} />} onClick={run(() => onCopyTotp(entry))}>
+                {t("totp.copy")}
+              </MenuItem>
+            )}
+            {entry.url && (
+              <MenuItem icon={<Icon data={Copy} />} onClick={run(() => onCopy(entry.url))}>
+                {t("vault.context.copyWebsite")}
+              </MenuItem>
+            )}
+            {entry.url && (
+              <MenuItem icon={<Icon data={ArrowUpRightFromSquare} />} onClick={run(openWebsite)}>
+                {t("vault.columns.openWebsite")}
+              </MenuItem>
+            )}
+            {entry.kind !== "note" && entry.password_history?.length > 0 && (
+              <MenuItem
+                icon={<Icon data={ClockArrowRotateLeft} />}
+                onClick={run(() => actions.onHistory(entry))}
+              >
+                {t("entry.labels.passwordHistory", { count: entry.password_history.length })}
+              </MenuItem>
+            )}
+            {writable && <MenuDivider />}
+            {writable && (
+              <MenuItem icon={<Icon data={Pencil} />} onClick={run(() => actions.onEdit(entry))}>
+                {t("common.actions.edit")}
+              </MenuItem>
+            )}
+            {writable && (
+              <MenuItem
+                icon={<Icon data={CopyPlus} />}
+                onClick={run(() => actions.onDuplicate(entry))}
+              >
+                {t("vault.context.duplicate")}
+              </MenuItem>
+            )}
+            {writable && (
+              <MenuItem
+                icon={<Icon data={entry.favorite ? StarFill : Star} />}
+                onClick={run(() => actions.onToggleFavorite(entry))}
+              >
+                {t(entry.favorite ? "vault.columns.removeFavorite" : "vault.columns.markFavorite")}
+              </MenuItem>
+            )}
+            {entry.access === "owner" && (
+              <MenuItem onClick={run(() => actions.onShare(entry))}>{t("sharing.manage")}</MenuItem>
+            )}
+            {writable && (
+              <MenuItem onClick={run(() => actions.onMove(entry))}>{t("vault.bulk.move")}</MenuItem>
+            )}
+            {writable && <MenuDivider />}
+            {writable && (
+              <MenuItem
+                theme="danger"
+                icon={<Icon data={TrashBin} />}
+                onClick={run(() => actions.onDelete(entry.password_name))}
+              >
+                {t("vault.bulk.moveToTrash")}
+              </MenuItem>
+            )}
+          </>
+        )
+      )}
+    </Menu>
+  );
+};
 
 const EntryBrowser = ({
   entries,
@@ -36,6 +189,9 @@ const EntryBrowser = ({
   bulkTrashPending = false,
   onBulkMove,
   bulkMovePending = false,
+  onCopyTotp,
+  onDuplicate,
+  onMove,
   taskActive = true,
   ...actions
 }) => {
@@ -46,6 +202,7 @@ const EntryBrowser = ({
   const phone = !isMediaActive("s");
   const [selectedId, setSelectedId] = useState(null);
   const [menuEntryId, setMenuEntryId] = useState(null);
+  const [contextMenu, setContextMenu] = useState(null);
   const [revealedEntryId, setRevealedEntryId] = useState(null);
   const listRef = useRef(null);
   const closeRef = useRef(null);
@@ -53,6 +210,34 @@ const EntryBrowser = ({
   const previousMobileEntry = useRef(null);
   const selected = mobileEntry ?? entries.find((entry) => entry.id === selectedId);
   const selectedEntryIdSet = new Set(selectedEntryIds);
+
+  const closeContextMenu = () => {
+    const restoreFocus = contextMenu?.restoreFocus;
+    setContextMenu(null);
+    window.requestAnimationFrame(() => restoreFocus?.focus({ preventScroll: true }));
+  };
+
+  const openContextMenu = (entry, restoreFocus, event) => {
+    if (event?.shiftKey) return;
+    event?.preventDefault();
+    const box = restoreFocus.getBoundingClientRect();
+    const pointer =
+      event &&
+      event.clientX >= box.left &&
+      event.clientX <= box.right &&
+      event.clientY >= box.top &&
+      event.clientY <= box.bottom;
+    restoreFocus.focus({ preventScroll: true });
+    setContextMenu({
+      entry,
+      selection: selectedEntryIdSet.has(String(entry.id)) ? selectedEntryIds.length : 0,
+      trigger: contextTrigger(
+        pointer ? event.clientX : box.left,
+        pointer ? event.clientY : box.bottom
+      ),
+      restoreFocus,
+    });
+  };
 
   const toggleSelection = (entryId, checked) => {
     const id = String(entryId);
@@ -167,6 +352,11 @@ const EntryBrowser = ({
           minHeight={fixedViewport ? "0" : undefined}
           overflow={fixedViewport ? "hidden" : undefined}
           onKeyDown={(event) => {
+            if (contextMenu && event.key === "Escape") {
+              event.preventDefault();
+              closeContextMenu();
+              return;
+            }
             if (
               !event.defaultPrevented &&
               !bulkMovePending &&
@@ -293,9 +483,26 @@ const EntryBrowser = ({
                 }}
                 renderItem={(ctx, { getItemProps, getItemViewProps, getCellProps }) => (
                   <List.ItemView
-                    {...getItemProps({ "data-entry-id": ctx.item.id })}
+                    {...getItemProps({
+                      "data-entry-id": ctx.item.id,
+                      onContextMenu: (event) =>
+                        openContextMenu(ctx.item, event.currentTarget, event),
+                      onKeyDown: (event) => {
+                        if (
+                          event.key === "ContextMenu" ||
+                          (event.shiftKey && event.key === "F10")
+                        ) {
+                          event.preventDefault();
+                          openContextMenu(ctx.item, event.currentTarget);
+                        }
+                      },
+                    })}
                     {...getItemViewProps()}
-                    hovered={menuEntryId === ctx.item.id ? true : undefined}
+                    hovered={
+                      menuEntryId === ctx.item.id || contextMenu?.entry.id === ctx.item.id
+                        ? true
+                        : undefined
+                    }
                     startContent={
                       <Flex {...getCellProps()} gap="spacing-2" alignItems="center">
                         <Checkbox
@@ -391,6 +598,19 @@ const EntryBrowser = ({
                             onMenuOpenChange={(open) => setMenuEntryId(open ? ctx.item.id : null)}
                           />
                         </Box>
+                      ) : phone ? (
+                        <Box {...getCellProps()} onClick={(event) => event.stopPropagation()}>
+                          <Button
+                            type="button"
+                            view="flat-secondary"
+                            size="xl"
+                            aria-label={`${t("navigation.more")}: ${ctx.item.password_name}`}
+                            qa="entry-context-more"
+                            onClick={(event) => openContextMenu(ctx.item, event.currentTarget)}
+                          >
+                            <Icon data={EllipsisVertical} />
+                          </Button>
+                        </Box>
                       ) : undefined
                     }
                   >
@@ -457,6 +677,22 @@ const EntryBrowser = ({
           )}
         </Flex>
       )}
+      <EntryContextMenu
+        menu={contextMenu}
+        onClose={closeContextMenu}
+        onCopy={onCopy}
+        onCopyTotp={onCopyTotp}
+        onEdit={actions.onEdit}
+        onHistory={actions.onHistory}
+        onShare={actions.onShare}
+        onToggleFavorite={actions.onToggleFavorite}
+        onDelete={actions.onDelete}
+        onDuplicate={onDuplicate}
+        onMove={onMove}
+        onBulkTrash={onBulkTrash}
+        onBulkMove={onBulkMove}
+        onClearSelection={() => onSelectedEntryIdsChange?.([])}
+      />
     </>
   );
 };

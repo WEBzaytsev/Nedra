@@ -34,9 +34,11 @@ import EntryBrowser from "../components/vault/EntryBrowser";
 import EntryFilterMenu from "../components/vault/EntryFilterMenu";
 import useClipboard from "../hooks/useClipboard";
 import { applyEntryFilters, entryFilterCounts } from "../lib/entryFilters";
+import { duplicateEntryName } from "../lib/entryActions";
 import { useNotify } from "../hooks/useNotify";
 import { getPageScrollTarget, getPageScrollTop } from "../lib/pageScroll";
 import { reusePayload } from "../lib/passwordHistory";
+import { generateTotp } from "../lib/totp";
 import apiClient from "../api/client";
 import { createEntryDraftStore } from "../lib/entryDraft";
 import { getCurrentUser } from "../utils";
@@ -291,6 +293,31 @@ const PasswordsPage = () => {
   const openShare = (row) => {
     if (mobile || searchParams.has("entry")) openTask({ entry: row.id, view: "share" });
     else setShareTarget(row);
+  };
+
+  const openDuplicate = (row) => {
+    if (row.access === "read") return;
+    setEditTarget(null);
+    setInitialDraft({
+      ...row,
+      password_name: duplicateEntryName(
+        row.password_name,
+        passwords.map((entry) => entry.password_name),
+        t("vault.context.copySuffix")
+      ),
+      favorite: false,
+      attachment_count: 0,
+      password_history: [],
+    });
+    setDialogOpen(true);
+  };
+
+  const handleCopyTotp = async (row) => {
+    try {
+      copy(await generateTotp(row.totp_secret));
+    } catch {
+      notify(t("totp.invalid"), { theme: "danger" });
+    }
   };
 
   const handleToggleFavorite = useCallback(
@@ -835,6 +862,9 @@ const PasswordsPage = () => {
               onOpenEntry={(entry) => openTask({ entry: entry.id, view: "details" })}
               onCloseEntry={closeTask}
               onToggleFavorite={handleToggleFavorite}
+              onCopyTotp={handleCopyTotp}
+              onDuplicate={openDuplicate}
+              onMove={(entry) => setBulkMoveTargets([entry])}
               selectedEntryIds={selectedEntryIds}
               onSelectedEntryIdsChange={setSelectedEntryIds}
               onBulkTrash={handleBulkTrash}

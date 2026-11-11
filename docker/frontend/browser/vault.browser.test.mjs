@@ -161,7 +161,10 @@ async function vault(
                     deleted_at: "2026-11-11T12:00:00",
                 })),
             };
-        } else if (path === "/api/vault/entries/trash/undo" && method === "POST") {
+        } else if (
+            path === "/api/vault/entries/trash/undo" &&
+            method === "POST"
+        ) {
             const body = request.postDataJSON();
             data = { count: body.entries.length, detail: "entries restored" };
         } else if (grantMatch && method === "PUT") {
@@ -1786,7 +1789,12 @@ for (const width of [320, 375, 430, 768, 1024, 1440]) {
                     }),
             );
             if (width < 1280) {
-                assert.deepEqual(visible, []);
+                if (width < 576) {
+                    assert.equal(visible.length, 1);
+                    assert.ok(
+                        visible[0].width >= 44 && visible[0].height >= 44,
+                    );
+                } else assert.deepEqual(visible, []);
             } else {
                 assert.ok(visible.length >= 4);
                 for (const box of visible) {
@@ -2117,6 +2125,195 @@ test("desktop quick actions and details preserve ACL and confirmation boundaries
     }
 });
 
+test("entry context actions preserve ACL, keyboard focus, selection and mobile access", async () => {
+    const { context, page, errors } = await vault(1440);
+    try {
+        const list = page.locator('[data-qa="entry-list"]');
+        const github = list.getByRole("row").filter({ hasText: "GitHub" });
+        const menu = page.getByRole("menu", {
+            name: "Actions for GitHub",
+            exact: true,
+        });
+
+        await github.focus();
+        await page.keyboard.press("Shift+F10");
+        await menu.waitFor();
+        for (const name of [
+            "Copy username",
+            "Copy password",
+            "Copy 2FA code",
+            "Copy website",
+            "Open website",
+            "Duplicate",
+            "Move",
+            "Move to trash",
+        ]) {
+            await menu.getByRole("menuitem", { name, exact: true }).waitFor();
+        }
+        await page.keyboard.press("Escape");
+        await menu.waitFor({ state: "hidden" });
+        assert.equal(
+            await github.evaluate((node) => node === document.activeElement),
+            true,
+        );
+
+        await github.click({ button: "right", modifiers: ["Shift"] });
+        assert.equal(
+            await menu.count(),
+            0,
+            "Shift+right-click keeps the browser menu",
+        );
+
+        await github.click({ button: "right" });
+        await menu.waitFor();
+        await menu
+            .getByRole("menuitem", { name: "Copy website", exact: true })
+            .click();
+        assert.equal(
+            await page.evaluate(() => navigator.clipboard.readText()),
+            "github.com",
+        );
+        assert.equal(
+            await github.evaluate((node) => node === document.activeElement),
+            true,
+        );
+
+        await github.click({ button: "right" });
+        await menu
+            .getByRole("menuitem", { name: "Duplicate", exact: true })
+            .click();
+        const duplicate = page.getByRole("dialog", {
+            name: "Add entry",
+            exact: true,
+        });
+        await duplicate.waitFor();
+        assert.equal(
+            await duplicate
+                .getByRole("textbox", { name: "Name", exact: true })
+                .inputValue(),
+            "GitHub (copy)",
+        );
+        await duplicate
+            .getByRole("button", { name: "Cancel", exact: true })
+            .click();
+        await duplicate.waitFor({ state: "hidden" });
+
+        await list.getByLabel("Select GitHub", { exact: true }).click();
+        await list.getByLabel("Select Recovery notes", { exact: true }).click();
+        await github.click({ button: "right" });
+        const selectedMenu = page.getByRole("menu", {
+            name: "Actions for 2 selected entries",
+            exact: true,
+        });
+        await selectedMenu.waitFor();
+        await selectedMenu
+            .getByRole("menuitem", {
+                name: "Move 2 selected entries",
+                exact: true,
+            })
+            .waitFor();
+        await selectedMenu
+            .getByRole("menuitem", {
+                name: "Move 2 selected entries to trash",
+                exact: true,
+            })
+            .waitFor();
+        await page.keyboard.press("Escape");
+        await selectedMenu.waitFor({ state: "hidden" });
+        assert.equal(
+            await list.getByLabel("Select GitHub", { exact: true }).isChecked(),
+            true,
+        );
+        await list.getByLabel("Select GitHub", { exact: true }).click();
+        await list.getByLabel("Select Recovery notes", { exact: true }).click();
+
+        const writable = list
+            .getByRole("row")
+            .filter({ hasText: "Recovery notes" });
+        await writable.click({ button: "right" });
+        const writableMenu = page.getByRole("menu", {
+            name: "Actions for Recovery notes",
+            exact: true,
+        });
+        await writableMenu.waitFor();
+        for (const name of ["Duplicate", "Move", "Move to trash"]) {
+            await writableMenu
+                .getByRole("menuitem", { name, exact: true })
+                .waitFor();
+        }
+        assert.equal(
+            await writableMenu
+                .getByRole("menuitem", { name: "Manage access", exact: true })
+                .count(),
+            0,
+        );
+        await page.keyboard.press("Escape");
+
+        const readOnly = list
+            .getByRole("row")
+            .filter({ hasText: "Read-only account" });
+        await readOnly.click({ button: "right" });
+        const readOnlyMenu = page.getByRole("menu", {
+            name: "Actions for Read-only account",
+            exact: true,
+        });
+        await readOnlyMenu.waitFor();
+        await readOnlyMenu
+            .getByRole("menuitem", { name: "Copy username", exact: true })
+            .waitFor();
+        for (const name of [
+            "Edit",
+            "Duplicate",
+            "Move",
+            "Move to trash",
+            "Manage access",
+        ]) {
+            assert.equal(
+                await readOnlyMenu
+                    .getByRole("menuitem", { name, exact: true })
+                    .count(),
+                0,
+            );
+        }
+        await page.keyboard.press("Escape");
+        await fits(page);
+        assert.deepEqual(errors, []);
+    } finally {
+        await context.close();
+    }
+});
+
+test("phone exposes entry context actions through a touch-sized menu button", async () => {
+    const { context, page, errors } = await vault(375, "ru", "dark");
+    try {
+        const more = page.getByRole("button", {
+            name: "Ещё: GitHub",
+            exact: true,
+        });
+        await visibleTouchAction(page, more);
+        await more.click();
+        const menu = page.getByRole("menu", {
+            name: "Действия с записью «GitHub»",
+            exact: true,
+        });
+        await menu.waitFor();
+        await menu
+            .getByRole("menuitem", { name: "Скопировать сайт", exact: true })
+            .waitFor();
+        await fits(page);
+        await axe(page);
+        await page.keyboard.press("Escape");
+        await menu.waitFor({ state: "hidden" });
+        assert.equal(
+            await more.evaluate((node) => node === document.activeElement),
+            true,
+        );
+        assert.deepEqual(errors, []);
+    } finally {
+        await context.close();
+    }
+});
+
 test("entry editor keeps favorite beside the dialog close action", async () => {
     const { context, page, errors } = await vault(1440, "en", "dark");
     try {
@@ -2399,7 +2596,8 @@ test("bulk vault and trash actions keep stable selections and send one bounded r
         assert.equal(await github.isChecked(), true);
 
         const bulkMove = page.waitForRequest(
-            (request) => new URL(request.url()).pathname === "/api/vault/entries/move",
+            (request) =>
+                new URL(request.url()).pathname === "/api/vault/entries/move",
         );
         await page.getByRole("button", { name: "Move", exact: true }).click();
         const moveDialog = taskSurface(page, {
@@ -2413,7 +2611,9 @@ test("bulk vault and trash actions keep stable selections and send one bounded r
             folder_id: null,
         });
         const bulkMoveUndo = page.waitForRequest(
-            (request) => new URL(request.url()).pathname === "/api/vault/entries/move/undo",
+            (request) =>
+                new URL(request.url()).pathname ===
+                "/api/vault/entries/move/undo",
         );
         await page.getByRole("button", { name: "Undo", exact: true }).click();
         assert.deepEqual((await bulkMoveUndo).postDataJSON(), {
@@ -2513,22 +2713,42 @@ for (const [width, language] of [
             });
             await selected.check();
             const trashed = page.waitForRequest(
-                (request) => new URL(request.url()).pathname === "/api/vault/entries/trash",
+                (request) =>
+                    new URL(request.url()).pathname ===
+                    "/api/vault/entries/trash",
             );
             await page
-                .getByRole("button", { name: text.vault.bulk.moveToTrash, exact: true })
+                .getByRole("button", {
+                    name: text.vault.bulk.moveToTrash,
+                    exact: true,
+                })
                 .click();
             assert.deepEqual((await trashed).postDataJSON(), {
                 entries: [{ entry_id: 1, password_name: "GitHub" }],
             });
-            await page.getByRole("button", { name: text.vault.bulk.undo, exact: true }).waitFor();
-            await mobileToastFits(page, text.vault.messages.movedToTrash_one, width);
+            await page
+                .getByRole("button", {
+                    name: text.vault.bulk.undo,
+                    exact: true,
+                })
+                .waitFor();
+            await mobileToastFits(
+                page,
+                text.vault.messages.movedToTrash_one,
+                width,
+            );
 
             const undone = page.waitForRequest(
                 (request) =>
-                    new URL(request.url()).pathname === "/api/vault/entries/trash/undo",
+                    new URL(request.url()).pathname ===
+                    "/api/vault/entries/trash/undo",
             );
-            await page.getByRole("button", { name: text.vault.bulk.undo, exact: true }).click();
+            await page
+                .getByRole("button", {
+                    name: text.vault.bulk.undo,
+                    exact: true,
+                })
+                .click();
             assert.deepEqual((await undone).postDataJSON(), {
                 entries: [
                     {
@@ -2538,7 +2758,11 @@ for (const [width, language] of [
                     },
                 ],
             });
-            await mobileToastFits(page, text.vault.messages.trashUndone_one, width);
+            await mobileToastFits(
+                page,
+                text.vault.messages.trashUndone_one,
+                width,
+            );
             await fits(page);
             assert.deepEqual(errors, []);
         } finally {
@@ -2684,17 +2908,29 @@ test("phone task navigation preserves list context, history, drafts and failed e
             "a task owns main, not a second body below the list",
         );
         await button(t.entry.labels.passwordHistory).click();
-        const history = page.getByRole("dialog", { name: t.entry.history.title, exact: true });
+        const history = page.getByRole("dialog", {
+            name: t.entry.history.title,
+            exact: true,
+        });
         await history.waitFor();
-        await history.getByRole("button", { name: t.entry.history.useAgain, exact: true }).click();
+        await history
+            .getByRole("button", {
+                name: t.entry.history.useAgain,
+                exact: true,
+            })
+            .click();
         const confirmation = page.getByRole("dialog", {
             name: t.entry.history.confirmTitle,
             exact: true,
         });
         await confirmation.waitFor();
         await capture("history-confirmation");
-        await confirmation.getByRole("button", { name: t.common.actions.cancel, exact: true }).click();
-        await history.getByRole("button", { name: t.common.actions.close, exact: true }).click();
+        await confirmation
+            .getByRole("button", { name: t.common.actions.cancel, exact: true })
+            .click();
+        await history
+            .getByRole("button", { name: t.common.actions.close, exact: true })
+            .click();
         await history.waitFor({ state: "hidden" });
         await capture("details");
         await page.goBack();
@@ -2799,7 +3035,10 @@ test("phone task navigation preserves list context, history, drafts and failed e
             await capture(`readonly-${view}-denied`);
         }
         await page.goto(`${origin}/passwords?entry=2&view=details`);
-        await taskSurface(page, { name: "Read-only account", exact: true }).waitFor();
+        await taskSurface(page, {
+            name: "Read-only account",
+            exact: true,
+        }).waitFor();
         await button(t.entry.labels.passwordHistory).click();
         const readonlyHistory = page.getByRole("dialog", {
             name: t.entry.history.title,
@@ -2808,7 +3047,10 @@ test("phone task navigation preserves list context, history, drafts and failed e
         await readonlyHistory.waitFor();
         assert.equal(
             await readonlyHistory
-                .getByRole("button", { name: t.entry.history.useAgain, exact: true })
+                .getByRole("button", {
+                    name: t.entry.history.useAgain,
+                    exact: true,
+                })
                 .count(),
             0,
         );
@@ -4638,7 +4880,9 @@ if (process.env.CIPHERMOTH_LAYOUT_MATRIX) {
                         .click();
                     await detail
                         .getByRole("button", {
-                            name: new RegExp(`^${t.entry.labels.passwordHistory}`),
+                            name: new RegExp(
+                                `^${t.entry.labels.passwordHistory}`,
+                            ),
                         })
                         .click();
                     const historyDialog = page.getByRole("dialog", {
@@ -4647,11 +4891,17 @@ if (process.env.CIPHERMOTH_LAYOUT_MATRIX) {
                     });
                     await historyDialog.waitFor();
                     await historyDialog
-                        .getByRole("button", { name: t.entry.history.useAgain, exact: true })
+                        .getByRole("button", {
+                            name: t.entry.history.useAgain,
+                            exact: true,
+                        })
                         .waitFor();
                     await capture("password-history");
                     await historyDialog
-                        .getByRole("button", { name: t.common.actions.close, exact: true })
+                        .getByRole("button", {
+                            name: t.common.actions.close,
+                            exact: true,
+                        })
                         .click();
                     await historyDialog.waitFor({ state: "hidden" });
                     await detail
