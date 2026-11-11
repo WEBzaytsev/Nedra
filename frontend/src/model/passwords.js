@@ -157,6 +157,29 @@ const Passwords = {
     }
   }),
 
+  bulkMove: thunk(async (actions, { entries, folderId }) => {
+    try {
+      const { data } = await apiClient.post("/vault/entries/move", {
+        entries: entries.map((entry) => ({ entry_id: entry.id })),
+        folder_id: folderId,
+      });
+      await actions.get();
+      return data;
+    } catch (err) {
+      throw new Error(await errorDetail(err, i18n.t("errors.moveEntries")));
+    }
+  }),
+
+  undoBulkMove: thunk(async (actions, entries) => {
+    try {
+      const { data } = await apiClient.post("/vault/entries/move/undo", { entries });
+      await actions.get();
+      return data;
+    } catch (err) {
+      throw new Error(await errorDetail(err, i18n.t("errors.moveEntries")));
+    }
+  }),
+
   getTrash: thunk(async (actions) => {
     try {
       const { data } = await apiClient.get("/passwords/trash");

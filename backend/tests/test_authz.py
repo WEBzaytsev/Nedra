@@ -162,6 +162,24 @@ PROTECTED_ROUTES: dict[tuple[str, str], Spec] = {
         json={"entries": [{"password_name": "alpha"}]},
         headers=h,
     ),
+    ("POST", "/api/vault/entries/move"): lambda c, h, x: c.post(
+        "/vault/entries/move",
+        json={"entries": [{"entry_id": x["entry_id"]}], "folder_id": x["folder_id"]},
+        headers=h,
+    ),
+    ("POST", "/api/vault/entries/move/undo"): lambda c, h, x: c.post(
+        "/vault/entries/move/undo",
+        json={
+            "entries": [
+                {
+                    "entry_id": x["entry_id"],
+                    "folder_id": None,
+                    "moved_to_folder_id": None,
+                }
+            ]
+        },
+        headers=h,
+    ),
     ("POST", "/api/vault/trash/restore"): lambda c, h, x: c.post(
         "/vault/trash/restore",
         json={

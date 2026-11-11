@@ -7,7 +7,7 @@ from crud.attachment import AttachmentCRUD
 from crud.auth import AuthContext
 from crud.folder import FolderCRUD, grant_active
 from crud.password import PasswordCRUD
-from crud.records import find_entry, open_entry, open_folder, open_group
+from crud.records import find_entry, open_entry, open_folder, open_group, seal_entry
 from errors import Forbidden, InvalidRequest, NotFound
 from helpers import VaultKey
 from models import (
@@ -28,7 +28,9 @@ from schemas import (
     BulkResult,
     EntryAccess,
     EntryPermission,
+    EntryRef,
     FolderAccessSource,
+    MoveUndoRef,
     OnConflict,
     Password,
     PasswordCreate,
@@ -713,6 +715,70 @@ class AuthorizedPasswordCRUD(PasswordCRUD):
                 entry_id=target.entry_id,
             )
         return await super().purge_passwords(targets, key)
+
+    async def move_passwords(
+        self, targets: Sequence[EntryRef], folder_id: int | None, key: VaultKey
+    ) -> BulkResult:
+        return await self._move_passwords(
+            [(target.entry_id, folder_id, None, False) for target in targets], key
+        )
+
+    async def undo_move_passwords(
+        self, targets: Sequence[MoveUndoRef], key: VaultKey
+    ) -> BulkResult:
+        return await self._move_passwords(
+            [
+                (target.entry_id, target.folder_id, target.moved_to_folder_id, True)
+                for target in targets
+            ],
+            key,
+        )
+
+    async def _move_passwords(
+        self,
+        targets: Sequence[tuple[int, int | None, int | None, bool]],
+        key: VaultKey,
+    ) -> BulkResult:
+        """Validate every ACL and folder link before changing any entry."""
+        folders = FolderCRUD(self.session, self.context)
+        prepared: list[tuple[EntryModel, FolderModel | None, str | None]] = []
+        for entry_id, folder_id, expected_folder_id, check_current_folder in targets:
+            entry = await self.session.get(EntryModel, entry_id)
+            if entry is None or entry.deleted is not None:
+                raise NotFound("Password not found.")
+            if check_current_folder and entry.folder_id != expected_folder_id:
+                raise InvalidRequest("The entries changed since they were moved.")
+            await self.acl.require(entry.id, EntryPermission.write)
+            folder = None
+            folder_name = None
+            if folder_id is not None:
+                folder = await folders._folder(folder_id)
+                permission = await folders.permission_for(folder)
+                if permission not in (EntryPermission.owner, EntryPermission.write):
+                    raise Forbidden("Write access to the folder is required.")
+                if folder.owner_id != entry.owner_id:
+                    raise InvalidRequest(
+                        "An entry can only be moved into a folder owned by its owner."
+                    )
+                folder_name = open_folder(key, folder).name
+            document = open_entry(key, entry)
+            prepared.append((entry, folder, folder_name))
+
+        moved = 0
+        for entry, folder, folder_name in prepared:
+            folder_id = folder.id if folder is not None else None
+            if entry.folder_id == folder_id:
+                continue
+            document = open_entry(key, entry).model_copy(update={"folder": folder_name})
+            entry.folder_id = folder_id
+            entry.backed_up = False
+            seal_entry(key, entry, document)
+            moved += 1
+        await self.session.flush()
+        return BulkResult(
+            count=moved,
+            detail=f"{moved} {'entry' if moved == 1 else 'entries'} moved.",
+        )
 
     async def import_passwords_csv(
         self, file_bytes: bytes, key: VaultKey, on_conflict: OnConflict

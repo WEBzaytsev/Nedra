@@ -34,6 +34,8 @@ const EntryBrowser = ({
   onSelectedEntryIdsChange,
   onBulkTrash,
   bulkTrashPending = false,
+  onBulkMove,
+  bulkMovePending = false,
   taskActive = true,
   ...actions
 }) => {
@@ -167,6 +169,7 @@ const EntryBrowser = ({
           onKeyDown={(event) => {
             if (
               !event.defaultPrevented &&
+              !bulkMovePending &&
               selectedEntryIds.length > 0 &&
               (event.key === "Delete" || event.key === "Backspace")
             ) {
@@ -177,6 +180,7 @@ const EntryBrowser = ({
             if (
               !event.defaultPrevented &&
               !bulkTrashPending &&
+              !bulkMovePending &&
               selectedEntryIds.length > 0 &&
               event.key === "Escape"
             ) {
@@ -217,8 +221,17 @@ const EntryBrowser = ({
                 <Flex gap="spacing-2" wrap="wrap">
                   <Button
                     size="xl"
+                    view="outlined"
+                    disabled={bulkTrashPending || bulkMovePending}
+                    loading={bulkMovePending}
+                    onClick={onBulkMove}
+                  >
+                    {t("vault.bulk.move")}
+                  </Button>
+                  <Button
+                    size="xl"
                     view="outlined-danger"
-                    disabled={bulkTrashPending}
+                    disabled={bulkTrashPending || bulkMovePending}
                     loading={bulkTrashPending}
                     onClick={onBulkTrash}
                   >
@@ -228,7 +241,7 @@ const EntryBrowser = ({
                   <Button
                     size="xl"
                     view="outlined"
-                    disabled={bulkTrashPending}
+                    disabled={bulkTrashPending || bulkMovePending}
                     onClick={() => onSelectedEntryIdsChange?.([])}
                   >
                     {t("vault.bulk.clearSelection")}
@@ -287,7 +300,9 @@ const EntryBrowser = ({
                       <Flex {...getCellProps()} gap="spacing-2" alignItems="center">
                         <Checkbox
                           checked={selectedEntryIdSet.has(String(ctx.item.id))}
-                          disabled={bulkTrashPending || ctx.item.access === "read"}
+                          disabled={
+                            bulkTrashPending || bulkMovePending || ctx.item.access === "read"
+                          }
                           size="xl"
                           controlProps={{
                             "aria-label": t("vault.bulk.selectEntry", {

@@ -2327,6 +2327,29 @@ test("bulk vault and trash actions keep stable selections and send one bounded r
         await page.getByPlaceholder("Search entries…").fill("");
         assert.equal(await github.isChecked(), true);
 
+        const bulkMove = page.waitForRequest(
+            (request) => new URL(request.url()).pathname === "/api/vault/entries/move",
+        );
+        await page.getByRole("button", { name: "Move", exact: true }).click();
+        const moveDialog = taskSurface(page, {
+            name: "Move selected entries",
+            exact: true,
+        });
+        await moveDialog.waitFor();
+        await taskAction(page, moveDialog, "Move").click();
+        assert.deepEqual((await bulkMove).postDataJSON(), {
+            entries: [{ entry_id: 1 }],
+            folder_id: null,
+        });
+        const bulkMoveUndo = page.waitForRequest(
+            (request) => new URL(request.url()).pathname === "/api/vault/entries/move/undo",
+        );
+        await page.getByRole("button", { name: "Undo", exact: true }).click();
+        assert.deepEqual((await bulkMoveUndo).postDataJSON(), {
+            entries: [{ entry_id: 1, folder_id: 1, moved_to_folder_id: null }],
+        });
+
+        await github.check();
         const bulkTrash = page.waitForRequest(
             (request) =>
                 new URL(request.url()).pathname === "/api/vault/entries/trash",

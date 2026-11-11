@@ -50,6 +50,7 @@ async def test_vault_lifecycle_and_unlock(client: httpx.AsyncClient) -> None:
             "multi-user",
             "entry-grants",
             "bulk-entry-actions",
+            "bulk-entry-move",
             "mcp",
         ],
     }

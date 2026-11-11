@@ -607,6 +607,36 @@ class BulkTrashedPayload(BaseModel):
         return self
 
 
+class EntryRef(BaseModel):
+    entry_id: int = Field(gt=0)
+
+
+class BulkMovePayload(BaseModel):
+    entries: list[EntryRef] = Field(min_length=1, max_length=MAX_BULK_ENTRIES)
+    folder_id: int | None
+
+    @model_validator(mode="after")
+    def _distinct(self) -> "BulkMovePayload":
+        if len({entry.entry_id for entry in self.entries}) != len(self.entries):
+            raise ValueError("Each entry may be listed only once.")
+        return self
+
+
+class MoveUndoRef(EntryRef):
+    folder_id: int | None
+    moved_to_folder_id: int | None
+
+
+class BulkMoveUndoPayload(BaseModel):
+    entries: list[MoveUndoRef] = Field(min_length=1, max_length=MAX_BULK_ENTRIES)
+
+    @model_validator(mode="after")
+    def _distinct(self) -> "BulkMoveUndoPayload":
+        if len({entry.entry_id for entry in self.entries}) != len(self.entries):
+            raise ValueError("Each entry may be listed only once.")
+        return self
+
+
 class BulkResult(BaseModel):
     count: int
     detail: str

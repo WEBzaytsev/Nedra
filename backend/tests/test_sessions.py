@@ -1055,6 +1055,7 @@ async def test_the_server_no_longer_advertises_the_vault_key_protocol(
         "multi-user",
         "entry-grants",
         "bulk-entry-actions",
+        "bulk-entry-move",
         "mcp",
     ]
     paths = app.openapi()["paths"]

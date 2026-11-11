@@ -142,6 +142,34 @@ describe("bulk entry actions", () => {
     );
     expect(seen).toHaveLength(1);
   });
+
+  it("moves and undoes entries by stable entry and folder IDs", async () => {
+    const actions = build({
+      "POST /vault/entries/move": [200, { count: 2, detail: "2 entries moved." }],
+      "POST /vault/entries/move/undo": [200, { count: 2, detail: "2 entries moved." }],
+    });
+    const entries = [
+      { id: 7, password_name: "a/b", folder_id: 3 },
+      { id: 9, password_name: "Wi-Fi ключ", folder_id: null },
+    ];
+    await expect(actions.bulkMove({ entries, folderId: 4 })).resolves.toMatchObject({ count: 2 });
+    await expect(
+      actions.undoBulkMove([
+        { entry_id: 7, folder_id: 3, moved_to_folder_id: 4 },
+        { entry_id: 9, folder_id: null, moved_to_folder_id: 4 },
+      ])
+    ).resolves.toMatchObject({ count: 2 });
+    expect(JSON.parse(seen[0].data)).toEqual({
+      entries: [{ entry_id: 7 }, { entry_id: 9 }],
+      folder_id: 4,
+    });
+    expect(JSON.parse(seen[2].data)).toEqual({
+      entries: [
+        { entry_id: 7, folder_id: 3, moved_to_folder_id: 4 },
+        { entry_id: 9, folder_id: null, moved_to_folder_id: 4 },
+      ],
+    });
+  });
 });
 
 describe("sharing", () => {

@@ -16,6 +16,7 @@ def get_meta() -> MetaResponse:
             "multi-user",
             "entry-grants",
             "bulk-entry-actions",
+            "bulk-entry-move",
             "mcp",
         ],
     )

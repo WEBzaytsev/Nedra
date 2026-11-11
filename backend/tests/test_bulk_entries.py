@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 import httpx
 
-from schemas import MAX_BULK_ENTRIES, BulkTrashPayload
+from schemas import MAX_BULK_ENTRIES, BulkMovePayload, BulkTrashPayload
 from tests.support import auth, create_vault, db_execute, db_snapshot, entry
 from tests.test_folder_access import (
     bootstrap,
@@ -33,6 +33,19 @@ async def _refs(client: httpx.AsyncClient, headers) -> dict[str, dict]:
         }
         for item in response.json()
     }
+
+
+async def _move(
+    client: httpx.AsyncClient, headers, folder_id, *entries: dict
+) -> httpx.Response:
+    return await client.post(
+        "/vault/entries/move",
+        json={
+            "entries": [{"entry_id": entry["id"]} for entry in entries],
+            "folder_id": folder_id,
+        },
+        headers=headers,
+    )
 
 
 async def test_bulk_actions_are_atomic_and_bind_trashed_ids(
@@ -222,4 +235,132 @@ async def test_bulk_purge_requires_ownership_for_every_entry(
         headers=member_headers,
     )
     assert response.status_code == 403, response.text
+    assert await db_snapshot() == before
+
+
+async def test_bulk_move_and_undo_recheck_acl_and_current_folder(
+    client: httpx.AsyncClient,
+) -> None:
+    _owner, owner_headers = await bootstrap(client)
+    member = await create_user(client, owner_headers, "member")
+    _, member_headers = await login(client, "member")
+    source = await create_folder(client, owner_headers, "Source")
+    target = await create_folder(client, owner_headers, "Target")
+    changed = await create_folder_entry(client, owner_headers, source, "changed")
+    blocked = await create_folder_entry(client, owner_headers, source, "blocked")
+
+    response = await client.put(
+        f"/folders/{target['id']}/grants/users/{member['id']}",
+        json={"permission": "write"},
+        headers=owner_headers,
+    )
+    assert response.status_code == 200, response.text
+    for entry_row, permission in ((changed, "write"), (blocked, "read")):
+        response = await client.put(
+            f"/passwords/{entry_row['id']}/shares/{member['id']}",
+            json={"permission": permission},
+            headers=owner_headers,
+        )
+        assert response.status_code == 200, response.text
+
+    before = await db_snapshot()
+    response = await _move(client, member_headers, target["id"], changed, blocked)
+    assert response.status_code == 403, response.text
+    assert await db_snapshot() == before
+
+    response = await client.put(
+        f"/passwords/{blocked['id']}/shares/{member['id']}",
+        json={"permission": "write"},
+        headers=owner_headers,
+    )
+    assert response.status_code == 200, response.text
+    response = await _move(client, member_headers, target["id"], changed, blocked)
+    assert response.status_code == 200, response.text
+    assert response.json() == {"count": 2, "detail": "2 entries moved."}
+    moved = {
+        item["id"]: item
+        for item in (await client.get("/passwords", headers=member_headers)).json()
+    }
+    assert {moved[changed["id"]]["folder_id"], moved[blocked["id"]]["folder_id"]} == {
+        target["id"]
+    }
+
+    response = await client.put(
+        f"/folders/{source['id']}/grants/users/{member['id']}",
+        json={"permission": "write"},
+        headers=owner_headers,
+    )
+    assert response.status_code == 200, response.text
+    undo = await client.post(
+        "/vault/entries/move/undo",
+        json={
+            "entries": [
+                {
+                    "entry_id": entry_row["id"],
+                    "folder_id": source["id"],
+                    "moved_to_folder_id": target["id"],
+                }
+                for entry_row in (changed, blocked)
+            ]
+        },
+        headers=member_headers,
+    )
+    assert undo.status_code == 200, undo.text
+    assert undo.json() == {"count": 2, "detail": "2 entries moved."}
+
+    moved_again = await _move(client, member_headers, None, changed)
+    assert moved_again.status_code == 200, moved_again.text
+    before = await db_snapshot()
+    stale_undo = await client.post(
+        "/vault/entries/move/undo",
+        json={
+            "entries": [
+                {
+                    "entry_id": changed["id"],
+                    "folder_id": source["id"],
+                    "moved_to_folder_id": target["id"],
+                }
+            ]
+        },
+        headers=member_headers,
+    )
+    assert stale_undo.status_code == 400, stale_undo.text
+    assert await db_snapshot() == before
+
+
+async def test_bulk_move_validates_stable_ids_and_owner_compatible_target(
+    client: httpx.AsyncClient,
+) -> None:
+    _owner, owner_headers = await bootstrap(client)
+    member = await create_user(client, owner_headers, "member")
+    _, member_headers = await login(client, "member")
+    source = await create_folder(client, owner_headers, "Source")
+    entry_row = await create_folder_entry(client, owner_headers, source, "shared")
+    foreign = await create_folder(client, member_headers, "Foreign")
+    response = await client.put(
+        f"/passwords/{entry_row['id']}/shares/{member['id']}",
+        json={"permission": "write"},
+        headers=owner_headers,
+    )
+    assert response.status_code == 200, response.text
+
+    before = await db_snapshot()
+    response = await _move(client, member_headers, foreign["id"], entry_row)
+    assert response.status_code == 400, response.text
+    assert await db_snapshot() == before
+    for body in (
+        {"entries": [], "folder_id": None},
+        {"entries": [{"entry_id": entry_row["id"]}] * 2, "folder_id": None},
+        {"entries": [{"entry_id": entry_row["id"]}], "folder_id": "wrong"},
+    ):
+        response = await client.post(
+            "/vault/entries/move", json=body, headers=member_headers
+        )
+        assert response.status_code == 422, response.text
+    assert BulkMovePayload.model_validate(
+        {
+            "entries": [{"entry_id": index + 1} for index in range(MAX_BULK_ENTRIES)],
+            "folder_id": None,
+        }
+    )
     assert await db_snapshot() == before

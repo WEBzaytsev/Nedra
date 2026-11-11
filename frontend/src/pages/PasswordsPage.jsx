@@ -20,6 +20,7 @@ import { Trans, useTranslation } from "react-i18next";
 import { useNavigate, useSearchParams } from "react-router-dom";
 
 import BackupDialog from "../components/vault/BackupDialog";
+import BulkMoveDialog from "../components/vault/BulkMoveDialog";
 import ConfirmDialog from "../components/ConfirmDialog";
 import EmptyVault from "../components/vault/EmptyVault";
 import HealthDialog from "../components/vault/HealthDialog";
@@ -55,7 +56,7 @@ const PasswordsPage = () => {
   const { isMediaActive } = useLayoutContext();
   const mobile = !isMediaActive("s");
   const desktopShell = isMediaActive("l");
-  const { notify } = useNotify();
+  const { notify, dismiss } = useNotify();
   const copy = useClipboard();
 
   const {
@@ -70,6 +71,8 @@ const PasswordsPage = () => {
     bulkTrash,
     bulkRestore,
     bulkPurge,
+    bulkMove,
+    undoBulkMove,
     getTrash,
     restore,
     purge,
@@ -98,7 +101,10 @@ const PasswordsPage = () => {
   const [requestedEntryId, setRequestedEntryId] = useState(null);
   const [selectedEntryIds, setSelectedEntryIds] = useState([]);
   const [bulkTrashPending, setBulkTrashPending] = useState(false);
+  const [bulkMoveTargets, setBulkMoveTargets] = useState(null);
+  const [bulkMovePending, setBulkMovePending] = useState(false);
   const bulkTrashInFlight = useRef(false);
+  const bulkMoveInFlight = useRef(false);
   const view = searchParams.get("view");
   const routeEntry = passwords.find((entry) => String(entry.id) === searchParams.get("entry"));
   const editTarget = view === "edit" ? routeEntry : desktopEditTarget;
@@ -342,6 +348,63 @@ const PasswordsPage = () => {
     }
   }, [bulkTrash, selectedEntries, notify, t]);
 
+  const handleUndoBulkMove = useCallback(
+    async (receipt) => {
+      if (bulkMoveInFlight.current) return;
+      bulkMoveInFlight.current = true;
+      setBulkMovePending(true);
+      try {
+        await undoBulkMove(receipt);
+        dismiss("bulk-move-undo");
+        notify(t("vault.messages.moveUndone", { count: receipt.length }), { theme: "success" });
+      } catch (requestError) {
+        notify(requestError.message, { theme: "danger" });
+      } finally {
+        bulkMoveInFlight.current = false;
+        setBulkMovePending(false);
+      }
+    },
+    [dismiss, notify, t, undoBulkMove]
+  );
+
+  const handleBulkMove = useCallback(
+    async (folderId) => {
+      const entries = bulkMoveTargets ?? [];
+      if (entries.length === 0 || bulkMoveInFlight.current) return;
+      bulkMoveInFlight.current = true;
+      setBulkMovePending(true);
+      try {
+        await bulkMove({ entries, folderId });
+        setBulkMoveTargets(null);
+        setSelectedEntryIds([]);
+        const receipt = entries
+          .filter((entry) => entry.folder_id !== folderId)
+          .map((entry) => ({
+            entry_id: entry.id,
+            folder_id: entry.folder_id,
+            moved_to_folder_id: folderId,
+          }));
+        notify(
+          <Flex alignItems="center" gap="spacing-3" wrap="wrap">
+            <Text>{t("vault.messages.moved", { count: receipt.length })}</Text>
+            {receipt.length > 0 && (
+              <Button size="xl" view="flat-secondary" onClick={() => handleUndoBulkMove(receipt)}>
+                {t("vault.bulk.undo")}
+              </Button>
+            )}
+          </Flex>,
+          { theme: "success", autoHiding: false, name: "bulk-move-undo" }
+        );
+      } catch (requestError) {
+        notify(requestError.message, { theme: "danger" });
+      } finally {
+        bulkMoveInFlight.current = false;
+        setBulkMovePending(false);
+      }
+    },
+    [bulkMove, bulkMoveTargets, handleUndoBulkMove, notify, t]
+  );
+
   const handleRestore = async (name) => {
     try {
       await restore(name);
@@ -446,7 +509,12 @@ const PasswordsPage = () => {
       qa="vault-page"
     >
       <Box
-        hidden={toolTask || entryUnavailable || (entryTask && view !== "details")}
+        hidden={
+          (mobile && Boolean(bulkMoveTargets)) ||
+          toolTask ||
+          entryUnavailable ||
+          (entryTask && view !== "details")
+        }
         minWidth="0"
         minHeight="0"
         flexGrow={desktopShell ? 1 : undefined}
@@ -705,6 +773,8 @@ const PasswordsPage = () => {
               onSelectedEntryIdsChange={setSelectedEntryIds}
               onBulkTrash={handleBulkTrash}
               bulkTrashPending={bulkTrashPending}
+              onBulkMove={() => setBulkMoveTargets(selectedEntries)}
+              bulkMovePending={bulkMovePending}
             />
           )}
         </Flex>
@@ -803,6 +873,14 @@ const PasswordsPage = () => {
       >
         {t("vault.damage.removeMessage", { count: damagedCount })}
       </ConfirmDialog>
+      <BulkMoveDialog
+        open={Boolean(bulkMoveTargets)}
+        entries={bulkMoveTargets ?? []}
+        folders={writableFolderOptions}
+        onClose={() => setBulkMoveTargets(null)}
+        onMove={handleBulkMove}
+        pending={bulkMovePending}
+      />
       <TrashDialog
         open={activeTool === "trash"}
         trash={trash}
