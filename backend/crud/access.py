@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from datetime import datetime
 
 from sqlalchemy import exists, or_, select
@@ -24,6 +25,7 @@ from models import (
 from schemas import (
     AttachmentResponse,
     AuditEvent,
+    BulkResult,
     EntryAccess,
     EntryPermission,
     FolderAccessSource,
@@ -37,6 +39,7 @@ from schemas import (
     ShareGrant,
     SharePermission,
     ShareTarget,
+    TrashedEntryRef,
 )
 
 
@@ -679,6 +682,37 @@ class AuthorizedPasswordCRUD(PasswordCRUD):
             entry_id=entry_id,
         )
         return await super().purge_password(password_name, key, entry_id=entry_id)
+
+    async def trash_passwords(self, names: Sequence[str], key: VaultKey) -> BulkResult:
+        for name in names:
+            await self.acl.entry_by_name(name, key, EntryPermission.write)
+        return await super().trash_passwords(names, key)
+
+    async def restore_passwords(
+        self, targets: Sequence[TrashedEntryRef], key: VaultKey
+    ) -> BulkResult:
+        for target in targets:
+            await self.acl.entry_by_name(
+                target.password_name,
+                key,
+                EntryPermission.write,
+                deleted=True,
+                entry_id=target.entry_id,
+            )
+        return await super().restore_passwords(targets, key)
+
+    async def purge_passwords(
+        self, targets: Sequence[TrashedEntryRef], key: VaultKey
+    ) -> BulkResult:
+        for target in targets:
+            await self.acl.entry_by_name(
+                target.password_name,
+                key,
+                EntryPermission.owner,
+                deleted=True,
+                entry_id=target.entry_id,
+            )
+        return await super().purge_passwords(targets, key)
 
     async def import_passwords_csv(
         self, file_bytes: bytes, key: VaultKey, on_conflict: OnConflict

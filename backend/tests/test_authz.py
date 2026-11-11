@@ -157,6 +157,25 @@ PROTECTED_ROUTES: dict[tuple[str, str], Spec] = {
     ("DELETE", "/api/vault/damaged/{kind}/{row_id}"): lambda c, h, x: c.delete(
         "/vault/damaged/entries/1", headers=h
     ),
+    ("POST", "/api/vault/entries/trash"): lambda c, h, x: c.post(
+        "/vault/entries/trash",
+        json={"entries": [{"password_name": "alpha"}]},
+        headers=h,
+    ),
+    ("POST", "/api/vault/trash/restore"): lambda c, h, x: c.post(
+        "/vault/trash/restore",
+        json={
+            "entries": [{"password_name": "beta", "entry_id": x["trashed_entry_id"]}]
+        },
+        headers=h,
+    ),
+    ("POST", "/api/vault/trash/purge"): lambda c, h, x: c.post(
+        "/vault/trash/purge",
+        json={
+            "entries": [{"password_name": "beta", "entry_id": x["trashed_entry_id"]}]
+        },
+        headers=h,
+    ),
     ("PATCH", "/api/master_password/update"): lambda c, h, x: c.patch(
         "/master_password/update",
         json={
@@ -327,6 +346,9 @@ async def seed(client: httpx.AsyncClient, headers: Headers) -> dict:
     attachment_id = resp.json()["id"]
     resp = await client.delete("/passwords/beta", headers=headers)
     assert resp.status_code == 200, resp.text
+    trashed = await client.get("/passwords/trash", headers=headers)
+    assert trashed.status_code == 200, trashed.text
+    trashed_entry_id = trashed.json()[0]["id"]
     await client.get("/settings", headers=headers)
     folder = await client.post(
         "/folders", json={"name": "Seed folder"}, headers=headers
@@ -362,6 +384,7 @@ async def seed(client: httpx.AsyncClient, headers: Headers) -> dict:
         "group_id": group_id,
         "member_id": member_id,
         "service_id": service.json()["id"],
+        "trashed_entry_id": trashed_entry_id,
     }
 
 
@@ -495,6 +518,7 @@ async def test_uninitialized_vault_rejects_everything(
         "group_id": 1,
         "member_id": 1,
         "service_id": 1,
+        "trashed_entry_id": 1,
     }
     credentials = {
         **_as_key_headers(forged_keys("A" * 43 + "=")),

@@ -15,6 +15,7 @@ def get_meta() -> MetaResponse:
             "vault-sessions",
             "multi-user",
             "entry-grants",
+            "bulk-entry-actions",
             "mcp",
         ],
     )
