@@ -38,6 +38,7 @@ import { useTranslation } from "react-i18next";
 
 import { endSession } from "../api/session";
 import { useColorMode } from "../hooks/useColorMode";
+import useMenuAction from "../hooks/useMenuAction";
 import { getCurrentUser } from "../utils";
 
 import BrandMark from "./BrandMark";
@@ -109,13 +110,14 @@ const TopMenu = () => {
 
   const closeMobileNav = () => setMobileNavOpen(false);
   const rememberUtilityTrigger = (event) => {
-    utilityReturnTarget.current = mobileNavOpen ? mobileMenuButton.current : event.currentTarget;
+    utilityReturnTarget.current = mobileNavOpen ? mobileMenuButton.current : event?.currentTarget;
   };
   const closeUtility = (setter) => {
     setter(false);
     window.requestAnimationFrame(() => utilityReturnTarget.current?.focus());
   };
   const openSettings = (event) => {
+    if (!admin) return;
     rememberUtilityTrigger(event);
     closeMobileNav();
     if (phone) {
@@ -146,6 +148,10 @@ const TopMenu = () => {
     closeMobileNav();
     endSession();
   };
+  useMenuAction("settings", openSettings);
+  useMenuAction("lock", logOut);
+  useMenuAction("check-updates", checkForUpdates);
+  useMenuAction("toggle-theme", () => setMode(mode === "dark" ? "light" : "dark"));
 
   const navItems = [
     { id: "/passwords", label: t("vault.title"), icon: Lock },

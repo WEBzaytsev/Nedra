@@ -7,6 +7,7 @@ mod lock;
 mod lock_linux;
 #[cfg(windows)]
 mod lock_windows;
+mod menu;
 mod native;
 mod protocol;
 #[cfg(feature = "gui-test")]
@@ -111,6 +112,7 @@ pub fn run() {
         commands::core_status,
         commands::core_restart,
         lock::vault_lock,
+        menu::menu_state,
         clipboard::clipboard_write,
         clipboard::clipboard_clear,
         native::choose_backup,
@@ -129,6 +131,7 @@ pub fn run() {
         commands::core_status,
         commands::core_restart,
         lock::vault_lock,
+        menu::menu_state,
         clipboard::clipboard_write,
         clipboard::clipboard_clear,
         native::choose_backup,
@@ -164,6 +167,7 @@ pub fn run() {
             app.manage(supervisor);
             app.manage(native::Files::default());
             app.manage(clipboard::Clipboard::start());
+            menu::install(&handle)?;
             lock::install(handle);
             let window =
                 tauri::WebviewWindowBuilder::from_config(app, &app.config().app.windows[0])?

@@ -45,6 +45,7 @@ import { getCurrentUser } from "../utils";
 import useTaskRoute from "../hooks/useTaskRoute";
 import { VaultViewContext } from "../hooks/VaultViewContext";
 import TaskSurface from "../components/TaskSurface";
+import useMenuAction from "../hooks/useMenuAction";
 
 const buildSubtitle = (loading, passwords, t) => {
   if (loading) return t("common.labels.loading");
@@ -111,6 +112,7 @@ const PasswordsPage = () => {
   const [draftReady, setDraftReady] = useState(false);
   const [draftAttempt, setDraftAttempt] = useState(0);
   const [requestedEntryId, setRequestedEntryId] = useState(null);
+  const searchInput = useRef(null);
   const [selectedEntryIds, setSelectedEntryIds] = useState([]);
   const [bulkTrashPending, setBulkTrashPending] = useState(false);
   const [bulkMoveTargets, setBulkMoveTargets] = useState(null);
@@ -260,11 +262,15 @@ const PasswordsPage = () => {
     ? folderFilter
     : "";
 
-  const openAdd = () => {
+  const openAdd = (entryType = "password") => {
     const folder = writableFolderOptions.find((item) => item.id === Number(folderFilter));
     if (mobile) {
       navigate("/entries/new", {
-        state: { folderId: folder?.id ?? null, taskReturn: "/passwords" + window.location.search },
+        state: {
+          folderId: folder?.id ?? null,
+          entryType,
+          taskReturn: "/passwords" + window.location.search,
+        },
       });
       return;
     }
@@ -273,9 +279,25 @@ const PasswordsPage = () => {
       return;
     }
     setEditTarget(null);
-    setInitialDraft(folder ? { folder: folder.name, folder_id: folder.id } : null);
+    const draft = folder ? { folder: folder.name, folder_id: folder.id } : null;
+    setInitialDraft(entryType === "note" ? { ...(draft ?? {}), kind: "note" } : draft);
     setDialogOpen(true);
   };
+
+  const openTool = useCallback(
+    (tool) => {
+      if (mobile) {
+        openTask({ tool });
+        return;
+      }
+      const next = new URLSearchParams(searchParams);
+      next.delete("entry");
+      next.delete("view");
+      next.set("tool", tool);
+      setSearchParams(next);
+    },
+    [mobile, openTask, searchParams, setSearchParams]
+  );
 
   const openEdit = useCallback(
     (row) => {
@@ -531,6 +553,17 @@ const PasswordsPage = () => {
     notify(t("vault.messages.backupRequested"), { theme: "info" });
   };
 
+  useMenuAction("new-login", openAdd);
+  useMenuAction("new-note", () => openAdd("note"));
+  useMenuAction("import", () => openTool("import"));
+  useMenuAction("backup", () => openTool("backup"));
+  useMenuAction("trash", () => openTool("trash"));
+  useMenuAction("health", () => openTool("health"));
+  useMenuAction("find", () => {
+    searchInput.current?.focus();
+    searchInput.current?.select();
+  });
+
   const searchedPasswords = useMemo(() => {
     const query = search.trim().toLowerCase();
     const byFolder = activeFolder
@@ -638,7 +671,7 @@ const PasswordsPage = () => {
                       view="action"
                       size="xl"
                       disabled={!draftReady}
-                      onClick={openAdd}
+                      onClick={() => openAdd()}
                     >
                       <Icon data={Plus} />
                       {t("common.actions.add")}
@@ -756,6 +789,7 @@ const PasswordsPage = () => {
                     }}
                   >
                     <TextInput
+                      controlRef={searchInput}
                       size="xl"
                       type="search"
                       placeholder={t("vault.searchPlaceholder")}
@@ -829,7 +863,7 @@ const PasswordsPage = () => {
                 </Flex>
               )}
 
-              {isEmpty && <EmptyVault onAdd={openAdd} disabled={!draftReady} />}
+              {isEmpty && <EmptyVault onAdd={() => openAdd()} disabled={!draftReady} />}
             </>
           )}
 

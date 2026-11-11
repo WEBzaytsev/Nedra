@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 
 import { IS_DESKTOP, clearClipboard, openExternal } from "./index";
 import { coreRestart, coreStatus, onCoreStatus } from "./core";
+import { listenForMenuActions } from "./menu";
 import LoadingScreen from "../components/LoadingScreen";
 import { clearSession, isAuth } from "../utils";
 
@@ -32,7 +33,11 @@ export default function DesktopGate({ children }) {
       generation = next.generation;
       setStatus(next);
     };
-    Promise.all([onCoreStatus(update), listen("vault-locked", locked)]).then((stops) => {
+    Promise.all([
+      onCoreStatus(update),
+      listen("vault-locked", locked),
+      listenForMenuActions(),
+    ]).then((stops) => {
       if (disposed) stops.forEach((stop) => stop());
       else unlisten.push(...stops);
     });

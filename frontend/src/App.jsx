@@ -11,6 +11,7 @@ import { ColorModeProvider } from "./hooks/useColorMode";
 import useAutoLogout from "./hooks/useAutoLogout";
 import routes from "./routes";
 import { getCurrentUser, isAuth, setCurrentUser } from "./utils";
+import { setMenuUnlocked } from "./platform/menu";
 import { VaultViewContext } from "./hooks/VaultViewContext";
 import { MobileTaskActionsContext } from "./hooks/MobileTaskActionsContext";
 
@@ -19,6 +20,9 @@ const AppContent = () => {
 
   const authed = isAuth();
   const vaultView = useRef({});
+  useEffect(() => {
+    setMenuUnlocked(authed);
+  }, [authed]);
   useEffect(() => {
     if (!authed) vaultView.current = {};
   }, [authed]);

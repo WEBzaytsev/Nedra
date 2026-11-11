@@ -30,6 +30,7 @@ fn main() {
         "core_status",
         "core_restart",
         "vault_lock",
+        "menu_state",
         "clipboard_write",
         "clipboard_clear",
         "choose_backup",
