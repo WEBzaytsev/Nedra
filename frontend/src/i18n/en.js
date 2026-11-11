@@ -626,6 +626,9 @@ Object.assign(en.backup, {
     "Use Import to restore the file into this vault or a new one. Store it in a safe place: anyone with the backup password can open it, even after you change your account password.",
   desktopAdvice: "Choose a new filename in the save dialog to keep earlier backups.",
   webAdvice: "Check your browser downloads to confirm the file saved.",
+  cancel: "Cancel backup request",
+  cancelRequested:
+    "Cancellation requested. This export does not change the vault; a file already saved is not removed.",
 });
 Object.assign(en.importDialog, {
   enterBackupPassword: "Enter the password for this backup.",

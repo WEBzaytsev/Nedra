@@ -92,10 +92,12 @@ describe("backup", () => {
     const createObjectURL = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:backup");
     const revokeObjectURL = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
 
-    await actions.backup("Moth-Test-Vault-2026!");
+    const controller = new AbortController();
+    await actions.backup({ masterPassword: "Moth-Test-Vault-2026!", signal: controller.signal });
 
     const [request] = seen;
     expect(request.responseType).toBe("blob");
+    expect(request.signal).toBe(controller.signal);
     expect(JSON.parse(request.data)).toEqual({ master_password: "Moth-Test-Vault-2026!" });
     expect(link.download).toMatch(
       /^ciphermoth_backup_\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}\.cmbackup$/
@@ -109,7 +111,9 @@ describe("backup", () => {
   it("reports a wrong master password from the Blob error body", async () => {
     const body = new Blob([JSON.stringify({ detail: "Incorrect master password." })]);
     const actions = build({ "POST /passwords/backup": [403, body] });
-    await expect(actions.backup("wrong")).rejects.toThrow("Incorrect master password.");
+    await expect(actions.backup({ masterPassword: "wrong" })).rejects.toThrow(
+      "Incorrect master password."
+    );
   });
 });
 

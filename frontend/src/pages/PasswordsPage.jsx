@@ -526,8 +526,8 @@ const PasswordsPage = () => {
     }
   };
 
-  const handleBackup = async (masterPassword) => {
-    await backup(masterPassword);
+  const handleBackup = async (request) => {
+    await backup(request);
     notify(t("vault.messages.backupRequested"), { theme: "info" });
   };
 

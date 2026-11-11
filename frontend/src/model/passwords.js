@@ -371,7 +371,7 @@ const Passwords = {
     }
   }),
 
-  backup: thunk(async (_actions, masterPassword) => {
+  backup: thunk(async (_actions, { masterPassword, signal }) => {
     try {
       if (IS_DESKTOP)
         return await nativeBackup(getSessionToken(), masterPassword).catch((message) => {
@@ -380,7 +380,7 @@ const Passwords = {
       const response = await apiClient.post(
         "/passwords/backup",
         { master_password: masterPassword },
-        { responseType: "blob" }
+        { responseType: "blob", signal }
       );
       const stamp = new Date().toISOString().slice(0, 19).replace(/:/g, "-");
       triggerDownload(response.data, `ciphermoth_backup_${stamp}.cmbackup`);

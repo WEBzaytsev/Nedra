@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Alert, Flex, Text } from "@gravity-ui/uikit";
 import Dialog from "../TaskSurface";
 import { useTranslation } from "react-i18next";
@@ -12,28 +12,46 @@ const BackupDialog = ({ open, onClose, onBackup }) => {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [cancelled, setCancelled] = useState(false);
+  const controller = useRef(null);
 
   useEffect(() => {
     if (open) {
       setPassword("");
       setError("");
+      setCancelled(false);
     }
   }, [open]);
 
+  useEffect(() => () => controller.current?.abort(), []);
+
   const handleBackup = async () => {
+    if (controller.current) return;
     if (!password.trim()) {
       setError(t("backup.passwordRequired"));
       return;
     }
+    const request = new AbortController();
+    controller.current = request;
     setLoading(true);
+    setCancelled(false);
     try {
-      await onBackup(password);
+      await onBackup({ masterPassword: password, signal: request.signal });
       onClose();
     } catch (err) {
-      setError(err.message);
+      if (!request.signal.aborted) setError(err.message);
     } finally {
-      setLoading(false);
+      if (controller.current === request) {
+        controller.current = null;
+        setLoading(false);
+      }
     }
+  };
+
+  const canCancel = loading && !IS_DESKTOP;
+  const cancelBackup = () => {
+    controller.current?.abort();
+    setCancelled(true);
   };
 
   return (
@@ -66,6 +84,7 @@ const BackupDialog = ({ open, onClose, onBackup }) => {
             onChange={(event) => {
               setPassword(event.target.value);
               setError("");
+              setCancelled(false);
             }}
             onKeyDown={(event) => {
               if (event.key === "Enter") handleBackup();
@@ -79,14 +98,19 @@ const BackupDialog = ({ open, onClose, onBackup }) => {
             view="outlined"
             message={`${t("backup.restoreAdvice")} ${t(IS_DESKTOP ? "backup.desktopAdvice" : "backup.webAdvice")}`}
           />
+          {cancelled && (
+            <Alert theme="info" view="outlined" message={t("backup.cancelRequested")} />
+          )}
         </Flex>
       </Dialog.Body>
       <Dialog.Footer
-        loading={loading}
+        loading={false}
         onClickButtonApply={handleBackup}
-        onClickButtonCancel={onClose}
+        onClickButtonCancel={canCancel ? cancelBackup : onClose}
         textButtonApply={t("backup.title")}
-        textButtonCancel={t("common.actions.cancel")}
+        textButtonCancel={t(canCancel ? "backup.cancel" : "common.actions.cancel")}
+        propsButtonApply={{ disabled: loading, loading }}
+        propsButtonCancel={{ disabled: (loading && !canCancel) || (loading && cancelled) }}
       />
     </Dialog>
   );

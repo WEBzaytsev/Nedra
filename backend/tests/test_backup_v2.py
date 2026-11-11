@@ -6,6 +6,7 @@ import os
 import resource
 import struct
 import tempfile
+import threading
 import time
 from pathlib import Path
 from urllib.parse import quote
@@ -860,6 +861,55 @@ async def test_backup_generation_failure_closes_ciphertext_spool_and_releases_db
     monkeypatch.undo()
     write = await client.post("/passwords/create", json=entry("after"), headers=headers)
     assert write.status_code == 200
+
+
+async def test_cancelling_backup_generation_closes_the_spool_and_changes_nothing(
+    client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import crud.backup
+
+    headers = auth(await create_vault(client))
+    await client.post("/passwords/create", json=entry("saved"), headers=headers)
+    before = await db_snapshot()
+    handles = []
+    entered = threading.Event()
+    release = threading.Event()
+    real_spool = tempfile.SpooledTemporaryFile
+    real_write = crud.backup.BackupWriter.write
+
+    def tracked_spool(*args, **kwargs):
+        handle = real_spool(*args, **kwargs)
+        handles.append(handle)
+        return handle
+
+    def blocked_write(self, plaintext):
+        if not entered.is_set():
+            entered.set()
+            assert release.wait(5)
+        return real_write(self, plaintext)
+
+    monkeypatch.setattr(crud.backup.tempfile, "SpooledTemporaryFile", tracked_spool)
+    monkeypatch.setattr(crud.backup.BackupWriter, "write", blocked_write)
+    request = asyncio.create_task(
+        client.post(
+            "/passwords/backup",
+            json={"master_password": MASTER_PASSWORD},
+            headers=headers,
+        )
+    )
+    assert await asyncio.to_thread(entered.wait, 5)
+    request.cancel()
+    release.set()
+    with pytest.raises(asyncio.CancelledError):
+        await request
+
+    assert handles and all(handle.closed for handle in handles)
+    assert engine.sync_engine.pool.checkedout() == 0
+    assert await db_snapshot() == before
+    monkeypatch.undo()
+    assert (
+        await client.post("/passwords/create", json=entry("after"), headers=headers)
+    ).status_code == 200
 
 
 @pytest.mark.parametrize("failure", ["send", "cancel"])

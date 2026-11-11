@@ -3148,7 +3148,7 @@ for (const [width, language, theme] of [
                 name: t.backup.title,
                 exact: true,
             });
-            const cancel = page.getByRole("button", {
+            const close = page.getByRole("button", {
                 name: t.common.actions.cancel,
                 exact: true,
             });
@@ -3156,7 +3156,7 @@ for (const [width, language, theme] of [
                 exact: true,
             });
             const reachable = async () => {
-                for (const control of [apply, cancel]) {
+                for (const control of [apply, close]) {
                     await visibleTouchAction(page, control);
                     assert.ok(
                         await control.evaluate((node) => {
@@ -3199,19 +3199,28 @@ for (const [width, language, theme] of [
                 `backup-bottom-${width}-${language}-${theme}.png`,
             );
             let requests = 0;
-            let fail = true;
-            const pending = new Promise((resolve) => {
-                release = resolve;
-            });
             await page.route("**/api/passwords/backup", async (route) => {
                 requests++;
                 assert.equal(route.request().method(), "POST");
                 assert.deepEqual(route.request().postDataJSON(), {
                     master_password: "Synthetic-only",
                 });
-                await pending;
+                if (requests === 1) {
+                    await new Promise((resolve) => {
+                        release = resolve;
+                    });
+                    try {
+                        await route.fulfill({
+                            status: 422,
+                            json: { detail: t.errors.backupFailed },
+                        });
+                    } catch (error) {
+                        if (!/aborted|closed/i.test(String(error))) throw error;
+                    }
+                    return;
+                }
                 await route.fulfill(
-                    fail
+                    requests === 2
                         ? {
                               status: 422,
                               json: { detail: t.errors.backupFailed },
@@ -3265,9 +3274,45 @@ for (const [width, language, theme] of [
             const request = page.waitForRequest("**/api/passwords/backup");
             await apply.click();
             await request;
+            const cancelBackup = page.getByRole("button", {
+                name: t.backup.cancel,
+                exact: true,
+            });
+            await cancelBackup.waitFor();
             assert.equal(await apply.isDisabled(), true);
-            assert.equal(await cancel.isDisabled(), true);
+            assert.equal(await cancelBackup.isEnabled(), true);
+            assert.equal(await close.count(), 0);
+            await field.press("Enter");
+            await field.press("Enter");
+            assert.equal(requests, 1, "Enter cannot submit a second backup while loading");
+            const aborted = page.waitForEvent(
+                "requestfailed",
+                (candidate) =>
+                    new URL(candidate.url()).pathname === "/api/passwords/backup",
+            );
+            await cancelBackup.click();
+            await aborted;
             release();
+            await page
+                .getByText(t.backup.cancelRequested, { exact: true })
+                .waitFor();
+            await close.waitFor();
+            assert.equal(
+                await page.getByText(t.errors.backupFailed, { exact: true }).count(),
+                0,
+            );
+            assert.equal(await field.inputValue(), "Synthetic-only");
+            assert.equal(new URL(page.url()).searchParams.get("tool"), "backup");
+            assert.equal(
+                await page
+                    .getByText(t.vault.messages.backupRequested, { exact: true })
+                    .count(),
+                0,
+            );
+            await reachable();
+            const retry = page.waitForRequest("**/api/passwords/backup");
+            await apply.click();
+            await retry;
             await page
                 .getByText(t.errors.backupFailed, { exact: true })
                 .waitFor();
@@ -3275,12 +3320,11 @@ for (const [width, language, theme] of [
             await reachable();
             await fits(page);
             await axe(page);
-            fail = false;
             const download = page.waitForEvent("download");
             await apply.click();
             assert.match((await download).suggestedFilename(), /\.cmbackup$/);
             await page.waitForURL("**/passwords");
-            assert.equal(requests, 2);
+            assert.equal(requests, 3);
             if (width < 600) {
                 await dock
                     .locator("button")
@@ -3299,7 +3343,7 @@ for (const [width, language, theme] of [
                 page,
                 `backup-bottom-${width}-notification.png`,
             );
-            await cancel.click();
+            await close.click();
             await page.waitForURL("**/passwords");
             if (width < 600) {
                 await dock
