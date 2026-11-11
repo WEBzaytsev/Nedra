@@ -150,7 +150,20 @@ async function vault(
             /^\/api\/folders\/(\d+)\/grants\/(users|groups)\/(\d+)$/,
         );
         let data = {};
-        if (grantMatch && method === "PUT") {
+        if (path === "/api/vault/entries/trash" && method === "POST") {
+            const body = request.postDataJSON();
+            data = {
+                count: body.entries.length,
+                detail: "entries moved to trash",
+                entries: body.entries.map((entry) => ({
+                    ...entry,
+                    deleted_at: "2026-11-11T12:00:00",
+                })),
+            };
+        } else if (path === "/api/vault/entries/trash/undo" && method === "POST") {
+            const body = request.postDataJSON();
+            data = { count: body.entries.length, detail: "entries restored" };
+        } else if (grantMatch && method === "PUT") {
             const [, folderIdText, targetTypePlural, targetIdText] = grantMatch;
             const folderId = Number(folderIdText);
             const targetId = Number(targetIdText);
@@ -2356,7 +2369,7 @@ test("bulk vault and trash actions keep stable selections and send one bounded r
         );
         await github.press("Backspace");
         assert.deepEqual((await bulkTrash).postDataJSON(), {
-            entries: [{ password_name: "GitHub" }],
+            entries: [{ entry_id: 1, password_name: "GitHub" }],
         });
         await page
             .locator('[data-qa="entry-bulk-actions"]')
@@ -2427,6 +2440,54 @@ test("bulk vault and trash actions keep stable selections and send one bounded r
         await context.close();
     }
 });
+
+for (const [width, language] of [
+    [320, "en"],
+    [375, "ru"],
+]) {
+    test(`bulk trash Undo fits ${width}px / ${language}`, async () => {
+        const text = language === "ru" ? ruText : enText;
+        const { context, page, errors } = await vault(width, language);
+        try {
+            const selected = page.getByRole("checkbox", {
+                name: text.vault.bulk.selectEntry.replace("{{name}}", "GitHub"),
+                exact: true,
+            });
+            await selected.check();
+            const trashed = page.waitForRequest(
+                (request) => new URL(request.url()).pathname === "/api/vault/entries/trash",
+            );
+            await page
+                .getByRole("button", { name: text.vault.bulk.moveToTrash, exact: true })
+                .click();
+            assert.deepEqual((await trashed).postDataJSON(), {
+                entries: [{ entry_id: 1, password_name: "GitHub" }],
+            });
+            await page.getByRole("button", { name: text.vault.bulk.undo, exact: true }).waitFor();
+            await mobileToastFits(page, text.vault.messages.movedToTrash_one, width);
+
+            const undone = page.waitForRequest(
+                (request) =>
+                    new URL(request.url()).pathname === "/api/vault/entries/trash/undo",
+            );
+            await page.getByRole("button", { name: text.vault.bulk.undo, exact: true }).click();
+            assert.deepEqual((await undone).postDataJSON(), {
+                entries: [
+                    {
+                        entry_id: 1,
+                        password_name: "GitHub",
+                        deleted_at: "2026-11-11T12:00:00",
+                    },
+                ],
+            });
+            await mobileToastFits(page, text.vault.messages.trashUndone_one, width);
+            await fits(page);
+            assert.deepEqual(errors, []);
+        } finally {
+            await context.close();
+        }
+    });
+}
 
 test("profile footer shows and applies current language and theme", async () => {
     const { context, page, errors } = await vault(375, "ru", "dark", entries, {

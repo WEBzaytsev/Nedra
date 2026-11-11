@@ -15,6 +15,8 @@ from schemas import (
     BulkResult,
     BulkTrashedPayload,
     BulkTrashPayload,
+    BulkTrashResult,
+    BulkTrashUndoPayload,
     DamagedRows,
     PasswordDelete,
     SimpleDetailSchema,
@@ -66,15 +68,25 @@ _BULK_RESPONSES = inject_responses(
 @router.post(
     "/entries/trash",
     name="vault:trash-entries",
-    response_model=BulkResult,
+    response_model=BulkTrashResult,
     responses=_BULK_RESPONSES,
 )
 async def trash_entries(
     body: BulkTrashPayload, crud: PasswordCRUDDep, key: VaultKeyDep
+) -> BulkTrashResult:
+    return await crud.trash_passwords(body.entries, key)
+
+
+@router.post(
+    "/entries/trash/undo",
+    name="vault:undo-trash-entries",
+    response_model=BulkResult,
+    responses=_BULK_RESPONSES,
+)
+async def undo_trash_entries(
+    body: BulkTrashUndoPayload, crud: PasswordCRUDDep, key: VaultKeyDep
 ) -> BulkResult:
-    return await crud.trash_passwords(
-        [entry.password_name for entry in body.entries], key
-    )
+    return await crud.undo_trash_passwords(body.entries, key)
 
 
 @router.post(

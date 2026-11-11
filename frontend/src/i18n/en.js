@@ -158,6 +158,8 @@ const en = {
       passwordCreated: "Login added.",
       movedToTrash_one: "Entry moved to trash.",
       movedToTrash_other: "Entries moved to trash.",
+      trashUndone_one: "Entry restored from trash.",
+      trashUndone_other: "Entries restored from trash.",
       restored_one: "Entry restored from trash.",
       restored_other: "Entries restored from trash.",
       permanentlyDeleted_one: "Entry deleted permanently.",

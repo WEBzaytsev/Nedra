@@ -72,6 +72,7 @@ const PasswordsPage = () => {
     importCsv,
     toggleFavorite,
     bulkTrash,
+    undoBulkTrash,
     bulkRestore,
     bulkPurge,
     bulkMove,
@@ -339,23 +340,49 @@ const PasswordsPage = () => {
     [passwords, selectedEntryIds]
   );
 
+  const handleUndoBulkTrash = useCallback(
+    async (receipt) => {
+      if (bulkTrashInFlight.current) return;
+      bulkTrashInFlight.current = true;
+      setBulkTrashPending(true);
+      try {
+        await undoBulkTrash(receipt);
+        dismiss("bulk-trash-undo");
+        notify(t("vault.messages.trashUndone", { count: receipt.length }), { theme: "success" });
+      } catch (requestError) {
+        notify(requestError.message, { theme: "danger" });
+      } finally {
+        bulkTrashInFlight.current = false;
+        setBulkTrashPending(false);
+      }
+    },
+    [dismiss, notify, t, undoBulkTrash]
+  );
+
   const handleBulkTrash = useCallback(async () => {
     if (selectedEntries.length === 0 || bulkTrashInFlight.current) return;
     bulkTrashInFlight.current = true;
     setBulkTrashPending(true);
     try {
-      await bulkTrash(selectedEntries);
+      const result = await bulkTrash(selectedEntries);
       setSelectedEntryIds([]);
-      notify(t("vault.messages.movedToTrash", { count: selectedEntries.length }), {
-        theme: "success",
-      });
+      const receipt = result.entries;
+      notify(
+        <Flex alignItems="center" gap="spacing-3" wrap="wrap">
+          <Text>{t("vault.messages.movedToTrash", { count: receipt.length })}</Text>
+          <Button size="xl" view="flat-secondary" onClick={() => handleUndoBulkTrash(receipt)}>
+            {t("vault.bulk.undo")}
+          </Button>
+        </Flex>,
+        { theme: "success", autoHiding: false, name: "bulk-trash-undo" }
+      );
     } catch (requestError) {
       notify(requestError.message, { theme: "danger" });
     } finally {
       bulkTrashInFlight.current = false;
       setBulkTrashPending(false);
     }
-  }, [bulkTrash, selectedEntries, notify, t]);
+  }, [bulkTrash, selectedEntries, handleUndoBulkTrash, notify, t]);
 
   const handleUndoBulkMove = useCallback(
     async (receipt) => {

@@ -168,7 +168,20 @@ PROTECTED_ROUTES: dict[tuple[str, str], Spec] = {
     ),
     ("POST", "/api/vault/entries/trash"): lambda c, h, x: c.post(
         "/vault/entries/trash",
-        json={"entries": [{"password_name": "alpha"}]},
+        json={"entries": [{"password_name": "alpha", "entry_id": x["entry_id"]}]},
+        headers=h,
+    ),
+    ("POST", "/api/vault/entries/trash/undo"): lambda c, h, x: c.post(
+        "/vault/entries/trash/undo",
+        json={
+            "entries": [
+                {
+                    "password_name": "beta",
+                    "entry_id": x["trashed_entry_id"],
+                    "deleted_at": x["trashed_deleted_at"],
+                }
+            ]
+        },
         headers=h,
     ),
     ("POST", "/api/vault/entries/move"): lambda c, h, x: c.post(
@@ -413,6 +426,7 @@ async def seed(client: httpx.AsyncClient, headers: Headers) -> dict:
         "member_id": member_id,
         "service_id": service.json()["id"],
         "trashed_entry_id": trashed_entry_id,
+        "trashed_deleted_at": trashed.json()[0]["deleted"],
     }
 
 
@@ -547,6 +561,7 @@ async def test_uninitialized_vault_rejects_everything(
         "member_id": 1,
         "service_id": 1,
         "trashed_entry_id": 1,
+        "trashed_deleted_at": "2026-01-01T00:00:00",
     }
     credentials = {
         **_as_key_headers(forged_keys("A" * 43 + "=")),

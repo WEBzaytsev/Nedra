@@ -115,7 +115,7 @@ describe("backup", () => {
 
 describe("bulk entry actions", () => {
   it.each([
-    ["bulkTrash", "/vault/entries/trash", false],
+    ["bulkTrash", "/vault/entries/trash", true],
     ["bulkRestore", "/vault/trash/restore", true],
     ["bulkPurge", "/vault/trash/purge", true],
   ])("sends one atomic %s request with correct identities", async (method, path, includeId) => {
@@ -169,6 +169,24 @@ describe("bulk entry actions", () => {
         { entry_id: 9, folder_id: null, moved_to_folder_id: 4 },
       ],
     });
+  });
+
+  it("uses only the server-issued trash receipt for undo", async () => {
+    const receipt = [{ entry_id: 7, password_name: "a/b", deleted_at: "2026-11-11T12:00:00" }];
+    const actions = build({
+      "POST /vault/entries/trash": [200, { count: 1, detail: "done", entries: receipt }],
+      "POST /vault/entries/trash/undo": [200, { count: 1, detail: "done" }],
+    });
+    const entries = [{ id: 7, password_name: "a/b" }];
+
+    await expect(actions.bulkTrash(entries)).resolves.toMatchObject({ entries: receipt });
+    await expect(actions.undoBulkTrash(receipt)).resolves.toMatchObject({ count: 1 });
+
+    const mutations = seen.filter((request) => request.method === "post");
+    expect(JSON.parse(mutations[0].data)).toEqual({
+      entries: [{ entry_id: 7, password_name: "a/b" }],
+    });
+    expect(JSON.parse(mutations[1].data)).toEqual({ entries: receipt });
   });
 });
 

@@ -125,13 +125,27 @@ const Passwords = {
   bulkTrash: thunk(async (actions, entries) => {
     try {
       const { data } = await apiClient.post("/vault/entries/trash", {
-        entries: entries.map((entry) => ({ password_name: entry.password_name })),
+        entries: entries.map((entry) => ({
+          password_name: entry.password_name,
+          entry_id: entry.id,
+        })),
       });
       await actions.get();
       await actions.getTrash();
       return data;
     } catch (err) {
       throw new Error(await errorDetail(err, i18n.t("errors.deletePassword")));
+    }
+  }),
+
+  undoBulkTrash: thunk(async (actions, entries) => {
+    try {
+      const { data } = await apiClient.post("/vault/entries/trash/undo", { entries });
+      await actions.get();
+      await actions.getTrash();
+      return data;
+    } catch (err) {
+      throw new Error(await errorDetail(err, i18n.t("errors.restorePassword")));
     }
   }),
 

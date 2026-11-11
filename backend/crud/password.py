@@ -25,7 +25,9 @@ from errors import InvalidRequest, VaultDamaged
 from helpers import VaultKey
 from models import AttachmentModel, EntryModel, FolderModel, utc_now
 from schemas import (
+    ActiveTrashRef,
     BulkResult,
+    BulkTrashResult,
     ImportRowReport,
     OnConflict,
     Password,
@@ -36,6 +38,7 @@ from schemas import (
     PasswordUpdate,
     RestoredPassword,
     TrashedEntryRef,
+    TrashUndoRef,
 )
 from validators import normalize_totp_secret, normalize_totp_secret_leniently
 
@@ -383,14 +386,69 @@ class PasswordCRUD(BaseCRUD):
         await self.session.flush()
         return PasswordDelete(deleted=True, detail="Password permanently deleted.")
 
-    async def trash_passwords(self, names: Sequence[str], key: VaultKey) -> BulkResult:
-        models = [(await find_entry(self.session, key, name))[0] for name in names]
+    async def trash_passwords(
+        self, targets: Sequence[ActiveTrashRef], key: VaultKey
+    ) -> BulkTrashResult:
+        models = [
+            (
+                await find_entry(
+                    self.session, key, target.password_name, entry_id=target.entry_id
+                )
+            )[0]
+            for target in targets
+        ]
+        deleted_at = utc_now()
         for model in models:
-            model.deleted = utc_now()
+            model.deleted = deleted_at
         await self.session.flush()
-        return BulkResult(
+        return BulkTrashResult(
             count=len(models),
             detail=_entries_word(len(models)) + " moved to trash.",
+            entries=[
+                TrashUndoRef(
+                    entry_id=model.id,
+                    password_name=target.password_name,
+                    deleted_at=deleted_at,
+                )
+                for model, target in zip(models, targets, strict=True)
+            ],
+        )
+
+    async def undo_trash_passwords(
+        self, targets: Sequence[TrashUndoRef], key: VaultKey
+    ) -> BulkResult:
+        restoring: set[bytes] = set()
+        models: list[EntryModel] = []
+        for target in targets:
+            model, _ = await find_entry(
+                self.session,
+                key,
+                target.password_name,
+                deleted=True,
+                entry_id=target.entry_id,
+            )
+            if model.deleted != target.deleted_at:
+                raise InvalidRequest(
+                    "The entries changed since they were moved to trash."
+                )
+            if model.name_index in restoring:
+                raise InvalidRequest(
+                    f"More than one selected entry is named '{target.password_name}'. "
+                    "Restore one of them at a time."
+                )
+            if await active_entry_exists(self.session, key, target.password_name):
+                raise InvalidRequest(
+                    "An active password named "
+                    f"'{target.password_name}' already exists. "
+                    "Rename or delete it before restoring."
+                )
+            restoring.add(model.name_index)
+            models.append(model)
+        for model in models:
+            model.deleted = None
+        await self.flush_or_conflict(_NAME_TAKEN)
+        return BulkResult(
+            count=len(models), detail=_entries_word(len(models)) + " restored."
         )
 
     async def restore_passwords(

@@ -601,12 +601,23 @@ class TrashedEntryRef(PasswordRef):
     entry_id: int = Field(gt=0)
 
 
+class TrashUndoRef(TrashedEntryRef):
+    deleted_at: datetime
+
+
+class ActiveTrashRef(PasswordRef):
+    entry_id: int | None = Field(default=None, gt=0)
+
+
 class BulkTrashPayload(BaseModel):
-    entries: list[PasswordRef] = Field(min_length=1, max_length=MAX_BULK_ENTRIES)
+    entries: list[ActiveTrashRef] = Field(min_length=1, max_length=MAX_BULK_ENTRIES)
 
     @model_validator(mode="after")
     def _distinct(self) -> "BulkTrashPayload":
-        if len({entry.password_name for entry in self.entries}) != len(self.entries):
+        ids = [entry.entry_id for entry in self.entries if entry.entry_id is not None]
+        if len(set(ids)) != len(ids) or len(
+            {entry.password_name for entry in self.entries}
+        ) != len(self.entries):
             raise ValueError("Each entry may be listed only once.")
         return self
 
@@ -616,6 +627,16 @@ class BulkTrashedPayload(BaseModel):
 
     @model_validator(mode="after")
     def _distinct(self) -> "BulkTrashedPayload":
+        if len({entry.entry_id for entry in self.entries}) != len(self.entries):
+            raise ValueError("Each entry may be listed only once.")
+        return self
+
+
+class BulkTrashUndoPayload(BaseModel):
+    entries: list[TrashUndoRef] = Field(min_length=1, max_length=MAX_BULK_ENTRIES)
+
+    @model_validator(mode="after")
+    def _distinct(self) -> "BulkTrashUndoPayload":
         if len({entry.entry_id for entry in self.entries}) != len(self.entries):
             raise ValueError("Each entry may be listed only once.")
         return self
@@ -654,6 +675,10 @@ class BulkMoveUndoPayload(BaseModel):
 class BulkResult(BaseModel):
     count: int
     detail: str
+
+
+class BulkTrashResult(BulkResult):
+    entries: list[TrashUndoRef]
 
 
 class SettingsResponse(BaseModel):

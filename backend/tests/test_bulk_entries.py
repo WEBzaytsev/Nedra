@@ -16,9 +16,17 @@ from tests.test_folder_access import (
 
 
 async def _trash(client: httpx.AsyncClient, headers, *names: str) -> httpx.Response:
+    active = await client.get("/passwords", headers=headers)
+    assert active.status_code == 200, active.text
+    refs = {item["password_name"]: item["id"] for item in active.json()}
     return await client.post(
         "/vault/entries/trash",
-        json={"entries": [{"password_name": name} for name in names]},
+        json={
+            "entries": [
+                {"password_name": name, "entry_id": refs.get(name, 1_000_000)}
+                for name in names
+            ]
+        },
         headers=headers,
     )
 
@@ -48,6 +56,32 @@ async def _move(
     )
 
 
+async def test_bulk_trash_preserves_name_only_contract(
+    client: httpx.AsyncClient,
+) -> None:
+    headers = auth(await create_vault(client))
+    for name in ("legacy-a", "legacy-b"):
+        response = await client.post(
+            "/passwords/create", json=entry(name), headers=headers
+        )
+        assert response.status_code == 200, response.text
+    response = await client.post(
+        "/vault/entries/trash",
+        json={
+            "entries": [{"password_name": "legacy-a"}, {"password_name": "legacy-b"}]
+        },
+        headers=headers,
+    )
+    assert response.status_code == 200, response.text
+    assert len(response.json()["entries"]) == 2
+    undo = await client.post(
+        "/vault/entries/trash/undo",
+        json={"entries": response.json()["entries"]},
+        headers=headers,
+    )
+    assert undo.status_code == 200, undo.text
+
+
 async def test_bulk_actions_are_atomic_and_bind_trashed_ids(
     client: httpx.AsyncClient,
 ) -> None:
@@ -65,7 +99,13 @@ async def test_bulk_actions_are_atomic_and_bind_trashed_ids(
 
     response = await _trash(client, headers, "a", "b")
     assert response.status_code == 200, response.text
-    assert response.json() == {"count": 2, "detail": "2 entries moved to trash."}
+    assert response.json()["count"] == 2
+    assert response.json()["detail"] == "2 entries moved to trash."
+    trashed = await client.get("/passwords/trash", headers=headers)
+    assert trashed.status_code == 200, trashed.text
+    assert {item["entry_id"] for item in response.json()["entries"]} == {
+        item["id"] for item in trashed.json()
+    }
     refs = await _refs(client, headers)
 
     before = await db_snapshot()
@@ -115,7 +155,8 @@ async def test_bulk_requests_validate_bounds_and_duplicates_without_writes(
     accepted = BulkTrashPayload.model_validate(
         {
             "entries": [
-                {"password_name": str(index)} for index in range(MAX_BULK_ENTRIES)
+                {"password_name": str(index), "entry_id": index + 1}
+                for index in range(MAX_BULK_ENTRIES)
             ]
         }
     )
@@ -204,8 +245,111 @@ async def test_bulk_actions_require_effective_write_access_and_honor_expiry(
         group_id=group_id,
     )
     before = await db_snapshot()
-    response = await _trash(client, member_headers, "group-first", "group-second")
+    response = await client.post(
+        "/vault/entries/trash",
+        json={
+            "entries": [
+                {"password_name": "group-first", "entry_id": group_first["id"]},
+                {"password_name": "group-second", "entry_id": group_second["id"]},
+            ]
+        },
+        headers=member_headers,
+    )
     assert response.status_code == 404, response.text
+    assert await db_snapshot() == before
+
+
+async def test_bulk_trash_undo_rechecks_acl_and_rejects_changed_or_conflicting_entries(
+    client: httpx.AsyncClient,
+) -> None:
+    _owner, owner_headers = await bootstrap(client)
+    member = await create_user(client, owner_headers, "member")
+    _, member_headers = await login(client, "member")
+    first = await client.post(
+        "/passwords/create", json=entry("first"), headers=owner_headers
+    )
+    second = await client.post(
+        "/passwords/create", json=entry("second"), headers=owner_headers
+    )
+    assert first.status_code == second.status_code == 200
+    entries = {
+        row["password_name"]: row
+        for row in (await client.get("/passwords", headers=owner_headers)).json()
+    }
+    for name in ("first", "second"):
+        granted = await client.put(
+            f"/passwords/{entries[name]['id']}/shares/{member['id']}",
+            json={"permission": "write"},
+            headers=owner_headers,
+        )
+        assert granted.status_code == 200, granted.text
+
+    trashed = await _trash(client, member_headers, "first", "second")
+    assert trashed.status_code == 200, trashed.text
+    receipt = trashed.json()["entries"]
+
+    await db_execute(
+        "UPDATE entry_access SET expires_at = :expired "
+        "WHERE entry_id = :entry_id AND user_id = :user_id",
+        expired=datetime.now(UTC) - timedelta(minutes=1),
+        entry_id=entries["second"]["id"],
+        user_id=member["id"],
+    )
+    before = await db_snapshot()
+    expired = await client.post(
+        "/vault/entries/trash/undo", json={"entries": receipt}, headers=member_headers
+    )
+    assert expired.status_code == 404, expired.text
+    assert await db_snapshot() == before
+
+    renewed = await client.put(
+        f"/passwords/{entries['second']['id']}/shares/{member['id']}",
+        json={"permission": "write"},
+        headers=owner_headers,
+    )
+    assert renewed.status_code == 200, renewed.text
+    revoked = await client.delete(
+        f"/passwords/{entries['first']['id']}/shares/{member['id']}",
+        headers=owner_headers,
+    )
+    assert revoked.status_code == 200, revoked.text
+    before = await db_snapshot()
+    revoked_undo = await client.post(
+        "/vault/entries/trash/undo", json={"entries": receipt}, headers=member_headers
+    )
+    assert revoked_undo.status_code == 404, revoked_undo.text
+    assert await db_snapshot() == before
+
+    restored_grant = await client.put(
+        f"/passwords/{entries['first']['id']}/shares/{member['id']}",
+        json={"permission": "write"},
+        headers=owner_headers,
+    )
+    assert restored_grant.status_code == 200, restored_grant.text
+    restored = await client.post(
+        "/vault/trash/restore", json={"entries": [receipt[0]]}, headers=owner_headers
+    )
+    assert restored.status_code == 200, restored.text
+    changed = await _trash(client, owner_headers, "first")
+    assert changed.status_code == 200, changed.text
+    before = await db_snapshot()
+    stale = await client.post(
+        "/vault/entries/trash/undo", json={"entries": receipt}, headers=member_headers
+    )
+    assert stale.status_code == 400, stale.text
+    assert await db_snapshot() == before
+
+    conflict = await client.post(
+        "/passwords/create", json=entry("second"), headers=owner_headers
+    )
+    assert conflict.status_code == 200, conflict.text
+    before = await db_snapshot()
+    conflicted = await client.post(
+        "/vault/entries/trash/undo",
+        json={"entries": [receipt[1]]},
+        headers=member_headers,
+    )
+    assert conflicted.status_code == 400, conflicted.text
     assert await db_snapshot() == before
 
 

@@ -23,9 +23,11 @@ from models import (
     utc_now,
 )
 from schemas import (
+    ActiveTrashRef,
     AttachmentResponse,
     AuditEvent,
     BulkResult,
+    BulkTrashResult,
     EntryAccess,
     EntryPermission,
     EntryRef,
@@ -42,6 +44,7 @@ from schemas import (
     SharePermission,
     ShareTarget,
     TrashedEntryRef,
+    TrashUndoRef,
 )
 
 
@@ -693,10 +696,30 @@ class AuthorizedPasswordCRUD(PasswordCRUD):
         )
         return await super().purge_password(password_name, key, entry_id=entry_id)
 
-    async def trash_passwords(self, names: Sequence[str], key: VaultKey) -> BulkResult:
-        for name in names:
-            await self.acl.entry_by_name(name, key, EntryPermission.write)
-        return await super().trash_passwords(names, key)
+    async def trash_passwords(
+        self, targets: Sequence[ActiveTrashRef], key: VaultKey
+    ) -> BulkTrashResult:
+        for target in targets:
+            await self.acl.entry_by_name(
+                target.password_name,
+                key,
+                EntryPermission.write,
+                entry_id=target.entry_id,
+            )
+        return await super().trash_passwords(targets, key)
+
+    async def undo_trash_passwords(
+        self, targets: Sequence[TrashUndoRef], key: VaultKey
+    ) -> BulkResult:
+        for target in targets:
+            await self.acl.entry_by_name(
+                target.password_name,
+                key,
+                EntryPermission.write,
+                deleted=True,
+                entry_id=target.entry_id,
+            )
+        return await super().undo_trash_passwords(targets, key)
 
     async def restore_passwords(
         self, targets: Sequence[TrashedEntryRef], key: VaultKey
