@@ -1627,6 +1627,7 @@ for (const width of [375, 1440]) {
             });
             await dialog.waitFor();
             const groups = dialog.locator('[data-qa="health-issue-group"]');
+            await groups.first().waitFor({ state: "visible" });
             assert.equal(await groups.count(), 1);
             const rows = groups.getByRole("button");
             assert.equal(await rows.count(), 10);
