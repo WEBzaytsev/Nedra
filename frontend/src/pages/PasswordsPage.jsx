@@ -31,7 +31,9 @@ import FolderAccessDialog from "../components/access/FolderAccessDialog";
 import ShareDialog from "../components/vault/ShareDialog";
 import TrashDialog from "../components/vault/TrashDialog";
 import EntryBrowser from "../components/vault/EntryBrowser";
+import EntryFilterMenu from "../components/vault/EntryFilterMenu";
 import useClipboard from "../hooks/useClipboard";
+import { applyEntryFilters, entryFilterCounts } from "../lib/entryFilters";
 import { useNotify } from "../hooks/useNotify";
 import { getPageScrollTarget, getPageScrollTop } from "../lib/pageScroll";
 import { reusePayload } from "../lib/passwordHistory";
@@ -98,6 +100,9 @@ const PasswordsPage = () => {
   const [removeDamagedOpen, setRemoveDamagedOpen] = useState(false);
   const [search, setSearch] = useState(vaultView.current.search ?? "");
   const [folderFilter, setFolderFilter] = useState(vaultView.current.folderFilter ?? "");
+  const [entryFilters, setEntryFilters] = useState(
+    () => new Set(vaultView.current.entryFilters ?? [])
+  );
   const [draftStore, setDraftStore] = useState(null);
   const [initialDraft, setInitialDraft] = useState(null);
   const [draftError, setDraftError] = useState(false);
@@ -138,8 +143,13 @@ const PasswordsPage = () => {
   const activeTool = searchParams.get("tool");
 
   useEffect(() => {
-    Object.assign(vaultView.current, { sortOrder, search, folderFilter });
-  }, [vaultView, sortOrder, search, folderFilter]);
+    Object.assign(vaultView.current, {
+      sortOrder,
+      search,
+      folderFilter,
+      entryFilters: [...entryFilters],
+    });
+  }, [vaultView, sortOrder, search, folderFilter, entryFilters]);
 
   useEffect(() => {
     const target = getPageScrollTarget();
@@ -494,7 +504,7 @@ const PasswordsPage = () => {
     notify(t("vault.messages.backupRequested"), { theme: "info" });
   };
 
-  const filteredPasswords = useMemo(() => {
+  const searchedPasswords = useMemo(() => {
     const query = search.trim().toLowerCase();
     const byFolder = activeFolder
       ? passwords.filter((password) => password.folder_id === Number(activeFolder))
@@ -516,16 +526,22 @@ const PasswordsPage = () => {
             )
         );
 
-    return [...matches].sort(
-      (first, second) =>
-        (sortOrder === "created-desc"
-          ? Date.parse(second.created) - Date.parse(first.created)
-          : 0) ||
-        (sortOrder === "favorites" ? Number(second.favorite) - Number(first.favorite) : 0) ||
-        first.password_name.localeCompare(second.password_name) *
-          (sortOrder === "name-desc" ? -1 : 1)
-    );
-  }, [passwords, search, activeFolder, sortOrder]);
+    return matches;
+  }, [passwords, search, activeFolder]);
+  const filterCounts = useMemo(() => entryFilterCounts(searchedPasswords), [searchedPasswords]);
+  const filteredPasswords = useMemo(
+    () =>
+      [...applyEntryFilters(searchedPasswords, entryFilters)].sort(
+        (first, second) =>
+          (sortOrder === "created-desc"
+            ? Date.parse(second.created) - Date.parse(first.created)
+            : 0) ||
+          (sortOrder === "favorites" ? Number(second.favorite) - Number(first.favorite) : 0) ||
+          first.password_name.localeCompare(second.password_name) *
+            (sortOrder === "name-desc" ? -1 : 1)
+      ),
+    [searchedPasswords, entryFilters, sortOrder]
+  );
 
   const subtitle = useMemo(
     () => (error || passwords.length === 0 ? "" : buildSubtitle(loading, passwords, t)),
@@ -708,8 +724,8 @@ const PasswordsPage = () => {
                   <Col
                     size={{
                       xs: 12,
-                      m: folderOptions.length ? 12 : 8,
-                      xl: folderOptions.length ? 6 : 8,
+                      m: folderOptions.length ? 12 : 6,
+                      xl: folderOptions.length ? 4 : 6,
                     }}
                   >
                     <TextInput
@@ -763,6 +779,13 @@ const PasswordsPage = () => {
                       ]}
                     />
                   </Col>
+                  <Col size={{ xs: 12, m: 2, xl: 2 }} minWidth="0">
+                    <EntryFilterMenu
+                      active={entryFilters}
+                      counts={filterCounts}
+                      onChange={setEntryFilters}
+                    />
+                  </Col>
                 </Row>
               )}
 
@@ -787,12 +810,18 @@ const PasswordsPage = () => {
             <EntryBrowser
               entries={filteredPasswords}
               totalCount={passwords.length}
-              emptyMessage={t(search.trim() ? "vault.noSearchResults" : "vault.noFolderResults", {
-                search: search.trim(),
-              })}
+              emptyMessage={t(
+                entryFilters.size
+                  ? "vault.noQuickFilterResults"
+                  : search.trim()
+                    ? "vault.noSearchResults"
+                    : "vault.noFolderResults",
+                { search: search.trim() }
+              )}
               onResetFilters={() => {
                 setSearch("");
                 setFolderFilter("");
+                setEntryFilters(new Set());
               }}
               requestedEntryId={requestedEntryId}
               onRequestedEntryOpen={() => setRequestedEntryId(null)}

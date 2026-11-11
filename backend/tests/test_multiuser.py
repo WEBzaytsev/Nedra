@@ -309,6 +309,13 @@ async def test_users_and_entry_acl_are_deny_by_default(
     assert owned_access["owner_username"] == "owner"
     assert owned_access["access"] == "owner"
 
+    private = await client.post(
+        "/passwords/create",
+        json=entry("private", "private-value"),
+        headers=owner_headers,
+    )
+    assert private.status_code == 200, private.text
+
     response = await client.post(
         "/users",
         json={
@@ -331,6 +338,7 @@ async def test_users_and_entry_acl_are_deny_by_default(
     )
     assert granted.status_code == 200, granted.text
     [shared] = (await client.get("/passwords", headers=member_headers)).json()
+    assert shared["password_name"] == "shared"
     [shared_access] = (
         await client.get("/passwords/access", headers=member_headers)
     ).json()

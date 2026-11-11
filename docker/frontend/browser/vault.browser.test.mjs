@@ -26,6 +26,7 @@ const entries = [
         folder_id: 1,
         tags: ["development"],
         url: "github.com",
+        description: "Primary development login",
         totp_secret: "JBSWY3DPEHPK3PXP",
         custom_fields: [
             {
@@ -2290,6 +2291,63 @@ for (const [width, language, theme] of [
             await trash
                 .getByRole("button", { name: /^(Восстановить|Restore)/ })
                 .waitFor();
+            await fits(page);
+            assert.deepEqual(errors, []);
+        } finally {
+            await context.close();
+        }
+    });
+}
+
+for (const [width, language] of [
+    [320, "en"],
+    [375, "ru"],
+]) {
+    test(`quick filters intersect and reset at ${width}px / ${language}`, async () => {
+        const { context, page, errors } = await vault(width, language);
+        try {
+            const text = language === "ru" ? ruText : enText;
+            const list = page.locator('[data-qa="entry-list"]');
+            const trigger = page.locator('[data-qa="entry-filters"]');
+            await visibleTouchAction(page, trigger);
+            await trigger.click();
+            const menu = page.getByRole("menu", {
+                name: text.vault.filters.title,
+                exact: true,
+            });
+            await menu.waitFor();
+            const attachments = menu.locator(
+                '[data-qa="entry-filter-attachments"]',
+            );
+            assert.match((await attachments.textContent()).trim(), /1$/);
+
+            const favorites = menu.locator(
+                '[data-qa="entry-filter-favorites"]',
+            );
+            await favorites.focus();
+            await favorites.press("Space");
+            assert.equal(await favorites.isVisible(), true);
+            assert.equal(await favorites.getAttribute("aria-checked"), "true");
+            assert.equal(await list.getByRole("row").count(), 1);
+
+            const selected = list.getByRole("checkbox", {
+                name: text.vault.bulk.selectEntry.replace("{{name}}", "GitHub"),
+                exact: true,
+            });
+            await selected.check();
+            if (!(await menu.isVisible())) await trigger.click();
+            await menu.locator('[data-qa="entry-filter-secure-notes"]').click();
+            await page
+                .getByText(text.vault.noQuickFilterResults, { exact: true })
+                .waitFor();
+            await page
+                .getByRole("button", {
+                    name: text.vault.resetFilters,
+                    exact: true,
+                })
+                .click();
+            assert.equal(await list.getByRole("row").count(), entries.length);
+            assert.equal(await selected.isChecked(), true);
             await fits(page);
             assert.deepEqual(errors, []);
         } finally {
