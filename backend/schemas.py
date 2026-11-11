@@ -139,6 +139,46 @@ class AuthResponse(BaseModel):
     idle_timeout_ms: int | None = None
 
 
+class RecoveryStatus(BaseModel):
+    configured: bool
+    created: datetime | None = None
+
+
+class RecoveryCodeResult(RecoveryStatus):
+    recovery_code: str
+
+
+class RecoveryCodePayload(BaseModel):
+    current_password: str = Field(min_length=1, max_length=1024)
+
+    @field_validator("current_password")
+    @classmethod
+    def _unicode(cls, value: str) -> str:
+        require_unicode_text(value)
+        return value
+
+
+class RecoverPasswordPayload(BaseModel):
+    username: Username
+    recovery_code: str = Field(min_length=1, max_length=128)
+    new_password: str = Field(min_length=1, max_length=1024)
+
+    @field_validator("recovery_code")
+    @classmethod
+    def _recovery_code_unicode(cls, value: str) -> str:
+        require_unicode_text(value)
+        return value
+
+    @field_validator("new_password")
+    @classmethod
+    def _strong(cls, value: str) -> str:
+        return validate_master_password_strength(value)
+
+
+class RecoveryAuthResponse(AuthResponse):
+    recovery_code: str | None = None
+
+
 class EntryDraftKey(BaseModel):
     user_id: int
     key: str = Field(repr=False)

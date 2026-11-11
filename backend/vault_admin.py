@@ -179,6 +179,29 @@ def migrate_service_permissions(
 
 
 @app.command(
+    "migrate-recovery",
+    help=(
+        "Upgrade a stopped schema-5 vault for personal recovery codes. "
+        "A rollback snapshot is created first."
+    ),
+)
+def migrate_recovery(
+    yes: Annotated[bool, typer.Option("--yes", help="Do not ask to confirm.")] = False,
+) -> None:
+    if not yes:
+        typer.confirm(
+            "Migrate the stopped schema-5 vault in "
+            f"{_data_dir()} for personal recovery codes?",
+            abort=True,
+        )
+    try:
+        saved = storage.migrate_recovery(_data_dir())
+    except storage.StorageError as error:
+        raise _fail(error) from None
+    typer.echo(f"Migrated. Rollback snapshot: {saved}")
+
+
+@app.command(
     "set-aside",
     help=(
         "Move the vault file (with its WAL) into a new folder in the snapshot "

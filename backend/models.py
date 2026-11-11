@@ -144,6 +144,32 @@ class UserModel(BaseModel):
     key_check: Mapped[bytes] = mapped_column(LargeBinary)
 
 
+class UserRecoveryModel(BaseModel):
+    __tablename__ = "user_recovery"
+    __table_args__ = (
+        CheckConstraint("length(kdf_salt) = 16", name="ck_user_recovery_salt"),
+        CheckConstraint(
+            "length(password_check) = 32", name="ck_user_recovery_password_check"
+        ),
+        CheckConstraint("length(key_check) = 32", name="ck_user_recovery_key_check"),
+    )
+
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    created: Mapped[datetime] = mapped_column(
+        TIMESTAMP, default=utc_now, server_default=func.current_timestamp()
+    )
+    kdf: Mapped[str] = mapped_column(String)
+    kdf_memory_kib: Mapped[int] = mapped_column(Integer)
+    kdf_iterations: Mapped[int] = mapped_column(Integer)
+    kdf_lanes: Mapped[int] = mapped_column(Integer)
+    kdf_salt: Mapped[bytes] = mapped_column(LargeBinary)
+    password_check: Mapped[bytes] = mapped_column(LargeBinary)
+    wrapped_key: Mapped[bytes] = mapped_column(LargeBinary)
+    key_check: Mapped[bytes] = mapped_column(LargeBinary)
+
+
 class EntryModel(BaseModel):
     __tablename__ = "entries"
     __table_args__ = (

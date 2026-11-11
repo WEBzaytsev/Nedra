@@ -1,3 +1,4 @@
+import base64
 import hashlib
 import logging
 import secrets
@@ -30,6 +31,7 @@ from models import (
     EntryModel,
     FolderModel,
     UserModel,
+    UserRecoveryModel,
     VaultModel,
 )
 from schemas import (
@@ -37,6 +39,9 @@ from schemas import (
     AuthResponse,
     AuthStatus,
     AuthUser,
+    RecoveryAuthResponse,
+    RecoveryCodeResult,
+    RecoveryStatus,
     ServiceOperation,
     UserCreateResponse,
     UserRole,
@@ -70,7 +75,7 @@ def token_digest(token: str) -> bytes:
     return hashlib.sha256(token.encode()).digest()
 
 
-def user_key_material(model: UserModel) -> KeyMaterial:
+def user_key_material(model: UserModel | UserRecoveryModel) -> KeyMaterial:
     for value, length in (
         (model.kdf_salt, 16),
         (model.password_check, 32),
@@ -96,6 +101,31 @@ def user_key_material(model: UserModel) -> KeyMaterial:
 
 
 def store_user_material(model: UserModel, material: KeyMaterial) -> None:
+    model.kdf = KDF_NAME
+    model.kdf_memory_kib = material.params.memory_kib
+    model.kdf_iterations = material.params.iterations
+    model.kdf_lanes = material.params.lanes
+    model.kdf_salt = material.salt
+    model.password_check = material.password_check
+    model.wrapped_key = material.wrapped_key
+    model.key_check = material.key_check
+
+
+def recovery_code() -> str:
+    raw = base64.b32encode(secrets.token_bytes(20)).decode().rstrip("=")
+    return "-".join(raw[index : index + 4] for index in range(0, len(raw), 4))
+
+
+def normalize_recovery_code(value: str) -> str | None:
+    normalized = "".join(value.upper().split()).replace("-", "")
+    if len(normalized) != 32 or any(
+        char not in "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567" for char in normalized
+    ):
+        return None
+    return normalized
+
+
+def store_recovery_material(model: UserRecoveryModel, material: KeyMaterial) -> None:
     model.kdf = KDF_NAME
     model.kdf_memory_kib = material.params.memory_kib
     model.kdf_iterations = material.params.iterations
@@ -580,11 +610,164 @@ class AuthCRUD(BaseCRUD):
             raise Forbidden("Administrator access is required.")
         store_user_material(current, material)
         current.must_change_password = True
+        await self.session.execute(
+            delete(UserRecoveryModel).where(UserRecoveryModel.user_id == current.id)
+        )
         if vault.owner_user_id == current.id:
             _store(vault, material)
+        self.session.add(
+            AccessAuditModel(
+                actor_user_id=actor.user.id,
+                action="user_password_reset",
+                resource_type="user",
+                resource_id=current.id,
+                target_user_id=current.id,
+            )
+        )
         await self.session.flush()
         after_commit(self.session, lambda: self.vault_sessions.revoke_user(user_id))
         return self.to_user(current)
+
+    async def recovery_status(self, context: AuthContext) -> RecoveryStatus:
+        recovery = await self.session.get(UserRecoveryModel, context.user.id)
+        return RecoveryStatus(
+            configured=recovery is not None,
+            created=recovery.created if recovery is not None else None,
+        )
+
+    async def create_recovery_code(
+        self, context: AuthContext, current_password: str
+    ) -> RecoveryCodeResult:
+        if context.user.role == UserRole.service:
+            raise Forbidden("Service users do not use recovery codes.")
+        await self.verify_current_password(context, current_password)
+        code = recovery_code()
+        material = await wrap_key_material(
+            normalize_recovery_code(code) or "", context.key
+        )
+        user = await fetch_user(self.session, context.user.id)
+        vault = await fetch_vault(self.session)
+        if (
+            user is None
+            or not user.active
+            or vault is None
+            or not context.key.matches(
+                (await validate_vault_material(self.session, vault)).key_check
+            )
+        ):
+            raise SessionRequired(_SESSION_ENDED)
+        recovery = await self.session.get(UserRecoveryModel, user.id)
+        if recovery is None:
+            recovery = UserRecoveryModel(user_id=user.id)
+            self.session.add(recovery)
+        store_recovery_material(recovery, material)
+        self.session.add(
+            AccessAuditModel(
+                actor_user_id=user.id,
+                action="recovery_code_created",
+                resource_type="user",
+                resource_id=user.id,
+                target_user_id=user.id,
+            )
+        )
+        await self.session.flush()
+        return RecoveryCodeResult(
+            configured=True, created=recovery.created, recovery_code=code
+        )
+
+    async def revoke_recovery_code(
+        self, context: AuthContext, current_password: str
+    ) -> RecoveryStatus:
+        await self.verify_current_password(context, current_password)
+        recovery = await self.session.get(UserRecoveryModel, context.user.id)
+        if recovery is not None:
+            await self.session.delete(recovery)
+            self.session.add(
+                AccessAuditModel(
+                    actor_user_id=context.user.id,
+                    action="recovery_code_revoked",
+                    resource_type="user",
+                    resource_id=context.user.id,
+                    target_user_id=context.user.id,
+                )
+            )
+        return RecoveryStatus(configured=False)
+
+    async def recover_password(
+        self, username: str, supplied_code: str, new_password: str
+    ) -> RecoveryAuthResponse:
+        normalized = normalize_recovery_code(supplied_code)
+        user = await self.session.scalar(
+            select(UserModel).where(
+                UserModel.username == username,
+                UserModel.active.is_(True),
+                UserModel.role != UserRole.service,
+            )
+        )
+        recovery = (
+            await self.session.get(UserRecoveryModel, user.id)
+            if user is not None
+            else None
+        )
+        if normalized is None or recovery is None or user is None:
+            await self.session.commit()
+            await create_key_material(supplied_code)
+            return RecoveryAuthResponse(valid=False)
+        observed = user_key_material(
+            recovery
+        )  # Recovery storage uses KeyMaterial fields.
+        user_id = user.id
+        await self.session.commit()
+        key = await open_material(normalized, observed)
+        if key is None:
+            return RecoveryAuthResponse(valid=False)
+        replacement = await wrap_key_material(new_password, key)
+        next_code = recovery_code()
+        next_material = await wrap_key_material(
+            normalize_recovery_code(next_code) or "", key
+        )
+        current = await fetch_user(self.session, user_id)
+        current_recovery = await self.session.get(UserRecoveryModel, user_id)
+        vault = await fetch_vault(self.session)
+        canonical = (
+            await validate_vault_material(self.session, vault)
+            if vault is not None
+            else None
+        )
+        if (
+            current is None
+            or not current.active
+            or current.role == UserRole.service
+            or current_recovery is None
+            or user_key_material(current_recovery) != observed
+            or vault is None
+            or canonical is None
+            or not key.matches(canonical.key_check)
+        ):
+            return RecoveryAuthResponse(valid=False)
+        store_user_material(current, replacement)
+        current.must_change_password = False
+        if vault.owner_user_id == current.id:
+            _store(vault, replacement)
+        store_recovery_material(current_recovery, next_material)
+        self.session.add(
+            AccessAuditModel(
+                actor_user_id=current.id,
+                action="recovery_code_used",
+                resource_type="user",
+                resource_id=current.id,
+                target_user_id=current.id,
+            )
+        )
+        await self._refresh_timeout()
+        response = self._open_session(current, key)
+        token = response.session_token
+        assert token is not None
+        after_commit(
+            self.session,
+            lambda: self.vault_sessions.revoke_user_except(user_id, token),
+        )
+        return RecoveryAuthResponse(**response.model_dump(), recovery_code=next_code)
 
     async def delete_user(self, actor: AuthContext, user_id: int) -> None:
         user = await self._target(actor, user_id)

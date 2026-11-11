@@ -295,6 +295,101 @@ async function openMobileMenu(page, width, t) {
   await page.getByRole("button", { name: t.navigation.more, exact: true }).click();
 }
 
+async function axe(page) {
+  await page.addScriptTag({ path: axePath });
+  const violations = await page.evaluate(async () =>
+    (
+      await window.axe.run(document, {
+        runOnly: {
+          type: "tag",
+          values: ["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"],
+        },
+      })
+    ).violations.map(({ id, nodes }) => ({
+      id,
+      targets: nodes.map((node) => node.target),
+    }))
+  );
+  assert.deepEqual(violations, []);
+}
+
+for (const [width, language] of [
+  [320, "en"],
+  [375, "ru"],
+  [1440, "en"],
+]) {
+  test(`recovery login retains retry state and shows the replacement code once at ${width}px`, async () => {
+    const { context, page, t, errors } = await openPage(width, language, "/login", false, true);
+    const recoveryCode = "SYNTHETIC-RECOVERY-USED";
+    const replacementPassword = "Synthetic-Replacement-Only!2026";
+    const replacementCode = "SYNTHETIC-RECOVERY-REPLACEMENT";
+    let attempts = 0;
+    try {
+      await page.route("**/api/auth/recover", async (route) => {
+        attempts += 1;
+        assert.equal(route.request().method(), "POST");
+        assert.deepEqual(route.request().postDataJSON(), {
+          username: "synthetic-user",
+          recovery_code: recoveryCode,
+          new_password: replacementPassword,
+        });
+        if (attempts === 1)
+          return route.fulfill({
+            status: 403,
+            json: { detail: "Synthetic recovery rejected" },
+          });
+        return route.fulfill({
+          json: {
+            valid: true,
+            session_token: "synthetic-recovered-session",
+            user: { id: 1, username: "synthetic-user", role: "admin", active: true },
+            recovery_code: replacementCode,
+          },
+        });
+      });
+      const submit = page.getByRole("button", { name: t.auth.recoveryReset, exact: true });
+      await page.getByRole("button", { name: t.auth.useRecoveryCode, exact: true }).click();
+      const password = page.getByLabel(t.auth.newPassword, { exact: true });
+      await submit.click();
+      await password.waitFor();
+      assert.equal(
+        await password.evaluate((node) => node === document.activeElement),
+        true,
+        "client validation focuses the missing recovery submission field"
+      );
+      assert.equal(attempts, 0, "client validation must not consume a recovery attempt");
+
+      const username = page.locator('input[autocomplete="username"]');
+      const code = page.getByLabel(t.auth.recoveryCode, { exact: true });
+      const confirm = page.getByLabel(t.auth.confirmMasterPassword, { exact: true });
+      await username.fill("synthetic-user");
+      await code.fill(recoveryCode);
+      await password.fill(replacementPassword);
+      await confirm.fill(replacementPassword);
+      await submit.click();
+      await page.getByText("Synthetic recovery rejected", { exact: true }).waitFor();
+      assert.equal(await code.inputValue(), recoveryCode);
+      assert.equal(await password.inputValue(), replacementPassword);
+      assert.equal(await confirm.inputValue(), replacementPassword);
+
+      await submit.click();
+      await page.getByText(replacementCode, { exact: false }).waitFor();
+      assert.match(page.url(), /\/login$/);
+      assert.equal((await page.locator("body").textContent()).includes(replacementPassword), false);
+      await fits(page);
+      await axe(page);
+
+      await page.getByRole("button", { name: t.auth.recoveryContinue, exact: true }).click();
+      await page.waitForURL("**/passwords");
+      assert.equal(await page.getByText(replacementCode, { exact: false }).count(), 0);
+      assert.equal(attempts, 2);
+      assert.deepEqual(errors, []);
+    } finally {
+      await context.close();
+    }
+  });
+}
+
 for (const [width, language] of [
   [320, "en"],
   [375, "ru"],

@@ -82,6 +82,19 @@ const en = {
     newPassword: "New password",
     changePassword: "Change password",
     changePasswordTitle: "Change your password",
+    recoveryTitle: "Recovery code",
+    recoveryDescription:
+      "A recovery code can reset your password. It is shown once; store it offline.",
+    recoveryCreate: "Create recovery code",
+    recoveryReplace: "Replace recovery code",
+    recoveryRevoke: "Revoke recovery code",
+    recoverySaveCode: "Save this new recovery code now:",
+    recoveryCode: "Recovery code",
+    recoveryResetTitle: "Reset your password",
+    recoveryReset: "Reset password",
+    recoveryContinue: "Continue to vault",
+    useRecoveryCode: "Use a recovery code",
+    backToLogin: "Back to sign in",
     passwordChangeReminder: "An administrator has requested a password change.",
 
     validation: {
@@ -89,6 +102,7 @@ const en = {
 
       enterUsername: "Enter your username.",
       enterPasswordChange: "Enter your current and new passwords.",
+      enterRecovery: "Enter your username, recovery code, and matching new passwords.",
       enterNewMasterPassword: "Set an administrator password.",
       passwordsDoNotMatch: "The passwords do not match.",
       weakPassword: "Use at least 12 characters and a mix of character types.",

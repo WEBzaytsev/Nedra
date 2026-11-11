@@ -82,6 +82,19 @@ const ru = {
     newPassword: "Новый пароль",
     changePassword: "Сменить пароль",
     changePasswordTitle: "Смените пароль",
+    recoveryTitle: "Код восстановления",
+    recoveryDescription:
+      "Код восстановления позволяет сменить пароль. Он показывается один раз — сохраните его офлайн.",
+    recoveryCreate: "Создать код восстановления",
+    recoveryReplace: "Заменить код восстановления",
+    recoveryRevoke: "Отозвать код восстановления",
+    recoverySaveCode: "Сохраните новый код восстановления сейчас:",
+    recoveryCode: "Код восстановления",
+    recoveryResetTitle: "Смените пароль",
+    recoveryReset: "Сменить пароль",
+    recoveryContinue: "Перейти в хранилище",
+    useRecoveryCode: "Использовать код восстановления",
+    backToLogin: "Назад ко входу",
     passwordChangeReminder: "Администратор просит сменить текущий пароль.",
 
     validation: {
@@ -89,6 +102,7 @@ const ru = {
 
       enterUsername: "Введите имя пользователя.",
       enterPasswordChange: "Введите текущий и новый пароли.",
+      enterRecovery: "Введите имя пользователя, код восстановления и совпадающие новые пароли.",
       enterNewMasterPassword: "Задайте пароль администратора.",
       passwordsDoNotMatch: "Пароли не совпадают.",
       weakPassword: "Используйте не менее 12 символов разных типов.",

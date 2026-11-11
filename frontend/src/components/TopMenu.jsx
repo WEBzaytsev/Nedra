@@ -43,6 +43,7 @@ import { getCurrentUser } from "../utils";
 
 import BrandMark from "./BrandMark";
 import PasswordChangeDialog from "./PasswordChangeDialog";
+import RecoveryCodeDialog from "./RecoveryCodeDialog";
 import SettingsModal from "./SettingsModal";
 import UpdateDialog from "./UpdateDialog";
 
@@ -85,6 +86,7 @@ const TopMenu = () => {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
+  const [recoveryOpen, setRecoveryOpen] = useState(false);
   const [updateOpen, setUpdateOpen] = useState(false);
   const mobileMenuButton = useRef(null);
   const utilityReturnTarget = useRef(null);
@@ -134,6 +136,11 @@ const TopMenu = () => {
       return;
     }
     setPasswordOpen(true);
+  };
+  const openRecovery = (event) => {
+    rememberUtilityTrigger(event);
+    closeMobileNav();
+    setRecoveryOpen(true);
   };
   const openUpdate = (event) => {
     rememberUtilityTrigger(event);
@@ -194,6 +201,7 @@ const TopMenu = () => {
       ? [{ id: "settings", label: t("topMenu.settings"), icon: Gear, action: openSettings }]
       : []),
     { id: "password", label: t("auth.changePassword"), icon: Key, action: openPassword },
+    { id: "recovery", label: t("auth.recoveryTitle"), icon: Key, action: openRecovery },
     ...(updateAvailable
       ? [
           {
@@ -434,6 +442,7 @@ const TopMenu = () => {
 
       {admin && <SettingsModal open={settingsOpen} onClose={() => closeUtility(setSettingsOpen)} />}
       <PasswordChangeDialog open={passwordOpen} onClose={() => closeUtility(setPasswordOpen)} />
+      <RecoveryCodeDialog open={recoveryOpen} onClose={() => closeUtility(setRecoveryOpen)} />
       <UpdateDialog open={updateOpen} onClose={() => closeUtility(setUpdateOpen)} />
     </>
   );

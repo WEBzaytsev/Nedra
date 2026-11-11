@@ -27,6 +27,8 @@ const LoginPage = () => {
   const { t, i18n } = useTranslation();
   const { state } = useLocation();
   const [acknowledged, setAcknowledged] = useState(false);
+  const [recovering, setRecovering] = useState(false);
+  const [recoveryCode, setRecoveryCode] = useState("");
   const [notice, setNotice] = useState("");
   const usernameRef = useRef(null);
   const passwordRef = useRef(null);
@@ -38,11 +40,25 @@ const LoginPage = () => {
     ref?.current?.focus();
   };
 
-  const { fetchStatus, authenticate, setUsername, setValue, setConfirm, setError } =
-    useStoreActions((actions) => actions.ciphermothModels.masterPassword);
-  const { initialized, error, username, value, confirm, loading } = useStoreState(
-    (storeState) => storeState.ciphermothModels.masterPassword
-  );
+  const {
+    fetchStatus,
+    authenticate,
+    recover,
+    continueRecovery,
+    setUsername,
+    setValue,
+    setConfirm,
+    setError,
+  } = useStoreActions((actions) => actions.ciphermothModels.masterPassword);
+  const {
+    initialized,
+    error,
+    username,
+    value,
+    confirm,
+    loading,
+    recoveryCode: issuedRecoveryCode,
+  } = useStoreState((storeState) => storeState.ciphermothModels.masterPassword);
 
   useEffect(() => {
     fetchStatus();
@@ -96,7 +112,48 @@ const LoginPage = () => {
     });
   };
 
+  const handleRecovery = () => {
+    if (!username.trim() || !recoveryCode.trim() || !value || value !== confirm) {
+      reportError(t("auth.validation.enterRecovery"), "recovery", passwordRef);
+      return;
+    }
+    if (getMasterPasswordStrength(value).value < 70) {
+      reportError(t("auth.validation.weakPassword"), "password", passwordRef);
+      return;
+    }
+    recover({ username, recoveryCode, password: value, returnTo: state?.returnTo });
+  };
+
   if (initialized === null) return <LoadingScreen />;
+
+  if (issuedRecoveryCode)
+    return (
+      <Container
+        maxWidth="440px"
+        gutters="spacing-3"
+        paddingBlock={{ xs: "spacing-6", m: "spacing-10" }}
+      >
+        <Card view="outlined">
+          <Flex direction="column" gap="spacing-5" padding={{ xs: "spacing-4", s: "spacing-6" }}>
+            <Box as="h1" margin="0">
+              <Text variant="header-1">{t("auth.recoveryTitle")}</Text>
+            </Box>
+            <Alert
+              message={`${t("auth.recoverySaveCode")} ${issuedRecoveryCode}`}
+              theme="warning"
+            />
+            <Button
+              onClick={() => continueRecovery(state?.returnTo)}
+              size="xl"
+              view="action"
+              width="max"
+            >
+              {t("auth.recoveryContinue")}
+            </Button>
+          </Flex>
+        </Card>
+      </Container>
+    );
 
   return (
     <Container
@@ -113,7 +170,8 @@ const LoginPage = () => {
           noValidate
           onSubmit={(event) => {
             event.preventDefault();
-            if (!loading) (initialized ? handleLogin : handleCreate)();
+            if (!loading)
+              (recovering ? handleRecovery : initialized ? handleLogin : handleCreate)();
           }}
         >
           <Flex alignItems="center" justifyContent="space-between" gap="spacing-2">
@@ -129,7 +187,15 @@ const LoginPage = () => {
             </Flex>
           </Flex>
           <Box as="h1" margin="0">
-            <Text variant="header-1">{t(initialized ? "auth.unlock" : "auth.setupTitle")}</Text>
+            <Text variant="header-1">
+              {t(
+                recovering
+                  ? "auth.recoveryResetTitle"
+                  : initialized
+                    ? "auth.unlock"
+                    : "auth.setupTitle"
+              )}
+            </Text>
           </Box>
           {!initialized && <Text color="secondary">{t("auth.setupDescription")}</Text>}
           {notice && <Alert theme="info" message={notice} />}
@@ -169,8 +235,19 @@ const LoginPage = () => {
               </Text>
             )}
           </Flex>
+          {recovering && (
+            <PasswordField
+              label={t("auth.recoveryCode")}
+              required
+              value={recoveryCode}
+              disabled={loading}
+              onUpdate={setRecoveryCode}
+              autoComplete="off"
+              controlProps={{ "aria-label": t("auth.recoveryCode") }}
+            />
+          )}
           <PasswordField
-            label={t("auth.masterPassword")}
+            label={t(recovering ? "auth.newPassword" : "auth.masterPassword")}
             controlRef={passwordRef}
             validationState={error && invalidField === "password" ? "invalid" : undefined}
             errorMessage={invalidField === "password" ? error : undefined}
@@ -184,7 +261,9 @@ const LoginPage = () => {
               setInvalidField("");
             }}
             autoComplete={initialized ? "current-password" : "new-password"}
-            controlProps={{ "aria-label": t("auth.masterPassword") }}
+            controlProps={{
+              "aria-label": t(recovering ? "auth.newPassword" : "auth.masterPassword"),
+            }}
           />
           {!initialized && value && strength && (
             <Flex direction="column" gap="spacing-2" aria-live="polite">
@@ -192,7 +271,7 @@ const LoginPage = () => {
               <Text color="secondary">{t(strength.labelKey)}</Text>
             </Flex>
           )}
-          {!initialized && (
+          {(recovering || !initialized) && (
             <>
               <PasswordField
                 label={t("auth.confirmMasterPassword")}
@@ -231,8 +310,21 @@ const LoginPage = () => {
             loading={loading}
             disabled={!initialized && !acknowledged}
           >
-            {t(initialized ? "auth.unlock" : "auth.create")}
+            {t(recovering ? "auth.recoveryReset" : initialized ? "auth.unlock" : "auth.create")}
           </Button>
+          {initialized && (
+            <Button
+              disabled={loading}
+              onClick={() => {
+                setRecovering(!recovering);
+                setError(null);
+                setInvalidField("");
+              }}
+              view="flat"
+            >
+              {t(recovering ? "auth.backToLogin" : "auth.useRecoveryCode")}
+            </Button>
+          )}
           <Text color="secondary" variant="caption-2">
             {t("auth.closeLocks")}
           </Text>

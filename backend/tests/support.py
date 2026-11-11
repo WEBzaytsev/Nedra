@@ -64,6 +64,7 @@ async def reset_vault() -> None:
     async with engine.begin() as conn:
         for table in (
             "attachments",
+            "user_recovery",
             "entry_access",
             "folder_user_access",
             "folder_group_access",

@@ -211,6 +211,60 @@ describe("authenticate", () => {
   });
 });
 
+describe("recover", () => {
+  it("keeps the replacement code transient until the user continues", async () => {
+    const { actions, state: current } = build({
+      "POST /auth/recover": [
+        200,
+        {
+          valid: true,
+          session_token: TOKEN,
+          user: USER,
+          recovery_code: "SYNTHETIC-RECOVERY-CODE-ONLY",
+        },
+      ],
+    });
+
+    await actions.recover({
+      username: USER.username,
+      recoveryCode: "SYNTHETIC-RECOVERY-CODE",
+      password: "Synthetic-Replacement-Only!2026",
+      returnTo: "/users?view=accounts",
+    });
+
+    expect(getSessionToken()).toBe(TOKEN);
+    expect(current().recoveryCode).toBe("SYNTHETIC-RECOVERY-CODE-ONLY");
+    expect(browser.location.replace).not.toHaveBeenCalled();
+    expect(JSON.parse(seen[0].data)).toEqual({
+      username: USER.username,
+      recovery_code: "SYNTHETIC-RECOVERY-CODE",
+      new_password: "Synthetic-Replacement-Only!2026",
+    });
+
+    await actions.continueRecovery("/users?view=accounts");
+
+    expect(current().recoveryCode).toBeNull();
+    expect(browser.location.replace).toHaveBeenCalledWith("/users?view=accounts");
+  });
+
+  it("does not unlock or retain a code when recovery is rejected", async () => {
+    const { actions, state: current } = build({
+      "POST /auth/recover": [200, { valid: false, session_token: null, user: null }],
+    });
+
+    await actions.recover({
+      username: USER.username,
+      recoveryCode: "SYNTHETIC-RECOVERY-CODE",
+      password: "Synthetic-Replacement-Only!2026",
+    });
+
+    expect(isAuth()).toBe(false);
+    expect(current().recoveryCode).toBeNull();
+    expect(current().error).toBe("Invalid username or password.");
+    expect(browser.location.replace).not.toHaveBeenCalled();
+  });
+});
+
 describe("status", () => {
   it("reports whether account bootstrap has completed", async () => {
     const { actions, state: current } = build({

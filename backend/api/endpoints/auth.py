@@ -18,6 +18,11 @@ from schemas import (
     AuthUser,
     EntryDraftKey,
     PasswordChangePayload,
+    RecoverPasswordPayload,
+    RecoveryAuthResponse,
+    RecoveryCodePayload,
+    RecoveryCodeResult,
+    RecoveryStatus,
     SimpleDetailSchema,
 )
 
@@ -43,6 +48,16 @@ async def login(request: Request, body: AuthPayload, crud: AuthCRUDDep) -> AuthR
     return await crud.login(body.username, body.password)
 
 
+@router.post("/recover", response_model=RecoveryAuthResponse)
+@limiter.limit(rate("10/hour"))
+async def recover_password(
+    request: Request, body: RecoverPasswordPayload, crud: AuthCRUDDep
+) -> RecoveryAuthResponse:
+    return await crud.recover_password(
+        body.username, body.recovery_code, body.new_password
+    )
+
+
 @router.get("/me", response_model=AuthUser)
 async def me(context: PasswordChangeContextDep, crud: AuthCRUDDep) -> AuthUser:
     return crud.to_user(context.user)
@@ -54,6 +69,35 @@ async def logout(
 ) -> SimpleDetailSchema:
     vault_sessions.revoke(credential.token)
     return SimpleDetailSchema(detail="Logged out.")
+
+
+@router.get("/recovery", response_model=RecoveryStatus)
+async def recovery_status(
+    context: PasswordChangeContextDep, crud: AuthCRUDDep
+) -> RecoveryStatus:
+    return await crud.recovery_status(context)
+
+
+@router.post("/recovery", response_model=RecoveryCodeResult)
+@limiter.limit(rate("10/hour"))
+async def create_recovery_code(
+    request: Request,
+    body: RecoveryCodePayload,
+    context: PasswordChangeContextDep,
+    crud: AuthCRUDDep,
+) -> RecoveryCodeResult:
+    return await crud.create_recovery_code(context, body.current_password)
+
+
+@router.delete("/recovery", response_model=RecoveryStatus)
+@limiter.limit(rate("10/hour"))
+async def revoke_recovery_code(
+    request: Request,
+    body: RecoveryCodePayload,
+    context: PasswordChangeContextDep,
+    crud: AuthCRUDDep,
+) -> RecoveryStatus:
+    return await crud.revoke_recovery_code(context, body.current_password)
 
 
 @router.get("/entry-draft-key", response_model=EntryDraftKey)

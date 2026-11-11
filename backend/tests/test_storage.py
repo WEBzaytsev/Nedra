@@ -60,6 +60,28 @@ def _pragma(path: Path, name: str) -> object:
         return connection.execute(f"PRAGMA {name}").fetchone()[0]
 
 
+def _database_state(
+    path: Path,
+) -> tuple[object, list[tuple[object, ...]], dict[str, list[tuple[object, ...]]]]:
+    with closing(sqlite3.connect(path)) as connection:
+        schema = connection.execute(
+            "SELECT type, name, tbl_name, sql FROM sqlite_schema "
+            "WHERE name NOT LIKE 'sqlite_%' ORDER BY type, name"
+        ).fetchall()
+        contents = {
+            name: connection.execute(
+                f'SELECT * FROM "{name}" ORDER BY rowid'
+            ).fetchall()
+            for kind, name, _, _ in schema
+            if kind == "table"
+        }
+        return (
+            connection.execute("PRAGMA user_version").fetchone()[0],
+            schema,
+            contents,
+        )
+
+
 def _mode(path: Path) -> int:
     return stat.S_IMODE(path.stat().st_mode)
 
@@ -108,6 +130,7 @@ async def test_schema_two_user_migration_snapshot_bootstrap_and_rollback(
         connection.executescript(
             """
             DROP TABLE access_audit;
+            DROP TABLE user_recovery;
             DROP TABLE folder_group_access;
             DROP TABLE folder_user_access;
             DROP TABLE group_members;
@@ -238,6 +261,7 @@ async def test_schema_three_folder_migration_links_encrypted_legacy_names(
         connection.executescript(
             """
             DROP TABLE access_audit;
+            DROP TABLE user_recovery;
             DROP TABLE folder_group_access;
             DROP TABLE folder_user_access;
             DROP TABLE group_members;
@@ -355,6 +379,7 @@ async def test_schema_four_service_permission_migration_disables_existing_tokens
     )
     with closing(sqlite3.connect(vault)) as connection:
         connection.execute("PRAGMA foreign_keys=OFF")
+        connection.execute("DROP TABLE user_recovery")
         connection.execute(
             "CREATE TABLE users_legacy AS SELECT " + user_columns + " FROM users"
         )
@@ -415,6 +440,56 @@ async def test_schema_four_service_permission_migration_disables_existing_tokens
         assert connection.execute(
             "SELECT service_operations FROM users WHERE username = 'assistant'"
         ).fetchone() == (0,)
+
+
+@pytest.mark.asyncio
+async def test_schema_five_recovery_migration_is_checked_and_keeps_login(
+    tmp_path: Path,
+) -> None:
+    folder = tmp_path / "schema-five"
+    async with client_for_data_dir(folder) as client:
+        assert await create_vault(client)
+    vault = folder / VAULT_FILE
+    with closing(sqlite3.connect(vault)) as connection:
+        connection.execute("DROP TABLE user_recovery")
+        connection.execute(f"PRAGMA user_version={storage.RECOVERY_SCHEMA_VERSION}")
+        connection.commit()
+
+    snapshot = storage.migrate_recovery(folder)
+    assert snapshot.is_file()
+    assert check_file(vault) == []
+    with closing(sqlite3.connect(vault)) as connection:
+        assert connection.execute("PRAGMA user_version").fetchone() == (SCHEMA_VERSION,)
+        assert connection.execute(
+            "SELECT name FROM sqlite_schema "
+            "WHERE type = 'table' AND name = 'user_recovery'"
+        ).fetchone() == ("user_recovery",)
+
+    async with client_for_data_dir(folder) as client:
+        logged_in = await client.post(
+            "/auth/login", json={"username": "admin", "password": MASTER_PASSWORD}
+        )
+        assert logged_in.json()["valid"] is True
+
+
+@pytest.mark.asyncio
+async def test_recovery_migration_rejects_unknown_crypto_format_without_writing(
+    tmp_path: Path,
+) -> None:
+    folder = tmp_path / "schema-five-unsupported-format"
+    async with client_for_data_dir(folder) as client:
+        assert await create_vault(client)
+    vault = folder / VAULT_FILE
+    with closing(sqlite3.connect(vault)) as connection:
+        connection.execute("DROP TABLE user_recovery")
+        connection.execute(f"PRAGMA user_version={storage.RECOVERY_SCHEMA_VERSION}")
+        connection.execute("UPDATE vault SET format_version = 0")
+        connection.commit()
+
+    before = _database_state(vault)
+    with pytest.raises(StorageError, match="unsupported vault format"):
+        storage.migrate_recovery(folder)
+    assert _database_state(vault) == before
 
 
 async def _names(client: httpx.AsyncClient, password: str) -> list[str]:

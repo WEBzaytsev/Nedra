@@ -26,6 +26,7 @@ PUBLIC_ROUTES = {
     ("GET", "/api/auth/status"),
     ("POST", "/api/auth/bootstrap"),
     ("POST", "/api/auth/login"),
+    ("POST", "/api/auth/recover"),
     ("GET", "/api/master_password/status"),
     ("POST", "/api/master_password/unlock"),
     ("POST", "/api/master_password/lock"),
@@ -51,6 +52,13 @@ def _alpha() -> dict:
 
 
 PROTECTED_ROUTES: dict[tuple[str, str], Spec] = {
+    ("GET", "/api/auth/recovery"): lambda c, h, x: c.get("/auth/recovery", headers=h),
+    ("POST", "/api/auth/recovery"): lambda c, h, x: c.post(
+        "/auth/recovery", json={"current_password": "wrong"}, headers=h
+    ),
+    ("DELETE", "/api/auth/recovery"): lambda c, h, x: c.request(
+        "DELETE", "/auth/recovery", json={"current_password": "wrong"}, headers=h
+    ),
     ("GET", "/api/auth/entry-draft-key"): lambda c, h, x: c.get(
         "/auth/entry-draft-key", headers=h
     ),
@@ -341,6 +349,8 @@ PROTECTED_ROUTES: dict[tuple[str, str], Spec] = {
 ROUTE_IDS = [f"{method} {path}" for method, path in PROTECTED_ROUTES]
 REACHED = {
     ("PUT", "/api/auth/password"): 403,
+    ("POST", "/api/auth/recovery"): 403,
+    ("DELETE", "/api/auth/recovery"): 403,
     ("DELETE", "/api/passwords/{entry_id}/access"): 403,
     ("DELETE", "/api/vault/damaged/{kind}/{row_id}"): 400,
     ("POST", "/api/folders"): 201,
