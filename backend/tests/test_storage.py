@@ -325,6 +325,98 @@ async def test_schema_three_folder_migration_links_encrypted_legacy_names(
         assert connection.execute("SELECT count(*) FROM folders").fetchone() == (1,)
 
 
+async def test_schema_four_service_permission_migration_disables_existing_tokens(
+    tmp_path: Path,
+) -> None:
+    folder = tmp_path / "schema-four"
+    async with client_for_data_dir(folder) as client:
+        bootstrapped = await client.post(
+            "/auth/bootstrap",
+            json={"username": "owner", "password": MASTER_PASSWORD},
+        )
+        assert bootstrapped.status_code == 200, bootstrapped.text
+        headers = auth(bootstrapped.json()["session_token"])
+        service = await client.post(
+            "/users",
+            json={
+                "username": "assistant",
+                "role": "service",
+                "current_password": MASTER_PASSWORD,
+            },
+            headers=headers,
+        )
+        assert service.status_code == 200, service.text
+
+    vault = folder / VAULT_FILE
+    user_columns = (
+        "id, created, updated, username, role, active, must_change_password, "
+        "service_owner_id, service_token_hash, kdf, kdf_memory_kib, "
+        "kdf_iterations, kdf_lanes, kdf_salt, password_check, wrapped_key, key_check"
+    )
+    with closing(sqlite3.connect(vault)) as connection:
+        connection.execute("PRAGMA foreign_keys=OFF")
+        connection.execute(
+            "CREATE TABLE users_legacy AS SELECT " + user_columns + " FROM users"
+        )
+        connection.execute("DROP TABLE users")
+        connection.execute(
+            """
+            CREATE TABLE users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                username VARCHAR(64) NOT NULL UNIQUE,
+                role VARCHAR(16) NOT NULL,
+                active BOOLEAN NOT NULL DEFAULT 1,
+                must_change_password BOOLEAN NOT NULL DEFAULT 0,
+                service_owner_id INTEGER REFERENCES users(id) ON DELETE RESTRICT,
+                service_token_hash BLOB UNIQUE,
+                kdf VARCHAR NOT NULL,
+                kdf_memory_kib INTEGER NOT NULL,
+                kdf_iterations INTEGER NOT NULL,
+                kdf_lanes INTEGER NOT NULL,
+                kdf_salt BLOB NOT NULL,
+                password_check BLOB NOT NULL,
+                wrapped_key BLOB NOT NULL,
+                key_check BLOB NOT NULL,
+                CONSTRAINT ck_users_role CHECK (role IN ('admin', 'member', 'service')),
+                CONSTRAINT ck_users_salt CHECK (length(kdf_salt) = 16),
+                CONSTRAINT ck_users_password_check CHECK (length(password_check) = 32),
+                CONSTRAINT ck_users_key_check CHECK (length(key_check) = 32)
+            )
+            """
+        )
+        connection.execute(
+            "INSERT INTO users ("
+            + user_columns
+            + ") SELECT "
+            + user_columns
+            + " FROM users_legacy"
+        )
+        connection.execute("DROP TABLE users_legacy")
+        connection.execute(
+            "CREATE INDEX ix_users_service_owner_id ON users(service_owner_id)"
+        )
+        connection.execute(
+            f"PRAGMA user_version={storage.SERVICE_PERMISSIONS_SCHEMA_VERSION}"
+        )
+        connection.commit()
+
+    snapshot = storage.migrate_service_permissions(folder)
+    assert (
+        _pragma(snapshot, "user_version") == storage.SERVICE_PERMISSIONS_SCHEMA_VERSION
+    )
+    assert _pragma(vault, "user_version") == SCHEMA_VERSION
+    assert check_file(vault) == []
+    with closing(sqlite3.connect(snapshot)) as connection:
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(users)")}
+        assert "service_operations" not in columns
+    with closing(sqlite3.connect(vault)) as connection:
+        assert connection.execute(
+            "SELECT service_operations FROM users WHERE username = 'assistant'"
+        ).fetchone() == (0,)
+
+
 async def _names(client: httpx.AsyncClient, password: str) -> list[str]:
     resp = await client.get("/passwords", headers=auth(await unlock(client, password)))
     assert resp.status_code == 200, resp.text

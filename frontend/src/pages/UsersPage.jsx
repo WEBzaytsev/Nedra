@@ -33,7 +33,13 @@ import { getCurrentUser } from "../utils";
 import TaskSurface from "../components/TaskSurface";
 import useTaskRoute from "../hooks/useTaskRoute";
 
-const EMPTY_FORM = { username: "", temporary_password: "", role: "member" };
+const EMPTY_FORM = {
+  username: "",
+  temporary_password: "",
+  current_password: "",
+  role: "member",
+};
+const SERVICE_OPERATIONS = ["list", "get", "create", "update", "delete", "relinquish"];
 
 const UsersPage = () => {
   const { t } = useTranslation();
@@ -44,8 +50,16 @@ const UsersPage = () => {
   const { notify } = useNotify();
   const copy = useClipboard();
   const users = useStoreState((state) => state.ciphermothModels.users.users);
-  const { get, create, update, revokeSessions, resetPassword, rotateServiceToken, remove } =
-    useStoreActions((actions) => actions.ciphermothModels.users);
+  const {
+    get,
+    create,
+    update,
+    revokeSessions,
+    resetPassword,
+    rotateServiceToken,
+    updateServiceOperations,
+    remove,
+  } = useStoreActions((actions) => actions.ciphermothModels.users);
   const currentUserId = getCurrentUser()?.id;
   const [form, setForm] = useState(EMPTY_FORM);
   const [busy, setBusy] = useState(false);
@@ -54,6 +68,9 @@ const UsersPage = () => {
   const [serviceToken, setServiceToken] = useState("");
   const [resetTarget, setResetTarget] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [serviceConfigTarget, setServiceConfigTarget] = useState(null);
+  const [serviceOperations, setServiceOperations] = useState([]);
+  const [servicePassword, setServicePassword] = useState("");
   const [desktopFolderTarget, setFolderAccessTarget] = useState(null);
   const [desktopGroupsOpen, setGroupsOpen] = useState(false);
   const folderAccessTarget =
@@ -66,6 +83,7 @@ const UsersPage = () => {
   const [temporaryPassword, setTemporaryPassword] = useState("");
   const [temporaryPasswordError, setTemporaryPasswordError] = useState(false);
   const temporaryPasswordRef = useRef(null);
+  const servicePasswordRef = useRef(null);
   const createFormId = useId();
 
   const closeUserAction = (setter, target) => {
@@ -118,7 +136,18 @@ const UsersPage = () => {
       temporaryPasswordRef.current?.focus();
       return;
     }
-    const payload = form.role === "service" ? { username: form.username, role: form.role } : form;
+    if (form.role === "service" && !form.current_password) {
+      servicePasswordRef.current?.focus();
+      return;
+    }
+    const payload =
+      form.role === "service"
+        ? { username: form.username, role: form.role, current_password: form.current_password }
+        : {
+            username: form.username,
+            role: form.role,
+            temporary_password: form.temporary_password,
+          };
     const created = await run(() => create(payload), t("users.messages.created"));
     if (!created) return;
     setServiceToken(created.service_token || "");
@@ -136,9 +165,38 @@ const UsersPage = () => {
     setTemporaryPassword("");
   };
 
-  const rotateToken = async (user) => {
-    const token = await run(() => rotateServiceToken(user.id), t("users.messages.tokenRotated"));
+  const saveServiceOperations = async () => {
+    const saved = await run(
+      () =>
+        updateServiceOperations({
+          userId: serviceConfigTarget.id,
+          operations: serviceOperations,
+          currentPassword: servicePassword,
+        }),
+      t("users.messages.serviceOperationsUpdated")
+    );
+    if (!saved) return;
+    setServicePassword("");
+    setServiceConfigTarget(null);
+  };
+
+  const rotateToken = async () => {
+    const token = await run(
+      () =>
+        rotateServiceToken({
+          userId: serviceConfigTarget.id,
+          currentPassword: servicePassword,
+        }),
+      t("users.messages.tokenRotated")
+    );
     if (token) setServiceToken(token);
+    setServicePassword("");
+  };
+
+  const openServiceConfig = (user) => {
+    setServiceConfigTarget(user);
+    setServiceOperations(user.service_operations || []);
+    setServicePassword("");
   };
 
   const deleteUser = async () => {
@@ -269,6 +327,20 @@ const UsersPage = () => {
                             ? t("users.serviceAccount")
                             : t("users.interactiveAccount")}
                       </Text>
+                      {user.role === "service" && (
+                        <Text
+                          as="small"
+                          variant="caption-2"
+                          color="secondary"
+                          wordBreak="break-word"
+                        >
+                          {(user.service_operations || []).length
+                            ? t("users.serviceOperationsSummary", {
+                                operations: user.service_operations.join(", "),
+                              })
+                            : t("users.serviceDisabled")}
+                        </Text>
+                      )}
                     </Flex>
                     <Flex
                       direction={{ xs: "column", m: "row" }}
@@ -355,8 +427,8 @@ const UsersPage = () => {
                               {t("folderAccess.manage")}
                             </MenuItem>
                             {user.role === "service" ? (
-                              <MenuItem disabled={busy} onClick={() => rotateToken(user)}>
-                                {t("users.rotateToken")}
+                              <MenuItem disabled={busy} onClick={() => openServiceConfig(user)}>
+                                {t("users.configureService")}
                               </MenuItem>
                             ) : (
                               <MenuItem
@@ -444,7 +516,25 @@ const UsersPage = () => {
                     />
                   </Flex>
                   {form.role === "service" ? (
-                    <Flex direction="column" gap="spacing-3" minWidth="0" />
+                    <Flex direction="column" gap="spacing-3" minWidth="0">
+                      <Text color="secondary" wordBreak="break-word">
+                        {t("users.servicePasswordConfirmation")}
+                      </Text>
+                      <PasswordField
+                        label={t("auth.currentPassword")}
+                        size="xl"
+                        controlRef={servicePasswordRef}
+                        value={form.current_password}
+                        disabled={busy}
+                        onChange={(event) =>
+                          setForm((current) => ({
+                            ...current,
+                            current_password: event.target.value,
+                          }))
+                        }
+                        autoComplete="current-password"
+                      />
+                    </Flex>
                   ) : (
                     <PasswordField
                       label={t("users.temporaryPassword")}
@@ -483,6 +573,7 @@ const UsersPage = () => {
                         ...current,
                         role,
                         temporary_password: role === "service" ? "" : current.temporary_password,
+                        current_password: role === "service" ? current.current_password : "",
                       }));
                       setTemporaryPasswordError(false);
                     }}
@@ -552,6 +643,76 @@ const UsersPage = () => {
           />
         </TaskSurface>
       )}
+
+      <Dialog
+        aria-label={t("users.configureServiceFor", { username: serviceConfigTarget?.username })}
+        fullWidth
+        maxWidth="s"
+        open={Boolean(serviceConfigTarget)}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen && !busy) {
+            setServiceConfigTarget(null);
+            setServicePassword("");
+          }
+        }}
+      >
+        <Dialog.Header
+          caption={t("users.configureServiceFor", { username: serviceConfigTarget?.username })}
+        />
+        <Dialog.Body>
+          <Flex direction="column" gap="spacing-5" minWidth="0">
+            <Text as="div" color="secondary" wordBreak="break-word">
+              {t("users.serviceOperationsDescription")}
+            </Text>
+            <Flex direction="column" gap="spacing-3" minWidth="0">
+              {SERVICE_OPERATIONS.map((operation) => (
+                <Switch
+                  key={operation}
+                  size="m"
+                  checked={serviceOperations.includes(operation)}
+                  disabled={busy}
+                  onUpdate={(enabled) =>
+                    setServiceOperations((current) =>
+                      enabled
+                        ? [...current, operation]
+                        : current.filter((candidate) => candidate !== operation)
+                    )
+                  }
+                >
+                  {t(`users.serviceOperations.${operation}`)}
+                </Switch>
+              ))}
+            </Flex>
+            <PasswordField
+              label={t("auth.currentPassword")}
+              value={servicePassword}
+              disabled={busy}
+              onChange={(event) => setServicePassword(event.target.value)}
+              autoComplete="current-password"
+            />
+            <Button
+              type="button"
+              view="outlined"
+              disabled={busy || !servicePassword}
+              loading={busy}
+              onClick={rotateToken}
+            >
+              {t("users.rotateToken")}
+            </Button>
+          </Flex>
+        </Dialog.Body>
+        <Dialog.Footer
+          onClickButtonApply={saveServiceOperations}
+          onClickButtonCancel={() => {
+            setServiceConfigTarget(null);
+            setServicePassword("");
+          }}
+          textButtonApply={t("common.actions.save")}
+          textButtonCancel={t("common.actions.cancel")}
+          propsButtonApply={{ disabled: busy || !servicePassword, loading: busy, view: "action" }}
+          propsButtonCancel={{ disabled: busy }}
+        />
+      </Dialog>
 
       <Dialog
         aria-label={t("users.resetPasswordFor", { username: resetTarget?.username })}

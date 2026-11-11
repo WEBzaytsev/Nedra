@@ -674,6 +674,22 @@ Object.assign(en.users, {
   resetPasswordDescription:
     "This ends the user's current sessions and requires them to change the temporary password at login.",
   deleteConfirm: "Delete {{username}}?",
+  configureService: "Configure MCP access",
+  configureServiceFor: "MCP access for {{username}}",
+  servicePasswordConfirmation:
+    "Confirm your current administrator password to issue this bearer token.",
+  serviceOperationsDescription:
+    "Choose the MCP operations this service may request. Entry and folder access still apply to every call.",
+  serviceOperationsSummary: "MCP: {{operations}}",
+  serviceDisabled: "MCP disabled until operations are explicitly allowed",
+  serviceOperations: {
+    list: "List entry metadata",
+    get: "Read entry details",
+    create: "Create entries",
+    update: "Update entries",
+    delete: "Move entries to Trash",
+    relinquish: "Relinquish direct entry access",
+  },
 });
 Object.assign(en.users.messages, {
   passwordReset: "Temporary password set. Active sessions ended.",
@@ -682,6 +698,7 @@ Object.assign(en.users.messages, {
   statusUpdated: "Account status saved.",
   sessionsRevoked: "Active sessions ended.",
   deleted: "User deleted.",
+  serviceOperationsUpdated: "MCP operations updated.",
 });
 en.folderAccess = {
   title: "Folder access",
@@ -761,6 +778,7 @@ Object.assign(en.errors, {
   authentication: "Could not log in. Try again.",
   resetPassword: "Could not reset the password. Try again.",
   rotateServiceToken: "Could not rotate the service token. Try again.",
+  updateServiceOperations: "Could not update MCP operations. Try again.",
   invalidEntryName:
     "The browser cannot open an entry named “{{name}}”. Rename the entry and try again.",
   damageCheck:

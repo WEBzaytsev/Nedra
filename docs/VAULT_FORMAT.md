@@ -74,13 +74,13 @@ vault key VK (32 random bytes, never stored in clear)
 
 **Why a separate commitment and not only GCM?** AES-GCM is not key-committing: one ciphertext can be built to decrypt under many keys. Unlock compares `password_check` first, so whatever is planted in `wrapped_key`, each unlock tests one password. The commitment costs an attacker exactly what testing the wrapped key would: one Argon2id per guess.
 
-## 4. SQLite layout (schema 4)
+## 4. SQLite layout (schema 5)
 
-`PRAGMA application_id` = `0x434D5448` ("CMTH"), `PRAGMA user_version` = 4. The SQLite settings (WAL, `synchronous=FULL`, `secure_delete=ON`, `foreign_keys=ON`, ...) are unchanged from schema 2 and listed in `CLAUDE.md`.
+`PRAGMA application_id` = `0x434D5448` ("CMTH"), `PRAGMA user_version` = 5. The SQLite settings (WAL, `synchronous=FULL`, `secure_delete=ON`, `foreign_keys=ON`, ...) are unchanged from schema 2 and listed in `CLAUDE.md`.
 
 **`vault`** (at most one row, `id = 1`): `owner_user_id`, `folder_links_ready`, plus the primary compatibility account's format version (2), KDF parameters, salt, commitment, wrapped key and key check, with timestamps. `folder_links_ready` is set only after encrypted legacy folder strings have been linked to first-class folder rows after an unlock.
 
-**`users`**: plaintext `username`, `role` (`admin`, `member` or `service`), active and required-password-change flags, optional `service_owner_id`, SHA-256 service-token digest, per-account KDF parameters, salt, commitment, wrapped VK and key check, with timestamps. Human passwords and service tokens are never stored.
+**`users`**: plaintext `username`, `role` (`admin`, `member` or `service`), active and required-password-change flags, optional `service_owner_id`, SHA-256 service-token digest, and `service_operations` bitmask. New services receive only `list` and `get`; migrated services receive no operations until an administrator explicitly re-authorizes them. Every MCP tool checks this mask and the entry/folder ACL. Per-account KDF parameters, salt, commitment, wrapped VK and key check are stored with timestamps. Human passwords and service tokens are never stored.
 
 **`entries`**: `id` (integer, autoincrement, never reused), `uid` (16 random bytes, unique), plaintext `owner_id`, optional plaintext `folder_id`, `name_index` (32 bytes), `document` (sealed entry document), `backed_up`, `created`, `updated`, `deleted`. A partial unique index on `name_index WHERE deleted IS NULL` keeps active names unique across the shared vault; trashed entries may share a name. `folder_id` is authoritative; the encrypted document's folder name is compatibility/display data.
 

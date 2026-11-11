@@ -15,7 +15,8 @@ from models import BaseModel
 
 MIN_SQLITE_VERSION = (3, 51, 3)
 APPLICATION_ID = 0x434D5448
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
+SERVICE_PERMISSIONS_SCHEMA_VERSION = 4
 MULTIUSER_SCHEMA_VERSION = 3
 PREVIOUS_SCHEMA_VERSION = 2
 FORMAT_1_SCHEMA = 1
@@ -172,6 +173,11 @@ def identity_problem(application_id: int, user_version: int) -> str | None:
         return (
             "uses the multi-user schema without stable folders; stop CipherMoth "
             "and run 'ciphermoth-admin migrate-folders'"
+        )
+    if user_version == SERVICE_PERMISSIONS_SCHEMA_VERSION:
+        return (
+            "uses the multi-user schema without explicit MCP service permissions; "
+            "stop CipherMoth and run 'ciphermoth-admin migrate-service-permissions'"
         )
     if user_version > SCHEMA_VERSION:
         return (
@@ -574,6 +580,7 @@ def migrate_users(data_dir: Path) -> Path:
                             service_owner_id INTEGER
                                 REFERENCES users(id) ON DELETE RESTRICT,
                             service_token_hash BLOB UNIQUE,
+                            service_operations INTEGER NOT NULL DEFAULT 0,
                             kdf VARCHAR NOT NULL,
                             kdf_memory_kib INTEGER NOT NULL,
                             kdf_iterations INTEGER NOT NULL,
@@ -587,7 +594,10 @@ def migrate_users(data_dir: Path) -> Path:
                             CONSTRAINT ck_users_salt CHECK (length(kdf_salt) = 16),
                             CONSTRAINT ck_users_password_check
                                 CHECK (length(password_check) = 32),
-                            CONSTRAINT ck_users_key_check CHECK (length(key_check) = 32)
+                            CONSTRAINT ck_users_key_check
+                                CHECK (length(key_check) = 32),
+                            CONSTRAINT ck_users_service_operations
+                                CHECK (service_operations BETWEEN 0 AND 63)
                         );
                         CREATE INDEX ix_users_service_owner_id
                             ON users(service_owner_id);
@@ -691,6 +701,15 @@ def migrate_folders(data_dir: Path) -> Path:
                 connection.execute("BEGIN EXCLUSIVE")
                 try:
                     _apply_folder_schema(connection)
+                    user_columns = {
+                        row[1] for row in connection.execute("PRAGMA table_info(users)")
+                    }
+                    if "service_operations" not in user_columns:
+                        connection.execute(
+                            "ALTER TABLE users ADD COLUMN service_operations "
+                            "INTEGER NOT NULL DEFAULT 0 "
+                            "CHECK (service_operations BETWEEN 0 AND 63)"
+                        )
                     connection.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
                     connection.commit()
                 except BaseException:
@@ -707,8 +726,93 @@ def migrate_folders(data_dir: Path) -> Path:
     return target
 
 
+def migrate_service_permissions(data_dir: Path) -> Path:
+    """Add explicit MCP operation permissions to a stopped schema-4 vault.
+
+    Existing bearer tokens remain stored but receive no operation permission.
+    This avoids silently changing an already-issued token's authority; an
+    administrator must re-authorize it after the migration.
+    """
+    require_supported_sqlite()
+    live = vault_file(data_dir)
+    folder = snapshot_dir(data_dir)
+    folder.mkdir(mode=0o700, parents=True, exist_ok=True)
+    target = folder / timestamped("pre-service-permissions")
+    with VaultLock(data_dir):
+        try:
+            with contextlib.closing(_connect_existing(live)) as source:
+                application_id = source.execute("PRAGMA application_id").fetchone()[0]
+                user_version = source.execute("PRAGMA user_version").fetchone()[0]
+                if (
+                    application_id != APPLICATION_ID
+                    or user_version != SERVICE_PERMISSIONS_SCHEMA_VERSION
+                ):
+                    raise StorageError(
+                        "Expected a CipherMoth schema-"
+                        f"{SERVICE_PERMISSIONS_SCHEMA_VERSION} vault; found "
+                        "application "
+                        f"{application_id}, schema {user_version}."
+                    )
+                problems = [
+                    str(row[0])
+                    for row in source.execute("PRAGMA integrity_check")
+                    if str(row[0]) != "ok"
+                ]
+                problems += [
+                    f"{row[0]} row {row[1]} references a missing row of {row[2]}"
+                    for row in source.execute("PRAGMA foreign_key_check")
+                ]
+                format_issue = format_problem(_formats(source))
+                if format_issue:
+                    problems.append(f"the file {format_issue}")
+                if problems:
+                    raise StorageError(
+                        "The vault cannot be migrated: " + "; ".join(problems[:5])
+                    )
+                if target.exists():
+                    raise StorageError(f"{target} already exists.")
+                os.close(os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600))
+                try:
+                    with contextlib.closing(sqlite3.connect(target)) as destination:
+                        source.backup(destination)
+                        destination.execute("PRAGMA journal_mode=DELETE")
+                except BaseException:
+                    _discard(target)
+                    raise
+            _fsync(target)
+            _fsync_dir(folder)
+
+            with contextlib.closing(
+                _connect_existing(live, writable=True)
+            ) as connection:
+                connection.execute("PRAGMA foreign_keys=ON")
+                connection.execute(f"PRAGMA busy_timeout={RESTORE_BUSY_TIMEOUT_MS}")
+                connection.execute("BEGIN EXCLUSIVE")
+                try:
+                    connection.execute(
+                        "ALTER TABLE users ADD COLUMN service_operations "
+                        "INTEGER NOT NULL DEFAULT 0 "
+                        "CHECK (service_operations BETWEEN 0 AND 63)"
+                    )
+                    connection.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
+                    connection.commit()
+                except BaseException:
+                    connection.rollback()
+                    raise
+        except sqlite3.DatabaseError as error:
+            raise StorageError(f"Could not migrate the vault: {error}") from error
+    problems = check_file(live)
+    if problems:
+        raise StorageError(
+            "The migrated vault failed verification; restore the "
+            "pre-service-permissions "
+            "snapshot: " + "; ".join(problems[:5])
+        )
+    return target
+
+
 def migrate_users_if_needed(data_dir: Path) -> Path | None:
-    """Migrate schema 2 or 3 when a single-process desktop owns startup."""
+    """Migrate schema 2, 3 or 4 when a single-process desktop owns startup."""
     live = vault_file(data_dir)
     if not live.is_file() or live.stat().st_size == 0:
         return None
@@ -724,6 +828,8 @@ def migrate_users_if_needed(data_dir: Path) -> Path | None:
         return migrate_users(data_dir)
     if user_version == MULTIUSER_SCHEMA_VERSION:
         return migrate_folders(data_dir)
+    if user_version == SERVICE_PERMISSIONS_SCHEMA_VERSION:
+        return migrate_service_permissions(data_dir)
     return None
 
 

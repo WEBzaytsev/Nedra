@@ -151,6 +151,34 @@ def migrate_folders(
 
 
 @app.command(
+    "migrate-service-permissions",
+    help=(
+        "Upgrade a stopped multi-user vault for explicit MCP service permissions. "
+        "A rollback snapshot is created first; existing service tokens start disabled."
+    ),
+)
+def migrate_service_permissions(
+    yes: Annotated[bool, typer.Option("--yes", help="Do not ask to confirm.")] = False,
+) -> None:
+    if not yes:
+        typer.confirm(
+            "Migrate the stopped schema-4 vault in "
+            f"{_data_dir()} for MCP service permissions? Existing service tokens "
+            "will be disabled until an administrator explicitly configures them.",
+            abort=True,
+        )
+    try:
+        saved = storage.migrate_service_permissions(_data_dir())
+    except storage.StorageError as error:
+        raise _fail(error) from None
+    typer.echo(f"Migrated. Rollback snapshot: {saved}")
+    typer.echo(
+        "Start CipherMoth, then configure each service account's allowed MCP "
+        "operations."
+    )
+
+
+@app.command(
     "set-aside",
     help=(
         "Move the vault file (with its WAL) into a new folder in the snapshot "

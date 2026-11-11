@@ -97,11 +97,13 @@ Then open **[http://localhost:3000](http://localhost:3000)**. [CONTRIBUTING.md](
 
 The first account is an administrator. Registration stays closed: administrators create human accounts or service
 accounts from **Users**, can require password changes, revoke sessions, disable accounts, reset human passwords, and
-rotate service tokens. Tokens are shown once; store them as credentials, not in source control.
+rotate service tokens, and choose each service's allowed MCP operations. Issuing, rotating, or changing those
+operations requires the administrator's current password. Tokens are shown once; store them as credentials, not in source control.
 
 Entry owners grant `read` or `write` access explicitly. Service accounts have no web login and can reach only entries
-granted to them. Connect MCP clients to `/mcp` with `Authorization: Bearer <service-token>`; the streamable HTTP endpoint
-uses the same grants as the web API. A service token is not a human session token and does not work on `/api`.
+granted to them and operations explicitly enabled for that service. Connect MCP clients to `/mcp` with `Authorization: Bearer <service-token>`;
+the streamable HTTP endpoint applies the same grants as the web API after the per-service operation check. A service token is not a
+human session token and does not work on `/api`.
 
 ## Who it's for (and who it isn't)
 

@@ -100,6 +100,9 @@ class UserModel(BaseModel):
         CheckConstraint("length(kdf_salt) = 16", name="ck_users_salt"),
         CheckConstraint("length(password_check) = 32", name="ck_users_password_check"),
         CheckConstraint("length(key_check) = 32", name="ck_users_key_check"),
+        CheckConstraint(
+            "service_operations BETWEEN 0 AND 63", name="ck_users_service_operations"
+        ),
         {"sqlite_autoincrement": True},
     )
 
@@ -127,6 +130,9 @@ class UserModel(BaseModel):
     )
     service_token_hash: Mapped[bytes | None] = mapped_column(
         LargeBinary, unique=True, nullable=True
+    )
+    service_operations: Mapped[int] = mapped_column(
+        Integer, default=0, server_default=text("0")
     )
     kdf: Mapped[str] = mapped_column(String)
     kdf_memory_kib: Mapped[int] = mapped_column(Integer)

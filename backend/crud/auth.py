@@ -24,6 +24,7 @@ from helpers import (
     wrap_key_material,
 )
 from models import (
+    AccessAuditModel,
     AttachmentModel,
     EntryAccessModel,
     EntryModel,
@@ -32,11 +33,15 @@ from models import (
     VaultModel,
 )
 from schemas import (
+    DEFAULT_SERVICE_OPERATIONS,
     AuthResponse,
     AuthStatus,
     AuthUser,
+    ServiceOperation,
     UserCreateResponse,
     UserRole,
+    service_operation_mask,
+    service_operations_from_mask,
 )
 from vault_sessions import VaultSessions
 
@@ -163,6 +168,11 @@ class AuthCRUD(BaseCRUD):
             role=UserRole(model.role),
             active=model.active,
             must_change_password=model.must_change_password,
+            service_operations=(
+                service_operations_from_mask(model.service_operations)
+                if model.role == UserRole.service
+                else []
+            ),
         )
 
     async def status(self) -> AuthStatus:
@@ -348,8 +358,13 @@ class AuthCRUD(BaseCRUD):
         username: str,
         role: UserRole,
         temporary_password: str | None,
+        current_password: str | None,
     ) -> UserCreateResponse:
         self.require_admin(actor)
+        if role == UserRole.service:
+            if current_password is None:
+                raise InvalidRequest("Current administrator password is required.")
+            await self.verify_current_password(actor, current_password)
         if (
             await self.session.scalar(
                 select(UserModel.id).where(UserModel.username == username)
@@ -389,6 +404,11 @@ class AuthCRUD(BaseCRUD):
             must_change_password=role != UserRole.service,
             service_owner_id=actor_id if role == UserRole.service else None,
             service_token_hash=token_digest(credential) if credential else None,
+            service_operations=(
+                service_operation_mask(DEFAULT_SERVICE_OPERATIONS)
+                if role == UserRole.service
+                else 0
+            ),
         )
         store_user_material(user, material)
         self.session.add(user)
@@ -477,9 +497,36 @@ class AuthCRUD(BaseCRUD):
         await self.session.flush()
         return self.to_user(user)
 
+    async def update_service_operations(
+        self,
+        actor: AuthContext,
+        user_id: int,
+        operations: list[ServiceOperation],
+        current_password: str,
+    ) -> AuthUser:
+        self.require_admin(actor)
+        await self.verify_current_password(actor, current_password)
+        target = await self._target(actor, user_id)
+        if target.role != UserRole.service:
+            raise Forbidden("Only service users have MCP operation permissions.")
+        target.service_operations = service_operation_mask(operations)
+        self.session.add(
+            AccessAuditModel(
+                actor_user_id=actor.user.id,
+                action="service_operations_updated",
+                resource_type="service",
+                resource_id=target.id,
+                target_user_id=target.id,
+            )
+        )
+        await self.session.flush()
+        return self.to_user(target)
+
     async def rotate_service_token(
-        self, actor: AuthContext, user_id: int
+        self, actor: AuthContext, user_id: int, current_password: str
     ) -> UserCreateResponse:
+        self.require_admin(actor)
+        await self.verify_current_password(actor, current_password)
         target = await self._target(actor, user_id)
         if target.role != UserRole.service:
             raise Forbidden("Only service users have service tokens.")

@@ -253,7 +253,14 @@ PROTECTED_ROUTES: dict[tuple[str, str], Spec] = {
         f"/users/{x['member_id']}/require-password-change", headers=h
     ),
     ("POST", "/api/users/{user_id}/service-token"): lambda c, h, x: c.post(
-        f"/users/{x['service_id']}/service-token", headers=h
+        f"/users/{x['service_id']}/service-token",
+        json={"current_password": MASTER_PASSWORD},
+        headers=h,
+    ),
+    ("PUT", "/api/users/{user_id}/service-operations"): lambda c, h, x: c.put(
+        f"/users/{x['service_id']}/service-operations",
+        json={"operations": ["list"], "current_password": MASTER_PASSWORD},
+        headers=h,
     ),
     ("PUT", "/api/users/{user_id}/password"): lambda c, h, x: c.put(
         f"/users/{x['member_id']}/password",
@@ -368,7 +375,13 @@ async def seed(client: httpx.AsyncClient, headers: Headers) -> dict:
     )
     assert member.status_code == 200, member.text
     service = await client.post(
-        "/users", json={"username": "service", "role": "service"}, headers=headers
+        "/users",
+        json={
+            "username": "service",
+            "role": "service",
+            "current_password": MASTER_PASSWORD,
+        },
+        headers=headers,
     )
     assert service.status_code == 200, service.text
     assert entry_id is not None

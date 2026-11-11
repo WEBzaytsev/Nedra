@@ -31,6 +31,8 @@ async def test_mixed_case_names_work_for_bootstrap_create_and_login(
         payload = {"username": name, "role": role}
         if role == "member":
             payload["temporary_password"] = password
+        else:
+            payload["current_password"] = password
         created = await client.post("/users", json=payload, headers=headers)
         assert created.status_code == 200
         assert created.json()["username"] == name.lower()

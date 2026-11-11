@@ -1,20 +1,30 @@
-from typing import TypedDict
+from collections.abc import Awaitable, Callable
+from typing import TypedDict, TypeVar, cast
 
 from mcp.server import MCPServer
 from mcp.server.auth.middleware.auth_context import get_access_token
 from mcp.server.auth.provider import AccessToken
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from crud.access import AuthorizedPasswordCRUD, EntryACL
-from crud.auth import AuthCRUD, token_digest
+from crud.auth import AuthContext, AuthCRUD, token_digest
 from crud.engine import Database
 from crud.records import open_entry
-from errors import SessionRequired
-from models import EntryModel, UserModel
-from schemas import CustomField, EntryPermission, Password, PasswordResponse
+from errors import Forbidden, SessionRequired
+from models import AccessAuditModel, EntryModel, UserModel
+from schemas import (
+    CustomField,
+    EntryPermission,
+    Password,
+    PasswordResponse,
+    ServiceOperation,
+    service_operations_from_mask,
+)
 from vault_sessions import VaultSessions
 
 MCP_SCOPE = "vault"
+Result = TypeVar("Result")
 
 
 class EntryChanges(TypedDict, total=False):
@@ -122,13 +132,52 @@ def build_mcp_server(
         description="Access explicitly shared CipherMoth vault entries.",
     )
 
-    @server.tool()
-    async def list_entries() -> list[dict[str, object]]:
-        """List metadata for entries explicitly shared with this service identity."""
-        async with database.transaction(write=False) as session:
+    async def service_call(
+        operation: ServiceOperation,
+        tool: str,
+        callback: Callable[[AsyncSession, AuthContext], Awaitable[Result]],
+    ) -> Result:
+        denied = False
+        result: Result | None = None
+        async with database.transaction() as session:
             context = await AuthCRUD(session, vault_sessions).resolve_service_token(
                 _current_token()
             )
+            if operation not in service_operations_from_mask(
+                context.user.service_operations
+            ):
+                denied = True
+                session.add(
+                    AccessAuditModel(
+                        actor_user_id=context.user.id,
+                        action=f"mcp_{tool}_denied",
+                        resource_type="service",
+                        resource_id=context.user.id,
+                        target_user_id=context.user.service_owner_id,
+                        permission=operation,
+                    )
+                )
+            else:
+                result = await callback(session, context)
+                session.add(
+                    AccessAuditModel(
+                        actor_user_id=context.user.id,
+                        action=f"mcp_{tool}",
+                        resource_type="service",
+                        resource_id=context.user.id,
+                        target_user_id=context.user.service_owner_id,
+                        permission=operation,
+                    )
+                )
+        if denied:
+            raise Forbidden(f"MCP operation '{operation}' is not enabled.")
+        return cast(Result, result)
+
+    @server.tool()
+    async def list_entries() -> list[dict[str, object]]:
+        """List metadata for entries explicitly shared with this service identity."""
+
+        async def call(session, context):
             crud = AuthorizedPasswordCRUD(session, context)
             entries = await crud.get_passwords(context.key)
             access = {item.entry_id: item for item in await crud.acl.access_map()}
@@ -137,25 +186,25 @@ def build_mcp_server(
                 for entry in entries
             ]
 
+        return await service_call(ServiceOperation.list, "list_entries", call)
+
     @server.tool()
     async def get_entry(entry_id: int) -> dict[str, object]:
         """Read one entry explicitly shared with this service identity."""
-        async with database.transaction(write=False) as session:
-            context = await AuthCRUD(session, vault_sessions).resolve_service_token(
-                _current_token()
-            )
+
+        async def call(session, context):
             entry, owner, access = await _by_id(
                 AuthorizedPasswordCRUD(session, context), entry_id, EntryPermission.read
             )
             return _detail(entry, owner, access)
 
+        return await service_call(ServiceOperation.get, "get_entry", call)
+
     @server.tool()
     async def create_entry(entry: Password) -> dict[str, object]:
         """Create an entry owned by this service identity's human owner."""
-        async with database.transaction() as session:
-            context = await AuthCRUD(session, vault_sessions).resolve_service_token(
-                _current_token()
-            )
+
+        async def call(session, context):
             crud = AuthorizedPasswordCRUD(session, context)
             await crud.create_password(entry, context.key)
             model = await session.scalar(
@@ -169,15 +218,15 @@ def build_mcp_server(
             created, owner, access = await _by_id(crud, model.id, EntryPermission.write)
             return _detail(created, owner, access)
 
+        return await service_call(ServiceOperation.create, "create_entry", call)
+
     @server.tool()
     async def update_entry(entry_id: int, changes: EntryChanges) -> dict[str, object]:
         """Update fields on one entry when this service identity has write access."""
-        if not changes:
-            raise ValueError("At least one field must be changed.")
-        async with database.transaction() as session:
-            context = await AuthCRUD(session, vault_sessions).resolve_service_token(
-                _current_token()
-            )
+
+        async def call(session, context):
+            if not changes:
+                raise ValueError("At least one field must be changed.")
             crud = AuthorizedPasswordCRUD(session, context)
             current, _, _ = await _by_id(crud, entry_id, EntryPermission.write)
             values = {field: getattr(current, field) for field in Password.model_fields}
@@ -187,30 +236,32 @@ def build_mcp_server(
             result, owner, access = await _by_id(crud, entry_id, EntryPermission.write)
             return _detail(result, owner, access)
 
+        return await service_call(ServiceOperation.update, "update_entry", call)
+
     @server.tool()
     async def delete_entry(entry_id: int) -> dict[str, object]:
         """Move one writable entry to Trash."""
-        async with database.transaction() as session:
-            context = await AuthCRUD(session, vault_sessions).resolve_service_token(
-                _current_token()
-            )
+
+        async def call(session, context):
             crud = AuthorizedPasswordCRUD(session, context)
             current, _, _ = await _by_id(crud, entry_id, EntryPermission.write)
             await crud.delete_password(current.password_name, context.key)
             return {"entry_id": entry_id, "moved_to_trash": True}
 
+        return await service_call(ServiceOperation.delete, "delete_entry", call)
+
     @server.tool()
     async def relinquish_entry(entry_id: int) -> dict[str, object]:
         """Remove this service identity's access without deleting the entry."""
-        async with database.transaction() as session:
-            context = await AuthCRUD(session, vault_sessions).resolve_service_token(
-                _current_token()
-            )
+
+        async def call(session, context):
             remaining = await EntryACL(session, context).relinquish(entry_id)
             return {
                 "entry_id": entry_id,
                 "direct_access_relinquished": True,
                 "effective_access": remaining.value if remaining else None,
             }
+
+        return await service_call(ServiceOperation.relinquish, "relinquish_entry", call)
 
     return server

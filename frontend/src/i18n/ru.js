@@ -730,6 +730,22 @@ Object.assign(ru.users, {
   resetPasswordDescription:
     "Текущие сеансы пользователя завершатся. При входе ему нужно будет сменить временный пароль.",
   deleteConfirm: "Удалить {{username}}?",
+  configureService: "Настроить доступ MCP",
+  configureServiceFor: "Доступ MCP: {{username}}",
+  servicePasswordConfirmation:
+    "Подтвердите текущий пароль администратора, чтобы выпустить bearer-токен.",
+  serviceOperationsDescription:
+    "Выберите операции MCP для этой учётной записи. Доступ к записям и папкам всё равно проверяется при каждом вызове.",
+  serviceOperationsSummary: "MCP: {{operations}}",
+  serviceDisabled: "MCP отключён, пока операции не разрешены явно",
+  serviceOperations: {
+    list: "Список метаданных записей",
+    get: "Чтение данных записи",
+    create: "Создание записей",
+    update: "Изменение записей",
+    delete: "Перемещение записей в корзину",
+    relinquish: "Отзыв прямого доступа к записи",
+  },
 });
 Object.assign(ru.users.messages, {
   passwordReset: "Временный пароль установлен. Активные сеансы завершены.",
@@ -738,6 +754,7 @@ Object.assign(ru.users.messages, {
   statusUpdated: "Состояние учётной записи сохранено.",
   sessionsRevoked: "Активные сеансы завершены.",
   deleted: "Пользователь удалён.",
+  serviceOperationsUpdated: "Операции MCP обновлены.",
 });
 ru.folderAccess = {
   title: "Доступ к папкам",
@@ -821,6 +838,7 @@ Object.assign(ru.errors, {
   authentication: "Не удалось войти.",
   resetPassword: "Не удалось сбросить пароль.",
   rotateServiceToken: "Не удалось перевыпустить служебный токен.",
+  updateServiceOperations: "Не удалось обновить операции MCP.",
   invalidEntryName:
     "Браузер не может открыть запись с названием «{{name}}». Переименуйте запись и повторите попытку.",
   damageCheck:

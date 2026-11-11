@@ -58,12 +58,26 @@ const Users = {
     }
   }),
 
-  rotateServiceToken: thunk(async (_actions, userId) => {
+  rotateServiceToken: thunk(async (_actions, { userId, currentPassword }) => {
     try {
-      const { data } = await apiClient.post(`/users/${userId}/service-token`);
+      const { data } = await apiClient.post(`/users/${userId}/service-token`, {
+        current_password: currentPassword,
+      });
       return data.service_token;
     } catch (err) {
       throw new Error(await errorDetail(err, i18n.t("errors.rotateServiceToken")));
+    }
+  }),
+
+  updateServiceOperations: thunk(async (actions, { userId, operations, currentPassword }) => {
+    try {
+      await apiClient.put(`/users/${userId}/service-operations`, {
+        operations,
+        current_password: currentPassword,
+      });
+      await actions.get();
+    } catch (err) {
+      throw new Error(await errorDetail(err, i18n.t("errors.updateServiceOperations")));
     }
   }),
 

@@ -649,19 +649,43 @@ async def _mcp_service_acl_flow(client: httpx.AsyncClient) -> None:
     [owned] = (await client.get("/passwords", headers=owner_headers)).json()
     service_response = await client.post(
         "/users",
-        json={"username": "assistant", "role": "service"},
+        json={
+            "username": "assistant",
+            "role": "service",
+            "current_password": ADMIN_PASSWORD,
+        },
         headers=owner_headers,
     )
     assert service_response.status_code == 200, service_response.text
     service = service_response.json()
     token = service.pop("service_token")
     assert token
+    assert service["service_operations"] == ["list", "get"]
     grant = await client.put(
         f"/passwords/{owned['id']}/shares/{service['id']}",
         json={"permission": "read"},
         headers=owner_headers,
     )
     assert grant.status_code == 200, grant.text
+    rejected_confirmation = await client.put(
+        f"/users/{service['id']}/service-operations",
+        json={"operations": ["create"], "current_password": "wrong-password"},
+        headers=owner_headers,
+    )
+    assert rejected_confirmation.status_code == 403
+    users = await client.get("/users", headers=owner_headers)
+    assert next(user for user in users.json() if user["id"] == service["id"])[
+        "service_operations"
+    ] == ["list", "get"]
+    configured = await client.put(
+        f"/users/{service['id']}/service-operations",
+        json={
+            "operations": ["list", "get", "create"],
+            "current_password": ADMIN_PASSWORD,
+        },
+        headers=owner_headers,
+    )
+    assert configured.status_code == 200, configured.text
 
     initialized = await mcp_post(
         client,
@@ -754,6 +778,40 @@ async def _mcp_service_acl_flow(client: httpx.AsyncClient) -> None:
         "folder"
     }
 
+    stripped = await client.put(
+        f"/users/{service['id']}/service-operations",
+        json={"operations": ["list", "get"], "current_password": ADMIN_PASSWORD},
+        headers=owner_headers,
+    )
+    assert stripped.status_code == 200, stripped.text
+    blocked_create = await mcp_post(
+        client,
+        token,
+        {
+            "jsonrpc": "2.0",
+            "id": 5,
+            "method": "tools/call",
+            "params": {
+                "name": "create_entry",
+                "arguments": {
+                    "entry": entry(
+                        "agent-blocked",
+                        "secret",
+                        folder=folder["name"],
+                        folder_id=folder["id"],
+                    )
+                },
+            },
+        },
+        protocol,
+    )
+    assert blocked_create.status_code == 200, blocked_create.text
+    assert blocked_create.json()["result"]["isError"] is True
+    assert "agent-blocked" not in {
+        item["password_name"]
+        for item in (await client.get("/passwords", headers=owner_headers)).json()
+    }
+
     revoked_folder = await client.delete(
         f"/folders/{folder['id']}/grants/users/{service['id']}",
         headers=owner_headers,
@@ -780,6 +838,12 @@ async def _mcp_service_acl_flow(client: httpx.AsyncClient) -> None:
         item for item in owner_entries if item["password_name"] == "agent-created"
     )
     assert agent_created["owner_id"] == owner["id"]
+    audit_rows = await db_execute(
+        "SELECT action, resource_id FROM access_audit WHERE resource_type = 'service'"
+    )
+    assert ("mcp_create_entry", service["id"]) in audit_rows
+    assert ("mcp_create_entry_denied", service["id"]) in audit_rows
+    assert token not in str(audit_rows)
 
     await client.patch(
         f"/users/{service['id']}", json={"active": False}, headers=owner_headers
@@ -808,7 +872,11 @@ async def test_legacy_migration_backup_restores_history_trash_attachments_and_gr
     _owner, owner_headers = await bootstrap(client)
     service_response = await client.post(
         "/users",
-        json={"username": "assistant", "role": "service"},
+        json={
+            "username": "assistant",
+            "role": "service",
+            "current_password": ADMIN_PASSWORD,
+        },
         headers=owner_headers,
     )
     assert service_response.status_code == 200, service_response.text

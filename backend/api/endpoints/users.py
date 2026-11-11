@@ -10,6 +10,8 @@ from crud.access import EntryACL
 from crud.folder import FolderCRUD
 from schemas import (
     AuthUser,
+    ServiceOperationsUpdatePayload,
+    ServiceTokenRotatePayload,
     ShareTarget,
     SimpleDetailSchema,
     UserCreatePayload,
@@ -54,6 +56,7 @@ async def create_user(
         username=body.username,
         role=body.role,
         temporary_password=body.temporary_password,
+        current_password=body.current_password,
     )
 
 
@@ -89,10 +92,23 @@ async def require_password_change(
 @router.post("/{user_id}/service-token", response_model=UserCreateResponse)
 async def rotate_service_token(
     user_id: int,
+    body: ServiceTokenRotatePayload,
     context: AdminContextDep,
     crud: AuthCRUDDep,
 ) -> UserCreateResponse:
-    return await crud.rotate_service_token(context, user_id)
+    return await crud.rotate_service_token(context, user_id, body.current_password)
+
+
+@router.put("/{user_id}/service-operations", response_model=AuthUser)
+async def update_service_operations(
+    user_id: int,
+    body: ServiceOperationsUpdatePayload,
+    context: AdminContextDep,
+    crud: AuthCRUDDep,
+) -> AuthUser:
+    return await crud.update_service_operations(
+        context, user_id, body.operations, body.current_password
+    )
 
 
 @router.put("/{user_id}/password", response_model=AuthUser)

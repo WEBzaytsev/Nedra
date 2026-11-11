@@ -56,6 +56,35 @@ class UserRole(StrEnum):
     service = "service"
 
 
+class ServiceOperation(StrEnum):
+    list = "list"
+    get = "get"
+    create = "create"
+    update = "update"
+    delete = "delete"
+    relinquish = "relinquish"
+
+
+_SERVICE_OPERATION_BITS = {
+    operation: 1 << index for index, operation in enumerate(ServiceOperation)
+}
+DEFAULT_SERVICE_OPERATIONS = (ServiceOperation.list, ServiceOperation.get)
+
+
+def service_operation_mask(
+    operations: list[ServiceOperation] | tuple[ServiceOperation, ...],
+) -> int:
+    return sum(_SERVICE_OPERATION_BITS[operation] for operation in operations)
+
+
+def service_operations_from_mask(mask: int) -> list[ServiceOperation]:
+    return [
+        operation
+        for operation in ServiceOperation
+        if mask & _SERVICE_OPERATION_BITS[operation]
+    ]
+
+
 class SharePermission(StrEnum):
     read = "read"
     write = "write"
@@ -78,6 +107,7 @@ class AuthUser(BaseModel):
     role: UserRole
     active: bool
     must_change_password: bool
+    service_operations: list[ServiceOperation] = Field(default_factory=list)
 
 
 class AuthStatus(BaseModel):
@@ -118,6 +148,7 @@ class UserCreatePayload(BaseModel):
     username: Username
     role: UserRole = UserRole.member
     temporary_password: str | None = Field(default=None, min_length=1, max_length=1024)
+    current_password: str | None = Field(default=None, min_length=1, max_length=1024)
 
     @model_validator(mode="after")
     def _human_password_required(self) -> "UserCreatePayload":
@@ -127,7 +158,21 @@ class UserCreatePayload(BaseModel):
             validate_master_password_strength(self.temporary_password)
         elif self.temporary_password is not None:
             raise ValueError("Service users do not use interactive passwords.")
+        elif self.current_password is None:
+            raise ValueError(
+                "Current administrator password is required for a service token."
+            )
+        if self.role != UserRole.service and self.current_password is not None:
+            raise ValueError(
+                "Current administrator password is only used for service tokens."
+            )
         return self
+
+    @field_validator("current_password")
+    @classmethod
+    def _current_password_unicode(cls, value: str | None) -> str | None:
+        require_unicode_text(value)
+        return value
 
 
 class UserCreateResponse(AuthUser):
@@ -146,6 +191,27 @@ class UserPasswordResetPayload(BaseModel):
     @classmethod
     def _strong(cls, value: str) -> str:
         return validate_master_password_strength(value)
+
+
+class ServiceTokenRotatePayload(BaseModel):
+    current_password: str = Field(min_length=1, max_length=1024)
+
+    @field_validator("current_password")
+    @classmethod
+    def _unicode(cls, value: str) -> str:
+        require_unicode_text(value)
+        return value
+
+
+class ServiceOperationsUpdatePayload(ServiceTokenRotatePayload):
+    operations: list[ServiceOperation] = Field(default_factory=list)
+
+    @field_validator("operations")
+    @classmethod
+    def _unique(cls, value: list[ServiceOperation]) -> list[ServiceOperation]:
+        if len(set(value)) != len(value):
+            raise ValueError("Each service operation may be listed only once.")
+        return value
 
 
 class PasswordChangePayload(BaseModel):

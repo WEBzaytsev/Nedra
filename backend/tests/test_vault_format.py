@@ -121,7 +121,7 @@ async def test_a_new_vault_is_format_2_with_a_wrapped_key_and_no_verifier(
     }
     assert not tables & {"master_password", "passwords", "password_attachments"}
     [(user_version,)] = await db_execute("PRAGMA user_version")
-    assert user_version == SCHEMA_VERSION == 4
+    assert user_version == SCHEMA_VERSION == 5
 
 
 async def test_the_schema_has_no_plaintext_entry_columns_or_indexes() -> None:

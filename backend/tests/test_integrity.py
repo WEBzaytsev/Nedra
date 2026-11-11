@@ -7,7 +7,7 @@ from contextlib import closing
 import httpx
 import pytest
 
-from storage import VAULT_FILE
+from storage import SCHEMA_VERSION, VAULT_FILE
 from tests.integrity import (
     VaultContents,
     VaultIntegrityError,
@@ -123,7 +123,7 @@ async def test_a_healthy_vault_scans_clean_and_matches_the_api(
 
     assert vault.key_check == "valid"
     assert vault.vault_rows == 1
-    assert vault.revision == 4
+    assert vault.revision == SCHEMA_VERSION
     github = vault.active["GitHub"]
     assert github.value == "third-Value-3"
     assert [h[0] for h in github.history] == ["second-Value-2", "first-Value-1"]
