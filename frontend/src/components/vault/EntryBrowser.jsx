@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, FileText, Key, Paperclip, StarFill } from "@gravity-ui/icons";
+import { ArrowLeft, FileText, Key, Paperclip, StarFill, TrashBin } from "@gravity-ui/icons";
 import {
   Box,
   Button,
+  Checkbox,
   Dialog,
   Divider,
   Flex,
@@ -29,6 +30,10 @@ const EntryBrowser = ({
   mobileEntry,
   onOpenEntry,
   onCloseEntry,
+  selectedEntryIds = [],
+  onSelectedEntryIdsChange,
+  onBulkTrash,
+  bulkTrashPending = false,
   taskActive = true,
   ...actions
 }) => {
@@ -45,6 +50,16 @@ const EntryBrowser = ({
   const selectedTrigger = useRef(null);
   const previousMobileEntry = useRef(null);
   const selected = mobileEntry ?? entries.find((entry) => entry.id === selectedId);
+  const selectedEntryIdSet = new Set(selectedEntryIds);
+
+  const toggleSelection = (entryId, checked) => {
+    const id = String(entryId);
+    onSelectedEntryIdsChange?.(
+      checked
+        ? [...selectedEntryIds, id]
+        : selectedEntryIds.filter((selectedId) => selectedId !== id)
+    );
+  };
 
   useEffect(() => {
     const previous = previousMobileEntry.current;
@@ -150,6 +165,25 @@ const EntryBrowser = ({
           minHeight={fixedViewport ? "0" : undefined}
           overflow={fixedViewport ? "hidden" : undefined}
           onKeyDown={(event) => {
+            if (
+              !event.defaultPrevented &&
+              selectedEntryIds.length > 0 &&
+              (event.key === "Delete" || event.key === "Backspace")
+            ) {
+              event.preventDefault();
+              onBulkTrash?.();
+              return;
+            }
+            if (
+              !event.defaultPrevented &&
+              !bulkTrashPending &&
+              selectedEntryIds.length > 0 &&
+              event.key === "Escape"
+            ) {
+              event.preventDefault();
+              onSelectedEntryIdsChange?.([]);
+              return;
+            }
             if (desktop && selected && event.key === "Escape" && !event.defaultPrevented) {
               event.stopPropagation();
               closeDetails();
@@ -167,6 +201,41 @@ const EntryBrowser = ({
             aria-label={t("vault.browser.entries")}
             qa="entry-scroll-region"
           >
+            {selectedEntryIds.length > 0 && (
+              <Flex
+                direction={{ xs: "column", s: "row" }}
+                gap="spacing-3"
+                alignItems={{ s: "center" }}
+                justifyContent="space-between"
+                paddingBlockEnd="spacing-3"
+                minWidth="0"
+                qa="entry-bulk-actions"
+              >
+                <Text role="status">
+                  {t("vault.bulk.selected", { count: selectedEntryIds.length })}
+                </Text>
+                <Flex gap="spacing-2" wrap="wrap">
+                  <Button
+                    size="xl"
+                    view="outlined-danger"
+                    disabled={bulkTrashPending}
+                    loading={bulkTrashPending}
+                    onClick={onBulkTrash}
+                  >
+                    <Icon data={TrashBin} />
+                    {t("vault.bulk.moveToTrash")}
+                  </Button>
+                  <Button
+                    size="xl"
+                    view="outlined"
+                    disabled={bulkTrashPending}
+                    onClick={() => onSelectedEntryIdsChange?.([])}
+                  >
+                    {t("vault.bulk.clearSelection")}
+                  </Button>
+                </Flex>
+              </Flex>
+            )}
             {entries.length !== totalCount && (
               <Flex alignItems="center" gap="spacing-2" paddingBlockEnd="spacing-3">
                 <Text variant="subheader-1">{t("vault.browser.entries")}</Text>
@@ -214,7 +283,36 @@ const EntryBrowser = ({
                     {...getItemProps({ "data-entry-id": ctx.item.id })}
                     {...getItemViewProps()}
                     hovered={menuEntryId === ctx.item.id ? true : undefined}
-                    startContent={<Icon data={ctx.item.kind === "note" ? FileText : Key} />}
+                    startContent={
+                      <Flex {...getCellProps()} gap="spacing-2" alignItems="center">
+                        <Checkbox
+                          checked={selectedEntryIdSet.has(String(ctx.item.id))}
+                          disabled={bulkTrashPending || ctx.item.access === "read"}
+                          size="xl"
+                          controlProps={{
+                            "aria-label": t("vault.bulk.selectEntry", {
+                              name: ctx.item.password_name,
+                            }),
+                            tabIndex: -1,
+                            onClick: (event) => event.stopPropagation(),
+                            onKeyDown: (event) => {
+                              if (event.key === "Enter") {
+                                event.preventDefault();
+                                event.stopPropagation();
+                                toggleSelection(
+                                  ctx.item.id,
+                                  !selectedEntryIdSet.has(String(ctx.item.id))
+                                );
+                              } else if (event.key === " ") {
+                                event.stopPropagation();
+                              }
+                            },
+                          }}
+                          onUpdate={(checked) => toggleSelection(ctx.item.id, checked)}
+                        />
+                        <Icon data={ctx.item.kind === "note" ? FileText : Key} />
+                      </Flex>
+                    }
                     description={
                       <Flex direction="column" gap="spacing-2" minWidth="0" width="100%">
                         <Flex gap="spacing-2" wrap="wrap" alignItems="center" qa="entry-metadata">

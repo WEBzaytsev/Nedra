@@ -1,4 +1,4 @@
-import { useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Plus } from "@gravity-ui/icons";
 import {
   Box,
@@ -67,6 +67,9 @@ const PasswordsPage = () => {
     importPasswords,
     importCsv,
     toggleFavorite,
+    bulkTrash,
+    bulkRestore,
+    bulkPurge,
     getTrash,
     restore,
     purge,
@@ -93,6 +96,9 @@ const PasswordsPage = () => {
   const [draftReady, setDraftReady] = useState(false);
   const [draftAttempt, setDraftAttempt] = useState(0);
   const [requestedEntryId, setRequestedEntryId] = useState(null);
+  const [selectedEntryIds, setSelectedEntryIds] = useState([]);
+  const [bulkTrashPending, setBulkTrashPending] = useState(false);
+  const bulkTrashInFlight = useRef(false);
   const view = searchParams.get("view");
   const routeEntry = passwords.find((entry) => String(entry.id) === searchParams.get("entry"));
   const editTarget = view === "edit" ? routeEntry : desktopEditTarget;
@@ -204,6 +210,12 @@ const PasswordsPage = () => {
     getFolders().catch((requestError) => notify(requestError.message, { theme: "danger" }));
   }, [get, getTrash, getDamaged, getFolders, notify]);
 
+  useEffect(() => {
+    setSelectedEntryIds((ids) =>
+      ids.filter((id) => passwords.some((entry) => String(entry.id) === id))
+    );
+  }, [passwords]);
+
   const damagedCount = damaged.entries.length + damaged.attachments.length;
 
   const folderOptions = useMemo(
@@ -301,16 +313,49 @@ const PasswordsPage = () => {
     try {
       await remove(deleteTarget);
       setDeleteTarget(null);
-      notify(t("vault.messages.movedToTrash"), { theme: "success" });
+      notify(t("vault.messages.movedToTrash", { count: 1 }), { theme: "success" });
     } catch (requestError) {
       notify(requestError.message, { theme: "danger" });
     }
   };
 
+  const selectedEntries = useMemo(
+    () => passwords.filter((entry) => selectedEntryIds.includes(String(entry.id))),
+    [passwords, selectedEntryIds]
+  );
+
+  const handleBulkTrash = useCallback(async () => {
+    if (selectedEntries.length === 0 || bulkTrashInFlight.current) return;
+    bulkTrashInFlight.current = true;
+    setBulkTrashPending(true);
+    try {
+      await bulkTrash(selectedEntries);
+      setSelectedEntryIds([]);
+      notify(t("vault.messages.movedToTrash", { count: selectedEntries.length }), {
+        theme: "success",
+      });
+    } catch (requestError) {
+      notify(requestError.message, { theme: "danger" });
+    } finally {
+      bulkTrashInFlight.current = false;
+      setBulkTrashPending(false);
+    }
+  }, [bulkTrash, selectedEntries, notify, t]);
+
   const handleRestore = async (name) => {
     try {
       await restore(name);
-      notify(t("vault.messages.restored"), { theme: "success" });
+      notify(t("vault.messages.restored", { count: 1 }), { theme: "success" });
+    } catch (requestError) {
+      notify(requestError.message, { theme: "danger" });
+      throw requestError;
+    }
+  };
+
+  const handleBulkRestore = async (entries) => {
+    try {
+      await bulkRestore(entries);
+      notify(t("vault.messages.restored", { count: entries.length }), { theme: "success" });
     } catch (requestError) {
       notify(requestError.message, { theme: "danger" });
       throw requestError;
@@ -330,7 +375,19 @@ const PasswordsPage = () => {
   const handlePurge = async (name) => {
     // TrashDialog keeps a failed purge inline, alongside Retry and Cancel.
     await purge(name);
-    notify(t("vault.messages.permanentlyDeleted"), { theme: "success" });
+    notify(t("vault.messages.permanentlyDeleted", { count: 1 }), { theme: "success" });
+  };
+
+  const handleBulkPurge = async (entries) => {
+    try {
+      await bulkPurge(entries);
+      notify(t("vault.messages.permanentlyDeleted", { count: entries.length }), {
+        theme: "success",
+      });
+    } catch (requestError) {
+      notify(requestError.message, { theme: "danger" });
+      throw requestError;
+    }
   };
 
   const handleBackup = async (masterPassword) => {
@@ -644,6 +701,10 @@ const PasswordsPage = () => {
               onOpenEntry={(entry) => openTask({ entry: entry.id, view: "details" })}
               onCloseEntry={closeTask}
               onToggleFavorite={handleToggleFavorite}
+              selectedEntryIds={selectedEntryIds}
+              onSelectedEntryIdsChange={setSelectedEntryIds}
+              onBulkTrash={handleBulkTrash}
+              bulkTrashPending={bulkTrashPending}
             />
           )}
         </Flex>
@@ -748,6 +809,8 @@ const PasswordsPage = () => {
         onClose={clearToolRoute}
         onRestore={handleRestore}
         onPurge={handlePurge}
+        onBulkRestore={handleBulkRestore}
+        onBulkPurge={handleBulkPurge}
       />
     </Flex>
   );

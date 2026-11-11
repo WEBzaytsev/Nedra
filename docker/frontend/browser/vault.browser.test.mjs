@@ -262,7 +262,7 @@ async function vault(
             data = folderGrants;
         else if (/^\/api\/folders\/\d+\/audit$/.test(path)) data = folderAudit;
         else if (path === "/api/passwords/trash")
-            data = [
+            data = options.trash ?? [
                 {
                     id: 11,
                     password_name: "Deleted / account",
@@ -1341,7 +1341,10 @@ for (const [width, language, theme] of [
                         dayBounds.height >= 39,
                     JSON.stringify({ dayBounds, width }),
                 );
-                assert.equal(await expiryInput.getAttribute("aria-expanded"), "true");
+                assert.equal(
+                    await expiryInput.getAttribute("aria-expanded"),
+                    "true",
+                );
             }
             const calendarBounds = await calendar.boundingBox();
             assert.ok(
@@ -1848,7 +1851,7 @@ test("mobile vault opens an accessible read view without exposing secrets", asyn
     const { context, page, errors } = await vault(375);
     try {
         const list = page.locator('[data-qa="entry-list"]');
-        await list.getByRole("row", { name: /^GitHub/ }).click();
+        await list.getByRole("row", { name: /GitHub/ }).click();
         const detail = taskSurface(page, {
             name: "GitHub",
             exact: true,
@@ -1886,7 +1889,7 @@ test("mobile vault opens an accessible read view without exposing secrets", asyn
         );
         await taskAction(page, detail, "Back").click();
 
-        await list.getByRole("row", { name: /^Read-only account/ }).click();
+        await list.getByRole("row", { name: /Read-only account/ }).click();
         const readOnly = taskSurface(page, {
             name: "Read-only account",
             exact: true,
@@ -1905,7 +1908,7 @@ test("mobile vault opens an accessible read view without exposing secrets", asyn
         assert.equal(await readOnly.locator('input[type="file"]').count(), 0);
         await taskAction(page, readOnly, "Back").click();
 
-        await list.getByRole("row", { name: /^Recovery notes/ }).click();
+        await list.getByRole("row", { name: /Recovery notes/ }).click();
         const note = taskSurface(page, {
             name: "Recovery notes",
             exact: true,
@@ -2107,7 +2110,8 @@ test("entry editor keeps favorite beside the dialog close action", async () => {
             .locator('[data-qa="entry-list"]')
             .getByRole("row")
             .filter({ hasText: "GitHub" })
-            .click({ position: { x: 24, y: 24 } });
+            .getByText("GitHub", { exact: true })
+            .click();
         const details = page.getByRole("region", { name: "Entry details" });
         await details
             .getByRole("button", { name: "Edit", exact: true })
@@ -2175,7 +2179,7 @@ for (const [width, language, theme] of [
                     .evaluateAll((rows) =>
                         rows.map(
                             (row) =>
-                                row.querySelector('[role="gridcell"]')
+                                row.querySelectorAll('[role="gridcell"]')[1]
                                     .textContent,
                         ),
                     ),
@@ -2280,6 +2284,126 @@ for (const [width, language, theme] of [
         }
     });
 }
+
+test("bulk vault and trash actions keep stable selections and send one bounded request", async () => {
+    const trash = [
+        {
+            id: 11,
+            password_name: "Deleted / account",
+            username: "old@example.test",
+            deleted: "2026-10-20T12:00:00Z",
+        },
+        {
+            id: 12,
+            password_name: "Old Wi-Fi",
+            username: "wifi@example.test",
+            deleted: "2026-10-21T12:00:00Z",
+        },
+    ];
+    const { context, page, errors } = await vault(375, "en", "dark", entries, {
+        trash,
+    });
+    try {
+        const list = page.locator('[data-qa="entry-list"]');
+        const github = list.getByRole("checkbox", {
+            name: "Select GitHub",
+            exact: true,
+        });
+        await github.focus();
+        await github.press("Enter");
+        assert.equal(await github.isChecked(), true);
+        await github.press("Space");
+        assert.equal(await github.isChecked(), false);
+        await github.press("Space");
+        assert.equal(await github.isChecked(), true);
+        await page
+            .getByRole("button", { name: "Move to trash", exact: true })
+            .waitFor();
+        await page.getByPlaceholder("Search entries…").fill("Recovery");
+        assert.equal(
+            await page.locator('[data-qa="entry-bulk-actions"]').count(),
+            1,
+        );
+        await page.getByPlaceholder("Search entries…").fill("");
+        assert.equal(await github.isChecked(), true);
+
+        const bulkTrash = page.waitForRequest(
+            (request) =>
+                new URL(request.url()).pathname === "/api/vault/entries/trash",
+        );
+        await github.press("Backspace");
+        assert.deepEqual((await bulkTrash).postDataJSON(), {
+            entries: [{ password_name: "GitHub" }],
+        });
+        await page
+            .locator('[data-qa="entry-bulk-actions"]')
+            .waitFor({ state: "hidden" });
+
+        await page.goto(`${origin}/passwords?tool=trash`);
+        const dialog = taskSurface(page, { name: "Trash", exact: true });
+        await dialog.waitFor();
+        for (const entry of trash) {
+            await dialog
+                .getByRole("checkbox", {
+                    name: `Select ${entry.password_name}`,
+                    exact: true,
+                })
+                .check();
+        }
+        const restore = page.waitForRequest(
+            (request) =>
+                new URL(request.url()).pathname === "/api/vault/trash/restore",
+        );
+        await dialog
+            .getByRole("button", { name: "Restore selected", exact: true })
+            .click();
+        assert.deepEqual((await restore).postDataJSON(), {
+            entries: trash.map((entry) => ({
+                password_name: entry.password_name,
+                entry_id: entry.id,
+            })),
+        });
+        await dialog
+            .locator('[data-qa="trash-bulk-actions"]')
+            .waitFor({ state: "hidden" });
+
+        for (const entry of trash) {
+            await dialog
+                .getByRole("checkbox", {
+                    name: `Select ${entry.password_name}`,
+                    exact: true,
+                })
+                .check();
+        }
+        await dialog
+            .getByRole("button", { name: "Delete selected", exact: true })
+            .click();
+        const confirmation = page.getByRole("dialog", {
+            name: "Delete selected entries permanently?",
+            exact: true,
+        });
+        assert.match(await confirmation.textContent(), /Deleted \/ account/);
+        assert.match(await confirmation.textContent(), /Old Wi-Fi/);
+        const purge = page.waitForRequest(
+            (request) =>
+                new URL(request.url()).pathname === "/api/vault/trash/purge",
+        );
+        await confirmation
+            .getByRole("button", { name: "Delete selected", exact: true })
+            .click();
+        assert.deepEqual((await purge).postDataJSON(), {
+            entries: trash.map((entry) => ({
+                password_name: entry.password_name,
+                entry_id: entry.id,
+            })),
+        });
+        await confirmation.waitFor({ state: "hidden" });
+        await fits(page);
+        assert.deepEqual(errors, []);
+    } finally {
+        await context.close();
+    }
+});
 
 test("profile footer shows and applies current language and theme", async () => {
     const { context, page, errors } = await vault(375, "ru", "dark", entries, {
@@ -4622,9 +4746,10 @@ if (process.env.CIPHERMOTH_LAYOUT_MATRIX) {
                               })
                             : route.fallback(),
                     );
-                    const createService = (width < 576
-                        ? page.locator('[data-qa="mobile-task-actions"]')
-                        : form
+                    const createService = (
+                        width < 576
+                            ? page.locator('[data-qa="mobile-task-actions"]')
+                            : form
                     ).getByRole("button", {
                         name: t.common.actions.create,
                         exact: true,
@@ -4632,7 +4757,8 @@ if (process.env.CIPHERMOTH_LAYOUT_MATRIX) {
                     assert.equal(await createService.count(), 1);
                     assert.equal(
                         await createService.evaluate(
-                            (control) => control.form === document.querySelector("form"),
+                            (control) =>
+                                control.form === document.querySelector("form"),
                         ),
                         true,
                         "service creation keeps its form owner after mobile portaling",

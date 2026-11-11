@@ -113,6 +113,37 @@ describe("backup", () => {
   });
 });
 
+describe("bulk entry actions", () => {
+  it.each([
+    ["bulkTrash", "/vault/entries/trash", false],
+    ["bulkRestore", "/vault/trash/restore", true],
+    ["bulkPurge", "/vault/trash/purge", true],
+  ])("sends one atomic %s request with correct identities", async (method, path, includeId) => {
+    const actions = build({ [`POST ${path}`]: [200, { count: 2, detail: "done" }] });
+    const entries = [
+      { id: 7, password_name: "a/b" },
+      { id: 9, password_name: "Wi-Fi ключ" },
+    ];
+    await expect(actions[method](entries)).resolves.toEqual({ count: 2, detail: "done" });
+    expect(JSON.parse(seen[0].data)).toEqual({
+      entries: entries.map((entry) => ({
+        password_name: entry.password_name,
+        ...(includeId ? { entry_id: entry.id } : {}),
+      })),
+    });
+    expect(seen.filter((request) => request.method === "post")).toHaveLength(1);
+    expect(seen[0].headers["x-ciphermoth-session"]).toBe(TOKEN);
+  });
+
+  it("preserves a rejected bulk request as a failure without refreshing", async () => {
+    const actions = build({ "POST /vault/entries/trash": [403, { detail: "Access denied" }] });
+    await expect(actions.bulkTrash([{ id: 1, password_name: "a" }])).rejects.toThrow(
+      "Access denied"
+    );
+    expect(seen).toHaveLength(1);
+  });
+});
+
 describe("sharing", () => {
   it("preserves an entry grant expiry when its permission changes", async () => {
     const expiresAt = "2026-12-01T09:30:00.000Z";

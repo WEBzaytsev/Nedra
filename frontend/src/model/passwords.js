@@ -113,6 +113,50 @@ const Passwords = {
     }
   }),
 
+  bulkTrash: thunk(async (actions, entries) => {
+    try {
+      const { data } = await apiClient.post("/vault/entries/trash", {
+        entries: entries.map((entry) => ({ password_name: entry.password_name })),
+      });
+      await actions.get();
+      await actions.getTrash();
+      return data;
+    } catch (err) {
+      throw new Error(await errorDetail(err, i18n.t("errors.deletePassword")));
+    }
+  }),
+
+  bulkRestore: thunk(async (actions, entries) => {
+    try {
+      const { data } = await apiClient.post("/vault/trash/restore", {
+        entries: entries.map((entry) => ({
+          password_name: entry.password_name,
+          entry_id: entry.id,
+        })),
+      });
+      await actions.get();
+      await actions.getTrash();
+      return data;
+    } catch (err) {
+      throw new Error(await errorDetail(err, i18n.t("errors.restorePassword")));
+    }
+  }),
+
+  bulkPurge: thunk(async (actions, entries) => {
+    try {
+      const { data } = await apiClient.post("/vault/trash/purge", {
+        entries: entries.map((entry) => ({
+          password_name: entry.password_name,
+          entry_id: entry.id,
+        })),
+      });
+      await actions.getTrash();
+      return data;
+    } catch (err) {
+      throw new Error(await errorDetail(err, i18n.t("errors.deletePassword")));
+    }
+  }),
+
   getTrash: thunk(async (actions) => {
     try {
       const { data } = await apiClient.get("/passwords/trash");
