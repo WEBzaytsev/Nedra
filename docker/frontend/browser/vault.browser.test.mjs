@@ -2505,6 +2505,12 @@ test("phone task navigation preserves list context, history, drafts and failed e
             password_name: `GitHub ${String(index).padStart(2, "0")}`,
         })),
     ];
+    records.find((entry) => entry.id === 129).password_history = [
+        { value: "Synthetic-history", changed_at: "2026-10-01T12:00:00Z" },
+    ];
+    records.find((entry) => entry.id === 2).password_history = [
+        { value: "Synthetic-read-history", changed_at: "2026-10-01T12:00:00Z" },
+    ];
     const { context, page, errors } = await vault(375, "ru", "dark", records, {
         role: "admin",
     });
@@ -2558,6 +2564,19 @@ test("phone task navigation preserves list context, history, drafts and failed e
             false,
             "a task owns main, not a second body below the list",
         );
+        await button(t.entry.labels.passwordHistory).click();
+        const history = page.getByRole("dialog", { name: t.entry.history.title, exact: true });
+        await history.waitFor();
+        await history.getByRole("button", { name: t.entry.history.useAgain, exact: true }).click();
+        const confirmation = page.getByRole("dialog", {
+            name: t.entry.history.confirmTitle,
+            exact: true,
+        });
+        await confirmation.waitFor();
+        await capture("history-confirmation");
+        await confirmation.getByRole("button", { name: t.common.actions.cancel, exact: true }).click();
+        await history.getByRole("button", { name: t.common.actions.close, exact: true }).click();
+        await history.waitFor({ state: "hidden" });
         await capture("details");
         await page.goBack();
         await row.waitFor();
@@ -2660,6 +2679,24 @@ test("phone task navigation preserves list context, history, drafts and failed e
             assert.equal(await button(t.common.actions.update).count(), 0);
             await capture(`readonly-${view}-denied`);
         }
+        await page.goto(`${origin}/passwords?entry=2&view=details`);
+        await taskSurface(page, { name: "Read-only account", exact: true }).waitFor();
+        await button(t.entry.labels.passwordHistory).click();
+        const readonlyHistory = page.getByRole("dialog", {
+            name: t.entry.history.title,
+            exact: true,
+        });
+        await readonlyHistory.waitFor();
+        assert.equal(
+            await readonlyHistory
+                .getByRole("button", { name: t.entry.history.useAgain, exact: true })
+                .count(),
+            0,
+        );
+        await readonlyHistory
+            .getByRole("button", { name: t.common.actions.close, exact: true })
+            .click();
+        await readonlyHistory.waitFor({ state: "hidden" });
         assert.deepEqual(errors, []);
     } finally {
         await context.close();
@@ -4482,11 +4519,22 @@ if (process.env.CIPHERMOTH_LAYOUT_MATRIX) {
                         .click();
                     await detail
                         .getByRole("button", {
-                            name: new RegExp(
-                                `^${t.entry.labels.passwordHistory}`,
-                            ),
+                            name: new RegExp(`^${t.entry.labels.passwordHistory}`),
                         })
                         .click();
+                    const historyDialog = page.getByRole("dialog", {
+                        name: t.entry.history.title,
+                        exact: true,
+                    });
+                    await historyDialog.waitFor();
+                    await historyDialog
+                        .getByRole("button", { name: t.entry.history.useAgain, exact: true })
+                        .waitFor();
+                    await capture("password-history");
+                    await historyDialog
+                        .getByRole("button", { name: t.common.actions.close, exact: true })
+                        .click();
+                    await historyDialog.waitFor({ state: "hidden" });
                     await detail
                         .getByRole("button", {
                             name: new RegExp(`^${t.entry.labels.attachments}`),

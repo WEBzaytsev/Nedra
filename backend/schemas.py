@@ -580,6 +580,20 @@ class PasswordUpdatePayload(BaseModel):
     new_password: Password
 
 
+class PasswordHistoryReusePayload(PasswordRef):
+    history_index: int = Field(ge=0)
+    changed_at: str = Field(min_length=1)
+
+    @field_validator("changed_at")
+    @classmethod
+    def _valid_marker(cls, value: str) -> str:
+        try:
+            datetime.fromisoformat(value)
+        except ValueError:
+            raise ValueError("changed_at must be an ISO 8601 timestamp.") from None
+        return value
+
+
 MAX_BULK_ENTRIES = 10_000
 
 

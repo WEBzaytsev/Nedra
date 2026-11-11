@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
   ArrowUpRightFromSquare,
+  ClockArrowRotateLeft,
   Copy,
   Eye,
   EyeSlash,
@@ -99,11 +100,12 @@ const EntryDetails = ({
   onCopy,
   onEdit,
   onDelete,
+  onHistory,
   onShare,
   onToggleFavorite,
   showTitle = false,
 }) => {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const isNote = entry.kind === "note";
   const writable = entry.access === "owner" || entry.access === "write";
   const history = entry.password_history ?? [];
@@ -232,20 +234,10 @@ const EntryDetails = ({
         </Disclosure>
       )}
       {!isNote && history.length > 0 && (
-        <Disclosure summary={`${t("entry.labels.passwordHistory")} (${history.length})`}>
-          <Flex direction="column" gap="spacing-4">
-            {history.map((item, index) => (
-              <EntryValue
-                key={`${item.changed_at}-${index}`}
-                label={new Date(item.changed_at).toLocaleString(i18n.resolvedLanguage)}
-                value={item.value}
-                hidden
-                mono
-                onCopy={onCopy}
-              />
-            ))}
-          </Flex>
-        </Disclosure>
+        <Button size="xl" view="outlined" onClick={() => onHistory?.(entry)}>
+          <Icon data={ClockArrowRotateLeft} />
+          {t("entry.labels.passwordHistory", { count: history.length })}
+        </Button>
       )}
       {writable && (
         <Flex paddingBlockStart="spacing-3">

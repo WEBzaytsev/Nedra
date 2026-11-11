@@ -649,6 +649,14 @@ class AuthorizedPasswordCRUD(PasswordCRUD):
                 )
         return await super().update_password(password_name, new_password, key)
 
+    async def reuse_password_history(
+        self, password_name: str, history_index: int, changed_at: str, key: VaultKey
+    ) -> PasswordUpdate:
+        await self.acl.entry_by_name(password_name, key, EntryPermission.write)
+        return await super().reuse_password_history(
+            password_name, history_index, changed_at, key
+        )
+
     async def set_favorite(
         self, password_name: str, favorite: bool, key: VaultKey
     ) -> PasswordUpdate:

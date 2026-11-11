@@ -82,6 +82,15 @@ PROTECTED_ROUTES: dict[tuple[str, str], Spec] = {
         json={"password": _alpha(), "new_password": {**_alpha(), "url": "x.test"}},
         headers=h,
     ),
+    ("POST", "/api/passwords/history/reuse"): lambda c, h, x: c.post(
+        "/passwords/history/reuse",
+        json={
+            "password_name": "alpha",
+            "history_index": 0,
+            "changed_at": "2026-01-01T00:00:00+00:00",
+        },
+        headers=h,
+    ),
     ("PATCH", "/api/passwords/{password_name}/favorite"): lambda c, h, x: c.patch(
         "/passwords/alpha/favorite", json={"favorite": True}, headers=h
     ),
@@ -317,6 +326,7 @@ REACHED = {
     ("POST", "/api/folders"): 201,
     ("POST", "/api/groups"): 201,
     ("DELETE", "/api/groups/{group_id}"): 400,
+    ("POST", "/api/passwords/history/reuse"): 400,
 }
 
 

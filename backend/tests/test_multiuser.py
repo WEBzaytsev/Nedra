@@ -8,7 +8,7 @@ import pytest
 import pyzipper
 
 from main import app
-from tests.support import auth, entry
+from tests.support import auth, db_execute, entry
 
 ADMIN_PASSWORD = "Moth-Admin-Password-2026!"
 MEMBER_PASSWORD = "Moth-Member-Password-2026!"
@@ -366,6 +366,210 @@ async def test_users_and_entry_acl_are_deny_by_default(
     assert (await client.get("/passwords/shared", headers=owner_headers)).json()[
         "password_value"
     ] == "changed"
+
+
+@pytest.mark.asyncio
+async def test_shared_password_history_reuse_rechecks_acl_and_keeps_the_cap(
+    client: httpx.AsyncClient,
+) -> None:
+    _owner, owner_headers = await bootstrap(client)
+    created = await client.post(
+        "/passwords/create", json=entry("history", "initial"), headers=owner_headers
+    )
+    assert created.status_code == 200, created.text
+    [owned] = (await client.get("/passwords", headers=owner_headers)).json()
+
+    for index in range(1, 11):
+        updated = await client.patch(
+            "/passwords/update",
+            json={
+                "password": {"password_name": "history"},
+                "new_password": entry("history", f"value-{index}"),
+            },
+            headers=owner_headers,
+        )
+        assert updated.status_code == 200, updated.text
+    before = (await client.get("/passwords/history", headers=owner_headers)).json()
+    assert len(before["password_history"]) == 10
+    selected = before["password_history"][-1]
+    payload = {
+        "password_name": "history",
+        "history_index": len(before["password_history"]) - 1,
+        "changed_at": selected["changed_at"],
+    }
+
+    await db_execute(
+        "UPDATE entries SET backed_up = 1 WHERE id = :entry_id", entry_id=owned["id"]
+    )
+    assert (await client.get("/passwords/history", headers=owner_headers)).json()[
+        "backed_up"
+    ] is True
+
+    member = await client.post(
+        "/users",
+        json={
+            "username": "history-reader",
+            "role": "member",
+            "temporary_password": MEMBER_PASSWORD,
+        },
+        headers=owner_headers,
+    )
+    assert member.status_code == 200, member.text
+    _, member_headers = await login(client, "history-reader", MEMBER_PASSWORD)
+    granted = await client.put(
+        f"/passwords/{owned['id']}/shares/{member.json()['id']}",
+        json={"permission": "read"},
+        headers=owner_headers,
+    )
+    assert granted.status_code == 200, granted.text
+    denied = await client.post(
+        "/passwords/history/reuse", json=payload, headers=member_headers
+    )
+    assert denied.status_code == 403
+
+    granted = await client.put(
+        f"/passwords/{owned['id']}/shares/{member.json()['id']}",
+        json={"permission": "write"},
+        headers=owner_headers,
+    )
+    assert granted.status_code == 200, granted.text
+    reused = await client.post(
+        "/passwords/history/reuse", json=payload, headers=member_headers
+    )
+    assert reused.status_code == 200, reused.text
+
+    after = (await client.get("/passwords/history", headers=owner_headers)).json()
+    assert after["password_value"] == selected["value"]
+    assert len(after["password_history"]) == 10
+    assert after["password_history"][0]["value"] == before["password_value"]
+    assert selected["value"] not in [row["value"] for row in after["password_history"]]
+    assert after["backed_up"] is False
+    audit = (
+        await client.get(f"/passwords/{owned['id']}/audit", headers=owner_headers)
+    ).json()
+    audit_text = json.dumps(audit)
+    assert selected["value"] not in audit_text
+    assert before["password_value"] not in audit_text
+
+
+@pytest.mark.asyncio
+async def test_password_history_reuse_preserves_a_concurrent_metadata_update(
+    client: httpx.AsyncClient,
+) -> None:
+    _owner, owner_headers = await bootstrap(client)
+    assert (
+        await client.post(
+            "/passwords/create", json=entry("history", "initial"), headers=owner_headers
+        )
+    ).status_code == 200
+    changed = await client.patch(
+        "/passwords/update",
+        json={
+            "password": {"password_name": "history"},
+            "new_password": entry("history", "current"),
+        },
+        headers=owner_headers,
+    )
+    assert changed.status_code == 200, changed.text
+    before = (await client.get("/passwords/history", headers=owner_headers)).json()
+    selected = before["password_history"][0]
+    payload = {
+        "password_name": "history",
+        "history_index": 0,
+        "changed_at": selected["changed_at"],
+    }
+    writer = await client.post(
+        "/users",
+        json={
+            "username": "history-writer",
+            "role": "member",
+            "temporary_password": MEMBER_PASSWORD,
+        },
+        headers=owner_headers,
+    )
+    assert writer.status_code == 200, writer.text
+    _, writer_headers = await login(client, "history-writer", MEMBER_PASSWORD)
+    granted = await client.put(
+        f"/passwords/{before['id']}/shares/{writer.json()['id']}",
+        json={"permission": "write"},
+        headers=owner_headers,
+    )
+    assert granted.status_code == 200, granted.text
+
+    concurrent = await client.patch(
+        "/passwords/update",
+        json={
+            "password": {"password_name": "history"},
+            "new_password": entry(
+                "history",
+                "current",
+                username="changed@example.test",
+                description="Edited by another user",
+            ),
+        },
+        headers=owner_headers,
+    )
+    assert concurrent.status_code == 200, concurrent.text
+
+    reused = await client.post(
+        "/passwords/history/reuse", json=payload, headers=writer_headers
+    )
+    assert reused.status_code == 200, reused.text
+    after = (await client.get("/passwords/history", headers=owner_headers)).json()
+    assert after["password_value"] == selected["value"]
+    assert after["username"] == "changed@example.test"
+    assert after["description"] == "Edited by another user"
+
+
+@pytest.mark.asyncio
+async def test_password_history_reuse_refuses_a_stale_history_selection(
+    client: httpx.AsyncClient,
+) -> None:
+    _owner, owner_headers = await bootstrap(client)
+    assert (
+        await client.post(
+            "/passwords/create", json=entry("history", "initial"), headers=owner_headers
+        )
+    ).status_code == 200
+    assert (
+        await client.patch(
+            "/passwords/update",
+            json={
+                "password": {"password_name": "history"},
+                "new_password": entry("history", "current"),
+            },
+            headers=owner_headers,
+        )
+    ).status_code == 200
+    selected = (await client.get("/passwords/history", headers=owner_headers)).json()[
+        "password_history"
+    ][0]
+    payload = {
+        "password_name": "history",
+        "history_index": 0,
+        "changed_at": selected["changed_at"],
+    }
+    assert (
+        await client.patch(
+            "/passwords/update",
+            json={
+                "password": {"password_name": "history"},
+                "new_password": entry("history", "newer"),
+            },
+            headers=owner_headers,
+        )
+    ).status_code == 200
+    before_retry = (
+        await client.get("/passwords/history", headers=owner_headers)
+    ).json()
+
+    stale = await client.post(
+        "/passwords/history/reuse", json=payload, headers=owner_headers
+    )
+    assert stale.status_code == 400
+    assert stale.json()["detail"] == "Password history changed. Refresh and try again."
+    after_retry = (await client.get("/passwords/history", headers=owner_headers)).json()
+    assert after_retry == before_retry
 
 
 @pytest.mark.asyncio

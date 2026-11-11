@@ -45,6 +45,7 @@ from api.access_log import RedactEntryNames, install_access_log_redaction, redac
         ),
         ("GET", "/api/passwords/trash", "/api/passwords/trash"),
         ("POST", "/api/passwords/create", "/api/passwords/create"),
+        ("POST", "/api/passwords/history/reuse", "/api/passwords/history/reuse"),
         ("PATCH", "/api/passwords/update", "/api/passwords/update"),
         ("POST", "/api/passwords/import", "/api/passwords/import"),
         ("POST", "/api/passwords/import/csv", "/api/passwords/import/csv"),

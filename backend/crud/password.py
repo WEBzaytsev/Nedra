@@ -310,6 +310,36 @@ class PasswordCRUD(BaseCRUD):
         await self.flush_or_conflict(_NAME_TAKEN)
         return PasswordUpdate(updated=True, detail="Password updated successfully.")
 
+    async def reuse_password_history(
+        self, password_name: str, history_index: int, changed_at: str, key: VaultKey
+    ) -> PasswordUpdate:
+        model, current = await find_entry(self.session, key, password_name)
+        if history_index >= len(current.history):
+            raise InvalidRequest("Password history changed. Refresh and try again.")
+        selected = current.history[history_index]
+        if datetime.fromisoformat(selected.changed_at) != datetime.fromisoformat(
+            changed_at
+        ):
+            raise InvalidRequest("Password history changed. Refresh and try again.")
+        if selected.value == current.value:
+            raise InvalidRequest("The selected password is already current.")
+
+        history = list(current.history)
+        history.pop(history_index)
+        history.insert(
+            0,
+            HistoryItem(value=current.value, changed_at=datetime.now(UTC).isoformat()),
+        )
+        del history[HISTORY_LIMIT:]
+        seal_entry(
+            key,
+            model,
+            current.model_copy(update={"value": selected.value, "history": history}),
+        )
+        model.backed_up = False
+        await self.session.flush()
+        return PasswordUpdate(updated=True, detail="Password updated successfully.")
+
     async def set_favorite(
         self, password_name: str, favorite: bool, key: VaultKey
     ) -> PasswordUpdate:

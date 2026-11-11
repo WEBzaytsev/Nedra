@@ -46,6 +46,7 @@ from schemas import (
     Password,
     PasswordCreate,
     PasswordDelete,
+    PasswordHistoryReusePayload,
     PasswordImportResult,
     PasswordResponse,
     PasswordUpdate,
@@ -202,6 +203,32 @@ async def update_password(
     return await crud.update_password(
         password_name=body.password.password_name,
         new_password=body.new_password,
+        key=key,
+    )
+
+
+@router.post(
+    "/history/reuse",
+    name="passwords:reuse_history",
+    response_model=PasswordUpdate,
+    dependencies=[Depends(require_master_password)],
+    responses=inject_responses(
+        {
+            status.HTTP_404_NOT_FOUND: SimpleDetailSchema,
+            status.HTTP_403_FORBIDDEN: SimpleDetailSchema,
+            status.HTTP_400_BAD_REQUEST: SimpleDetailSchema,
+        }
+    ),
+)
+async def reuse_password_history(
+    body: PasswordHistoryReusePayload,
+    crud: PasswordCRUDDep,
+    key: VaultKeyDep,
+) -> PasswordUpdate:
+    return await crud.reuse_password_history(
+        password_name=body.password_name,
+        history_index=body.history_index,
+        changed_at=body.changed_at,
         key=key,
     )
 

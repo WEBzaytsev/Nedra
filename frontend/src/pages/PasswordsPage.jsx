@@ -26,6 +26,7 @@ import EmptyVault from "../components/vault/EmptyVault";
 import HealthDialog from "../components/vault/HealthDialog";
 import ImportDialog from "../components/vault/ImportDialog";
 import PasswordFormDialog from "../components/vault/PasswordFormDialog";
+import PasswordHistoryDialog from "../components/vault/PasswordHistoryDialog";
 import FolderAccessDialog from "../components/access/FolderAccessDialog";
 import ShareDialog from "../components/vault/ShareDialog";
 import TrashDialog from "../components/vault/TrashDialog";
@@ -33,6 +34,7 @@ import EntryBrowser from "../components/vault/EntryBrowser";
 import useClipboard from "../hooks/useClipboard";
 import { useNotify } from "../hooks/useNotify";
 import { getPageScrollTarget, getPageScrollTop } from "../lib/pageScroll";
+import { reusePayload } from "../lib/passwordHistory";
 import apiClient from "../api/client";
 import { createEntryDraftStore } from "../lib/entryDraft";
 import { getCurrentUser } from "../utils";
@@ -63,6 +65,7 @@ const PasswordsPage = () => {
     get,
     create,
     update,
+    reuseHistory,
     remove,
     backup,
     importPasswords,
@@ -88,6 +91,7 @@ const PasswordsPage = () => {
   const [sortOrder, setSortOrder] = useState(vaultView.current.sortOrder ?? "created-desc");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [desktopEditTarget, setEditTarget] = useState(null);
+  const [historyTarget, setHistoryTarget] = useState(null);
   const [shareTarget, setShareTarget] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [removeDamagedOpen, setRemoveDamagedOpen] = useState(false);
@@ -313,6 +317,11 @@ const PasswordsPage = () => {
     }
     closeEntryForm();
     await getFolders().catch((requestError) => notify(requestError.message, { theme: "danger" }));
+  };
+
+  const handleReusePassword = async (entry, historyRow) => {
+    await reuseHistory(reusePayload(entry, historyRow));
+    notify(t("vault.messages.passwordUpdated"), { theme: "success" });
   };
 
   const handleDelete = async () => {
@@ -762,6 +771,7 @@ const PasswordsPage = () => {
               onRequestedEntryOpen={() => setRequestedEntryId(null)}
               onCopy={copy}
               onEdit={openEdit}
+              onHistory={setHistoryTarget}
               onDelete={setDeleteTarget}
               onShare={openShare}
               mobileEntry={view === "details" ? routeEntry : null}
@@ -813,6 +823,12 @@ const PasswordsPage = () => {
           onCopy={copy}
         />
       )}
+      <PasswordHistoryDialog
+        entry={historyTarget}
+        onClose={() => setHistoryTarget(null)}
+        onCopy={copy}
+        onReuse={handleReusePassword}
+      />
       <ShareDialog
         open={Boolean((view === "share" && routeEntry?.access === "owner") || shareTarget)}
         entry={view === "share" ? routeEntry : shareTarget}

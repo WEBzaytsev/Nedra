@@ -101,6 +101,15 @@ const Passwords = {
     }
   }),
 
+  reuseHistory: thunk(async (actions, payload) => {
+    try {
+      await apiClient.post("/passwords/history/reuse", payload);
+      await actions.get();
+    } catch (err) {
+      throw new Error(await errorDetail(err, i18n.t("errors.updatePassword")));
+    }
+  }),
+
   remove: thunk(async (actions, passwordName) => {
     const headers = entryHeaders(passwordName);
     const path = entryPath(passwordName);

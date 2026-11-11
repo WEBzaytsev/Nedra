@@ -5,6 +5,7 @@ _ENTRIES_PREFIX = re.compile(r"^(?P<prefix>.*?/passwords/)(?P<rest>.+)$")
 _LITERAL_ROUTES = {
     ("GET", "trash"),
     ("POST", "create"),
+    ("POST", "history/reuse"),
     ("PATCH", "update"),
     ("POST", "import"),
     ("POST", "import/csv"),
