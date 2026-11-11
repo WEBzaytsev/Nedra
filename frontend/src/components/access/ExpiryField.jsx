@@ -36,7 +36,15 @@ const ExpiryField = ({ value, onUpdate, disabled, invalid }) => {
           aria-describedby={hintId}
         >
           {(calendarProps) => (
-            <Calendar {...calendarProps} size={mobileContext.mobile ? "l" : "m"} />
+            <Calendar
+              {...calendarProps}
+              size={mobileContext.mobile ? "l" : "m"}
+              style={
+                mobileContext.mobile
+                  ? { "--g-date-calendar-day-size": "40px", "--g-date-calendar-padding": "4px" }
+                  : undefined
+              }
+            />
           )}
         </DatePicker>
       </MobileContext.Provider>

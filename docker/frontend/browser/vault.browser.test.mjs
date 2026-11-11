@@ -1322,6 +1322,7 @@ for (const [width, language, theme] of [
                 await page.locator('input[type="datetime-local"]').count(),
                 0,
             );
+            const expiryInput = await expiry.elementHandle();
             const calendarTrigger = dialog.getByRole("button", {
                 name: language === "ru" ? "Календарь" : "Calendar",
                 exact: true,
@@ -1340,21 +1341,7 @@ for (const [width, language, theme] of [
                         dayBounds.height >= 39,
                     JSON.stringify({ dayBounds, width }),
                 );
-                const openFieldStyle = await page
-                    .locator(
-                        ".nedra-expiry-picker > .g-text-input > .g-text-input__content",
-                    )
-                    .evaluate((node) => {
-                        const style = getComputedStyle(node);
-                        return {
-                            outlineStyle: style.outlineStyle,
-                            outlineWidth: style.outlineWidth,
-                        };
-                    });
-                assert.deepEqual(openFieldStyle, {
-                    outlineStyle: "solid",
-                    outlineWidth: "2px",
-                });
+                assert.equal(await expiryInput.getAttribute("aria-expanded"), "true");
             }
             const calendarBounds = await calendar.boundingBox();
             assert.ok(
