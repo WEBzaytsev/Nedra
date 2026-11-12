@@ -52,6 +52,8 @@ async def test_vault_lifecycle_and_unlock(client: httpx.AsyncClient) -> None:
             "bulk-entry-actions",
             "bulk-entry-move",
             "mcp",
+            "security-factor-step-up",
+            "device-unlock",
         ],
     }
 
@@ -83,6 +85,8 @@ async def test_vault_lifecycle_and_unlock(client: httpx.AsyncClient) -> None:
         "valid": False,
         "session_token": None,
         "idle_timeout_ms": None,
+        "security_key_required": False,
+        "security_key_challenge": None,
     }
 
 

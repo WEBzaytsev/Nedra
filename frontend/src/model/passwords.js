@@ -4,6 +4,7 @@ import { IS_DESKTOP, nativeBackup, nativeRestore } from "../platform";
 import { getSessionToken } from "../utils";
 import apiClient from "../api/client";
 import { errorDetail, triggerDownload } from "../lib/http";
+import { securityKeyStepUp } from "../lib/securityStepUp";
 import i18n from "../i18n";
 
 export const entryPath = (passwordName, suffix = "") => {
@@ -373,13 +374,21 @@ const Passwords = {
 
   backup: thunk(async (_actions, { masterPassword, signal }) => {
     try {
+      const securityKeyAssertion = await securityKeyStepUp("backup", {
+        master_password: masterPassword,
+      });
       if (IS_DESKTOP)
-        return await nativeBackup(getSessionToken(), masterPassword).catch((message) => {
-          throw new Error(String(message));
-        });
+        return await nativeBackup(getSessionToken(), masterPassword, securityKeyAssertion).catch(
+          (message) => {
+            throw new Error(String(message));
+          }
+        );
       const response = await apiClient.post(
         "/passwords/backup",
-        { master_password: masterPassword },
+        {
+          master_password: masterPassword,
+          ...(securityKeyAssertion ? { security_key_assertion: securityKeyAssertion } : {}),
+        },
         { responseType: "blob", signal }
       );
       const stamp = new Date().toISOString().slice(0, 19).replace(/:/g, "-");

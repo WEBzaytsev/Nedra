@@ -15,7 +15,9 @@ from models import BaseModel
 
 MIN_SQLITE_VERSION = (3, 51, 3)
 APPLICATION_ID = 0x434D5448
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 8
+DEVICE_UNLOCK_SCHEMA_VERSION = 7
+HARDWARE_FACTOR_SCHEMA_VERSION = 6
 RECOVERY_SCHEMA_VERSION = 5
 SERVICE_PERMISSIONS_SCHEMA_VERSION = 4
 MULTIUSER_SCHEMA_VERSION = 3
@@ -160,9 +162,13 @@ FORMAT_1_VAULT = (
 )
 
 
-def identity_problem(application_id: int, user_version: int) -> str | None:
+def identity_problem(
+    application_id: int, user_version: int, *, expected_schema: int = SCHEMA_VERSION
+) -> str | None:
     if application_id != APPLICATION_ID:
         return "is not a CipherMoth vault"
+    if user_version == expected_schema:
+        return None
     if user_version == FORMAT_1_SCHEMA:
         return FORMAT_1_VAULT
     if user_version == PREVIOUS_SCHEMA_VERSION:
@@ -184,6 +190,16 @@ def identity_problem(application_id: int, user_version: int) -> str | None:
         return (
             "uses the multi-user schema without personal recovery codes; stop "
             "CipherMoth and run 'ciphermoth-admin migrate-recovery'"
+        )
+    if user_version == HARDWARE_FACTOR_SCHEMA_VERSION:
+        return (
+            "uses the schema without personal hardware factors; stop CipherMoth "
+            "and run 'ciphermoth-admin migrate-hardware-factors'"
+        )
+    if user_version == DEVICE_UNLOCK_SCHEMA_VERSION:
+        return (
+            "uses the schema without voluntary device unlock; stop CipherMoth and "
+            "run 'ciphermoth-admin migrate-device-unlock'"
         )
     if user_version > SCHEMA_VERSION:
         return (
@@ -275,7 +291,9 @@ def refuse_unusable_file(path: Path) -> None:
         )
 
 
-def check_connection(connection: sqlite3.Connection) -> list[str]:
+def check_connection(
+    connection: sqlite3.Connection, *, expected_schema: int = SCHEMA_VERSION
+) -> list[str]:
     """Every problem SQLite finds in a vault: page and index integrity, foreign
     keys, and whether the file is a vault of this release at all."""
     problems = [
@@ -289,7 +307,9 @@ def check_connection(connection: sqlite3.Connection) -> list[str]:
     ]
     application_id = connection.execute("PRAGMA application_id").fetchone()[0]
     user_version = connection.execute("PRAGMA user_version").fetchone()[0]
-    problem = identity_problem(application_id, user_version)
+    problem = identity_problem(
+        application_id, user_version, expected_schema=expected_schema
+    )
     if problem is None:
         problem = format_problem(_formats(connection))
     if problem:
@@ -314,11 +334,11 @@ def _connect_existing(path: Path, *, writable: bool = False) -> sqlite3.Connecti
     return connection
 
 
-def check_file(path: Path) -> list[str]:
+def check_file(path: Path, *, expected_schema: int = SCHEMA_VERSION) -> list[str]:
     require_supported_sqlite()
     try:
         with contextlib.closing(_connect_existing(path)) as connection:
-            return check_connection(connection)
+            return check_connection(connection, expected_schema=expected_schema)
     except sqlite3.DatabaseError as error:
         return [f"SQLite cannot read the file: {error}"]
 
@@ -344,7 +364,13 @@ def _discard(path: Path) -> None:
         path.with_name(path.name + suffix).unlink(missing_ok=True)
 
 
-def _copy(source: Path, destination: Path, *, journal_mode: str = "DELETE") -> None:
+def _copy(
+    source: Path,
+    destination: Path,
+    *,
+    journal_mode: str = "DELETE",
+    expected_schema: int = SCHEMA_VERSION,
+) -> None:
     """A consistent, self-contained copy of the vault through SQLite's online
     backup API, so committed transactions still in the WAL are included and
     concurrent writers are no problem. The copy is checked before it gets its
@@ -359,7 +385,7 @@ def _copy(source: Path, destination: Path, *, journal_mode: str = "DELETE") -> N
         ):
             src.backup(dst)
             dst.execute(f"PRAGMA journal_mode={journal_mode}")
-            problems = check_connection(dst)
+            problems = check_connection(dst, expected_schema=expected_schema)
         if problems:
             raise StorageError(
                 f"The copy of {source.name} failed its integrity check: "
@@ -534,6 +560,76 @@ def _apply_recovery_schema(connection: sqlite3.Connection) -> None:
     )
 
 
+def _apply_hardware_factor_schema(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS user_security_keys (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            uid BLOB NOT NULL UNIQUE,
+            name VARCHAR(64) NOT NULL,
+            credential_id BLOB NOT NULL UNIQUE,
+            public_key BLOB NOT NULL,
+            rp_id VARCHAR(253) NOT NULL,
+            prf_salt BLOB NOT NULL,
+            wrapped_factor_key BLOB NOT NULL,
+            sign_count INTEGER NOT NULL,
+            created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            last_used TIMESTAMP,
+            CONSTRAINT ck_user_security_keys_uid CHECK (length(uid) = 16),
+            CONSTRAINT ck_user_security_keys_prf_salt CHECK (length(prf_salt) = 32),
+            CONSTRAINT ck_user_security_keys_sign_count
+                CHECK (sign_count >= 0 AND sign_count < 4294967296)
+        )
+        """
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS ix_user_security_keys_user_id "
+        "ON user_security_keys(user_id)"
+    )
+
+
+def _apply_device_unlock_schema(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS user_device_unlock_policies (
+            user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+            password_interval_days INTEGER NOT NULL DEFAULT 14,
+            last_password_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT ck_user_device_unlock_policies_interval
+                CHECK (password_interval_days IN (7, 14, 30))
+        )
+        """
+    )
+    connection.execute(
+        """
+        CREATE TABLE IF NOT EXISTS user_device_unlocks (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            uid BLOB NOT NULL UNIQUE,
+            name VARCHAR(64) NOT NULL,
+            credential_id BLOB NOT NULL UNIQUE,
+            public_key BLOB NOT NULL,
+            rp_id VARCHAR(253) NOT NULL,
+            prf_salt BLOB NOT NULL,
+            wrapped_key BLOB NOT NULL,
+            requires_factor BOOLEAN NOT NULL DEFAULT 0,
+            sign_count INTEGER NOT NULL,
+            created TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            last_used TIMESTAMP,
+            CONSTRAINT ck_user_device_unlocks_uid CHECK (length(uid) = 16),
+            CONSTRAINT ck_user_device_unlocks_prf_salt CHECK (length(prf_salt) = 32),
+            CONSTRAINT ck_user_device_unlocks_sign_count
+                CHECK (sign_count >= 0 AND sign_count < 4294967296)
+        )
+        """
+    )
+    connection.execute(
+        "CREATE INDEX IF NOT EXISTS ix_user_device_unlocks_user_id "
+        "ON user_device_unlocks(user_id)"
+    )
+
+
 def migrate_users(data_dir: Path) -> Path:
     """Upgrade an upstream schema-2 vault for account ownership and grants.
 
@@ -652,6 +748,8 @@ def migrate_users(data_dir: Path) -> Path:
                             connection.execute(statement)
                     _apply_folder_schema(connection)
                     _apply_recovery_schema(connection)
+                    _apply_hardware_factor_schema(connection)
+                    _apply_device_unlock_schema(connection)
                     connection.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
                     connection.commit()
                 except BaseException:
@@ -732,6 +830,8 @@ def migrate_folders(data_dir: Path) -> Path:
                 try:
                     _apply_folder_schema(connection)
                     _apply_recovery_schema(connection)
+                    _apply_hardware_factor_schema(connection)
+                    _apply_device_unlock_schema(connection)
                     user_columns = {
                         row[1] for row in connection.execute("PRAGMA table_info(users)")
                     }
@@ -826,6 +926,8 @@ def migrate_service_permissions(data_dir: Path) -> Path:
                         "CHECK (service_operations BETWEEN 0 AND 63)"
                     )
                     _apply_recovery_schema(connection)
+                    _apply_hardware_factor_schema(connection)
+                    _apply_device_unlock_schema(connection)
                     connection.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
                     connection.commit()
                 except BaseException:
@@ -899,6 +1001,8 @@ def migrate_recovery(data_dir: Path) -> Path:
                 connection.execute("BEGIN EXCLUSIVE")
                 try:
                     _apply_recovery_schema(connection)
+                    _apply_hardware_factor_schema(connection)
+                    _apply_device_unlock_schema(connection)
                     connection.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
                     connection.commit()
                 except BaseException:
@@ -910,6 +1014,117 @@ def migrate_recovery(data_dir: Path) -> Path:
     if problems:
         raise StorageError(
             "The migrated vault failed verification; restore the pre-recovery "
+            "snapshot: " + "; ".join(problems[:5])
+        )
+    return target
+
+
+def migrate_hardware_factors(data_dir: Path) -> Path:
+    """Add stopped-vault storage for personal WebAuthn PRF security keys."""
+    require_supported_sqlite()
+    live = vault_file(data_dir)
+    folder = snapshot_dir(data_dir)
+    folder.mkdir(mode=0o700, parents=True, exist_ok=True)
+    target = folder / timestamped("pre-hardware-factors")
+    with VaultLock(data_dir):
+        try:
+            with contextlib.closing(_connect_existing(live)) as source:
+                application_id = source.execute("PRAGMA application_id").fetchone()[0]
+                user_version = source.execute("PRAGMA user_version").fetchone()[0]
+                if (
+                    application_id != APPLICATION_ID
+                    or user_version != HARDWARE_FACTOR_SCHEMA_VERSION
+                ):
+                    raise StorageError(
+                        "Expected a CipherMoth "
+                        f"schema-{HARDWARE_FACTOR_SCHEMA_VERSION} vault; "
+                        f"found application {application_id}, "
+                        f"schema {user_version}."
+                    )
+                problems = check_connection(
+                    source, expected_schema=HARDWARE_FACTOR_SCHEMA_VERSION
+                )
+                if problems:
+                    raise StorageError(
+                        "The vault cannot be migrated: " + "; ".join(problems[:5])
+                    )
+                _copy(
+                    live,
+                    target,
+                    expected_schema=HARDWARE_FACTOR_SCHEMA_VERSION,
+                )
+            with contextlib.closing(
+                _connect_existing(live, writable=True)
+            ) as connection:
+                connection.execute("PRAGMA foreign_keys=ON")
+                connection.execute("BEGIN EXCLUSIVE")
+                try:
+                    _apply_hardware_factor_schema(connection)
+                    connection.execute(
+                        f"PRAGMA user_version={DEVICE_UNLOCK_SCHEMA_VERSION}"
+                    )
+                    connection.commit()
+                except BaseException:
+                    connection.rollback()
+                    raise
+        except sqlite3.DatabaseError as error:
+            raise StorageError(f"Could not migrate the vault: {error}") from error
+    problems = check_file(live, expected_schema=DEVICE_UNLOCK_SCHEMA_VERSION)
+    if problems:
+        raise StorageError(
+            "The migrated vault failed verification; restore the pre-hardware-factors "
+            "snapshot: " + "; ".join(problems[:5])
+        )
+    return target
+
+
+def migrate_device_unlock(data_dir: Path) -> Path:
+    """Add stopped-vault storage for voluntary per-user device unlock."""
+    require_supported_sqlite()
+    live = vault_file(data_dir)
+    folder = snapshot_dir(data_dir)
+    folder.mkdir(mode=0o700, parents=True, exist_ok=True)
+    target = folder / timestamped("pre-device-unlock")
+    with VaultLock(data_dir):
+        try:
+            with contextlib.closing(_connect_existing(live)) as source:
+                application_id = source.execute("PRAGMA application_id").fetchone()[0]
+                user_version = source.execute("PRAGMA user_version").fetchone()[0]
+                if (
+                    application_id != APPLICATION_ID
+                    or user_version != DEVICE_UNLOCK_SCHEMA_VERSION
+                ):
+                    raise StorageError(
+                        "Expected a CipherMoth schema-"
+                        f"{DEVICE_UNLOCK_SCHEMA_VERSION} vault; found application "
+                        f"{application_id}, schema {user_version}."
+                    )
+                problems = check_connection(
+                    source, expected_schema=DEVICE_UNLOCK_SCHEMA_VERSION
+                )
+                if problems:
+                    raise StorageError(
+                        "The vault cannot be migrated: " + "; ".join(problems[:5])
+                    )
+                _copy(live, target, expected_schema=DEVICE_UNLOCK_SCHEMA_VERSION)
+            with contextlib.closing(
+                _connect_existing(live, writable=True)
+            ) as connection:
+                connection.execute("PRAGMA foreign_keys=ON")
+                connection.execute("BEGIN EXCLUSIVE")
+                try:
+                    _apply_device_unlock_schema(connection)
+                    connection.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
+                    connection.commit()
+                except BaseException:
+                    connection.rollback()
+                    raise
+        except sqlite3.DatabaseError as error:
+            raise StorageError(f"Could not migrate the vault: {error}") from error
+    problems = check_file(live)
+    if problems:
+        raise StorageError(
+            "The migrated vault failed verification; restore the pre-device-unlock "
             "snapshot: " + "; ".join(problems[:5])
         )
     return target
@@ -936,6 +1151,11 @@ def migrate_users_if_needed(data_dir: Path) -> Path | None:
         return migrate_service_permissions(data_dir)
     if user_version == RECOVERY_SCHEMA_VERSION:
         return migrate_recovery(data_dir)
+    if user_version == HARDWARE_FACTOR_SCHEMA_VERSION:
+        migrate_hardware_factors(data_dir)
+        return migrate_device_unlock(data_dir)
+    if user_version == DEVICE_UNLOCK_SCHEMA_VERSION:
+        return migrate_device_unlock(data_dir)
     return None
 
 

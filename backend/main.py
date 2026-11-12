@@ -28,6 +28,7 @@ from mcp_server import MCP_SCOPE, ServiceTokenVerifier, build_mcp_server
 from settings import get_api_settings, get_vault_defaults
 from storage import VaultLock
 from vault_sessions import VaultSessions
+from webauthn import Challenges
 
 _SESSION_SWEEP_SECONDS = 30
 
@@ -92,6 +93,7 @@ def get_application(
         if vault_sessions is not None
         else VaultSessions(idle_timeout_ms=get_vault_defaults().inactivity_ms)
     )
+    server.state.security_challenges = Challenges()
     mcp = build_mcp_server(server.state.database, server.state.vault_sessions)
     server.state.mcp_server = mcp
 

@@ -5,7 +5,8 @@
   "description": "Browser checks of the frontend image: CSP and responsive vault workflows. Not part of the app.",
   "scripts": {
     "test": "node --test --test-concurrency=1 *.browser.test.mjs",
-    "test:vault": "node --test vault.browser.test.mjs"
+    "test:vault": "node --test vault.browser.test.mjs",
+    "test:security-factor-e2e": "node security-factor.e2e.mjs"
   },
   "devDependencies": {
     "axe-core": "^4.14.0",

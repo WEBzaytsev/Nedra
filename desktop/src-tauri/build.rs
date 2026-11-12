@@ -41,6 +41,9 @@ fn main() {
         "update_check",
         "update_install",
         "update_cancel",
+        "security_key_register",
+        "security_key_answer",
+        "security_key_cancel",
     ];
     if std::env::var_os("CARGO_FEATURE_GUI_TEST").is_some() {
         commands.extend(["qa_report", "qa_lock", "qa_backup", "qa_update_step"]);

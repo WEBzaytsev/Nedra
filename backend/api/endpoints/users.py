@@ -4,6 +4,7 @@ from api.endpoints.deps import (
     AdminContextDep,
     AuthContextDep,
     AuthCRUDDep,
+    SecurityFactorCRUDDep,
     SessionDep,
 )
 from crud.access import EntryACL
@@ -50,13 +51,29 @@ async def create_user(
     body: UserCreatePayload,
     context: AdminContextDep,
     crud: AuthCRUDDep,
+    factors: SecurityFactorCRUDDep,
 ) -> UserCreateResponse:
+    factor_key = (
+        await factors.step_up(
+            context,
+            "service-token-create",
+            body.security_key_assertion,
+            {
+                "current_password": body.current_password or "",
+                "target_role": str(body.role),
+                "target_username": body.username,
+            },
+        )
+        if body.role == "service"
+        else None
+    )
     return await crud.create_user(
         context,
         username=body.username,
         role=body.role,
         temporary_password=body.temporary_password,
         current_password=body.current_password,
+        factor_key=factor_key,
     )
 
 
@@ -95,8 +112,17 @@ async def rotate_service_token(
     body: ServiceTokenRotatePayload,
     context: AdminContextDep,
     crud: AuthCRUDDep,
+    factors: SecurityFactorCRUDDep,
 ) -> UserCreateResponse:
-    return await crud.rotate_service_token(context, user_id, body.current_password)
+    factor_key = await factors.step_up(
+        context,
+        "service-token-rotate",
+        body.security_key_assertion,
+        {"current_password": body.current_password, "target_user_id": user_id},
+    )
+    return await crud.rotate_service_token(
+        context, user_id, body.current_password, factor_key
+    )
 
 
 @router.put("/{user_id}/service-operations", response_model=AuthUser)
@@ -105,9 +131,20 @@ async def update_service_operations(
     body: ServiceOperationsUpdatePayload,
     context: AdminContextDep,
     crud: AuthCRUDDep,
+    factors: SecurityFactorCRUDDep,
 ) -> AuthUser:
+    factor_key = await factors.step_up(
+        context,
+        "service-operations",
+        body.security_key_assertion,
+        {
+            "current_password": body.current_password,
+            "operations": [str(operation) for operation in body.operations],
+            "target_user_id": user_id,
+        },
+    )
     return await crud.update_service_operations(
-        context, user_id, body.operations, body.current_password
+        context, user_id, body.operations, body.current_password, factor_key
     )
 
 

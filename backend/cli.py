@@ -1,5 +1,9 @@
+import base64
 import binascii
 import contextlib
+import hashlib
+import hmac
+import json
 import os
 import tempfile
 from collections.abc import Iterator
@@ -16,6 +20,7 @@ from rich.markup import escape
 from rich.table import Table
 
 from helpers import generate_totp
+from security_key_client import SecurityKeyError, answer
 
 app = typer.Typer(
     name="ciphermoth",
@@ -41,6 +46,7 @@ _LOCAL_HOSTS = ("localhost", "127.0.0.1", "::1")
 _SESSION_HEADER = "x-ciphermoth-session"
 _SESSIONS = "vault-sessions"
 _SLASH_NAMES = "entry-names-with-slash"
+_SECURITY_FACTOR_STEP_UP = "security-factor-step-up"
 _SERVER_TOO_OLD = (
     "This server runs a CipherMoth release older than 1.5.0, which this CLI no "
     "longer supports. Update the server, or use CipherMoth CLI 1.5.x."
@@ -156,10 +162,60 @@ class _Vault:
 
         _check(resp)
         data = resp.json()
+        if data.get("security_key_required"):
+            try:
+                assertion = answer(data["security_key_challenge"])
+            except (KeyError, SecurityKeyError) as error:
+                _die(str(error))
+            resp = self.client.post(
+                "/master_password/unlock",
+                json={
+                    "master_password": self.master,
+                    "security_key_assertion": assertion,
+                },
+            )
+        _check(resp)
+        data = resp.json()
         if not data.get("valid"):
             _die("Invalid master password.")
 
         self._auth = {_SESSION_HEADER: data["session_token"]}
+
+    def security_key_step_up(
+        self, action: str, fields: dict[str, object]
+    ) -> dict | None:
+        if _SECURITY_FACTOR_STEP_UP not in self.features:
+            return None
+        token = self._auth.get(_SESSION_HEADER)
+        if not token:
+            _die("Unlock the vault first.")
+        fields_json = json.dumps(
+            fields, ensure_ascii=False, separators=(",", ":"), sort_keys=True
+        )
+        context = (
+            base64.urlsafe_b64encode(
+                hmac.new(
+                    token.encode(),
+                    f"nedra/security-step-up-context/v1\0{action}\0{fields_json}".encode(),
+                    hashlib.sha256,
+                ).digest()
+            )
+            .rstrip(b"=")
+            .decode()
+        )
+        response = self.send(
+            "POST",
+            "/security/step-up/options",
+            json={"action": action, "context": context},
+        )
+        _check(response)
+        options = response.json()
+        if not options.get("required"):
+            return None
+        try:
+            return answer(options["challenge"])
+        except (KeyError, SecurityKeyError) as error:
+            _die(str(error))
 
     def headers(self, name: str | None = None) -> dict[str, str]:
         headers = dict(self._auth)
@@ -584,9 +640,11 @@ def cmd_backup(
     staged: Path | None = None
     try:
         with _vault(timeout=_TRANSFER_TIMEOUT) as vault:
-            with vault.stream(
-                "POST", "/passwords/backup", json={"master_password": vault.master}
-            ) as resp:
+            payload: dict[str, object] = {"master_password": vault.master}
+            assertion = vault.security_key_step_up("backup", payload)
+            if assertion is not None:
+                payload["security_key_assertion"] = assertion
+            with vault.stream("POST", "/passwords/backup", json=payload) as resp:
                 _check(resp)
                 out_dir.mkdir(parents=True, exist_ok=True)
                 stamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")

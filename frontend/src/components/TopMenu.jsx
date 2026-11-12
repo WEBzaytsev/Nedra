@@ -39,11 +39,13 @@ import { useTranslation } from "react-i18next";
 import { endSession } from "../api/session";
 import { useColorMode } from "../hooks/useColorMode";
 import useMenuAction from "../hooks/useMenuAction";
+import { IS_DESKTOP } from "../platform";
 import { getCurrentUser } from "../utils";
 
 import BrandMark from "./BrandMark";
 import PasswordChangeDialog from "./PasswordChangeDialog";
 import RecoveryCodeDialog from "./RecoveryCodeDialog";
+import SecurityKeyDialog from "./SecurityKeyDialog";
 import SettingsModal from "./SettingsModal";
 import UpdateDialog from "./UpdateDialog";
 
@@ -87,6 +89,7 @@ const TopMenu = () => {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
   const [recoveryOpen, setRecoveryOpen] = useState(false);
+  const [securityKeyOpen, setSecurityKeyOpen] = useState(false);
   const [updateOpen, setUpdateOpen] = useState(false);
   const mobileMenuButton = useRef(null);
   const utilityReturnTarget = useRef(null);
@@ -141,6 +144,11 @@ const TopMenu = () => {
     rememberUtilityTrigger(event);
     closeMobileNav();
     setRecoveryOpen(true);
+  };
+  const openSecurityKey = (event) => {
+    rememberUtilityTrigger(event);
+    closeMobileNav();
+    setSecurityKeyOpen(true);
   };
   const openUpdate = (event) => {
     rememberUtilityTrigger(event);
@@ -201,6 +209,9 @@ const TopMenu = () => {
       ? [{ id: "settings", label: t("topMenu.settings"), icon: Gear, action: openSettings }]
       : []),
     { id: "password", label: t("auth.changePassword"), icon: Key, action: openPassword },
+    ...(!IS_DESKTOP
+      ? [{ id: "security-key", label: t("auth.securityKey"), icon: Key, action: openSecurityKey }]
+      : []),
     { id: "recovery", label: t("auth.recoveryTitle"), icon: Key, action: openRecovery },
     ...(updateAvailable
       ? [
@@ -443,6 +454,12 @@ const TopMenu = () => {
       {admin && <SettingsModal open={settingsOpen} onClose={() => closeUtility(setSettingsOpen)} />}
       <PasswordChangeDialog open={passwordOpen} onClose={() => closeUtility(setPasswordOpen)} />
       <RecoveryCodeDialog open={recoveryOpen} onClose={() => closeUtility(setRecoveryOpen)} />
+      {!IS_DESKTOP && (
+        <SecurityKeyDialog
+          open={securityKeyOpen}
+          onClose={() => closeUtility(setSecurityKeyOpen)}
+        />
+      )}
       <UpdateDialog open={updateOpen} onClose={() => closeUtility(setUpdateOpen)} />
     </>
   );

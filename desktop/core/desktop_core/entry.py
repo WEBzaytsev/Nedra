@@ -57,6 +57,7 @@ def main(started):
     parser = argparse.ArgumentParser(prog="ciphermoth-core")
     parser.add_argument("--data-dir", type=Path)
     parser.add_argument("--check-vectors", type=Path)
+    parser.add_argument("--security-key", action="store_true")
     parser.add_argument("--version", action="store_true")
     args = parser.parse_args()
     if args.version:
@@ -67,6 +68,10 @@ def main(started):
 
         print(json.dumps(run_all(args.check_vectors)))
         return 0
+    if args.security_key:
+        from .security_key import run
+
+        return run()
     if not args.data_dir or not args.data_dir.is_absolute():
         parser.error("an absolute --data-dir supplied by the shell is required")
     if os.name != "nt":

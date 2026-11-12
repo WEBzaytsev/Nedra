@@ -5,7 +5,10 @@ import apiClient from "../api/client";
 import { routes } from "../test/adapter";
 import { stubBrowser } from "../test/globals";
 import { setSessionToken } from "../utils";
+import { securityKeyStepUp } from "../lib/securityStepUp";
 import Passwords from "./passwords";
+
+vi.mock("../lib/securityStepUp", () => ({ securityKeyStepUp: vi.fn() }));
 
 const TOKEN = "kM3x1y8Qe0bWv7c2Z9pL4tR6sN5aH1jD0fG3uY8iO2w";
 const RESULT = { imported: 2, skipped: 1, overwritten: 0, total: 3 };
@@ -28,6 +31,7 @@ beforeEach(() => {
   vi.unstubAllGlobals();
   stubBrowser();
   setSessionToken(TOKEN);
+  vi.mocked(securityKeyStepUp).mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -106,6 +110,25 @@ describe("backup", () => {
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:backup");
     createObjectURL.mockRestore();
     revokeObjectURL.mockRestore();
+  });
+
+  it("binds a fresh security-key assertion to the exact backup password", async () => {
+    const assertion = { credential_id: "credential", prf_output: "secret" };
+    vi.mocked(securityKeyStepUp).mockResolvedValue(assertion);
+    const actions = build({ "POST /passwords/backup": [200, new Blob(["zip"])] });
+    vi.stubGlobal("document", { createElement: vi.fn(() => ({ click: vi.fn() })) });
+    vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:backup");
+    vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+
+    await actions.backup({ masterPassword: "Moth-Test-Vault-2026!" });
+
+    expect(securityKeyStepUp).toHaveBeenCalledWith("backup", {
+      master_password: "Moth-Test-Vault-2026!",
+    });
+    expect(JSON.parse(seen[0].data)).toEqual({
+      master_password: "Moth-Test-Vault-2026!",
+      security_key_assertion: assertion,
+    });
   });
 
   it("reports a wrong master password from the Blob error body", async () => {

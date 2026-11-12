@@ -82,6 +82,24 @@ const ru = {
     newPassword: "Новый пароль",
     changePassword: "Сменить пароль",
     changePasswordTitle: "Смените пароль",
+    securityKey: "Аппаратный ключ",
+    securityKeyAdd: "Добавить аппаратный ключ",
+    securityKeyDefaultName: "Аппаратный ключ",
+    securityKeyDescription:
+      "Используйте ключ с PRF для входа и чувствительных изменений. При включении код восстановления будет удалён.",
+    securityKeyDisable: "Отключить аппаратный ключ",
+    securityKeyDisableDescription:
+      "Для отключения нужны текущий пароль и этот физический ключ. Все сессии будут завершены, а код восстановления не восстановится.",
+    securityKeyName: "Название ключа",
+    deviceUnlock: "Разблокировка устройством",
+    deviceUnlockAdd: "Добавить устройство",
+    deviceUnlockName: "Название устройства",
+    deviceUnlockPasswordRequired:
+      "Введите пароль: для разблокировки устройством нужно свежее подтверждение паролем.",
+    securityKeyPin: "PIN аппаратного ключа",
+    securityKeyPinHint: "Введите PIN физического ключа, а не пароль Недры.",
+    securityKeyPinInvalid: "PIN неверный. Попробуйте ещё раз.",
+    securityKeyTouch: "Коснитесь аппаратного ключа, чтобы продолжить.",
     recoveryTitle: "Код восстановления",
     recoveryDescription:
       "Код восстановления позволяет сменить пароль. Он показывается один раз — сохраните его офлайн.",

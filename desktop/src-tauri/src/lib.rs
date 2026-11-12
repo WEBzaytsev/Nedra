@@ -12,6 +12,7 @@ mod native;
 mod protocol;
 #[cfg(feature = "gui-test")]
 mod qa;
+mod security_key;
 mod sidecar;
 mod updates;
 
@@ -81,9 +82,17 @@ fn core_config(app: &tauri::AppHandle) -> Result<CoreConfig, Box<dyn std::error:
             "TMP",
             "LOCALAPPDATA",
             "USERPROFILE",
+            "CIPHERMOTH_SECURITY_KEY_RP_ID",
+            "WEBAUTHN_RP_IDS",
         ]
     } else {
-        vec!["HOME", "TMPDIR", "LANG"]
+        vec![
+            "HOME",
+            "TMPDIR",
+            "LANG",
+            "CIPHERMOTH_SECURITY_KEY_RP_ID",
+            "WEBAUTHN_RP_IDS",
+        ]
     };
     let env = names
         .into_iter()
@@ -122,7 +131,10 @@ pub fn run() {
         native::open_external,
         updates::update_check,
         updates::update_install,
-        updates::update_cancel
+        updates::update_cancel,
+        security_key::security_key_register,
+        security_key::security_key_answer,
+        security_key::security_key_cancel
     ]);
     #[cfg(feature = "gui-test")]
     let builder = builder.invoke_handler(tauri::generate_handler![
@@ -142,6 +154,9 @@ pub fn run() {
         updates::update_check,
         updates::update_install,
         updates::update_cancel,
+        security_key::security_key_register,
+        security_key::security_key_answer,
+        security_key::security_key_cancel,
         qa::qa_report,
         qa::qa_backup,
         qa::qa_lock,
@@ -166,6 +181,7 @@ pub fn run() {
             });
             app.manage(supervisor);
             app.manage(native::Files::default());
+            app.manage(security_key::SecurityKeys::new(core_config(&handle)?));
             app.manage(clipboard::Clipboard::start());
             menu::install(&handle)?;
             lock::install(handle);

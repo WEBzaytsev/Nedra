@@ -18,5 +18,8 @@ def get_meta() -> MetaResponse:
             "bulk-entry-actions",
             "bulk-entry-move",
             "mcp",
+            "security-factor-step-up",
+            "device-unlock",
+            "browser-extension",
         ],
     )

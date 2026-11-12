@@ -2,6 +2,7 @@ import { action, thunk } from "easy-peasy";
 
 import apiClient from "../api/client";
 import { errorDetail } from "../lib/http";
+import { securityKeyStepUp } from "../lib/securityStepUp";
 import i18n from "../i18n";
 
 const Users = {
@@ -22,7 +23,18 @@ const Users = {
 
   create: thunk(async (actions, payload) => {
     try {
-      const { data } = await apiClient.post("/users", payload);
+      const securityKeyAssertion =
+        payload.role === "service"
+          ? await securityKeyStepUp("service-token-create", {
+              current_password: payload.current_password,
+              target_role: payload.role,
+              target_username: payload.username,
+            })
+          : undefined;
+      const { data } = await apiClient.post("/users", {
+        ...payload,
+        security_key_assertion: securityKeyAssertion,
+      });
       await actions.get();
       return data;
     } catch (err) {
@@ -60,8 +72,13 @@ const Users = {
 
   rotateServiceToken: thunk(async (_actions, { userId, currentPassword }) => {
     try {
+      const securityKeyAssertion = await securityKeyStepUp("service-token-rotate", {
+        current_password: currentPassword,
+        target_user_id: userId,
+      });
       const { data } = await apiClient.post(`/users/${userId}/service-token`, {
         current_password: currentPassword,
+        security_key_assertion: securityKeyAssertion,
       });
       return data.service_token;
     } catch (err) {
@@ -71,9 +88,15 @@ const Users = {
 
   updateServiceOperations: thunk(async (actions, { userId, operations, currentPassword }) => {
     try {
+      const securityKeyAssertion = await securityKeyStepUp("service-operations", {
+        current_password: currentPassword,
+        operations,
+        target_user_id: userId,
+      });
       await apiClient.put(`/users/${userId}/service-operations`, {
         operations,
         current_password: currentPassword,
+        security_key_assertion: securityKeyAssertion,
       });
       await actions.get();
     } catch (err) {

@@ -1,5 +1,5 @@
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, Literal
 
 from sqlalchemy import (
     TIMESTAMP,
@@ -168,6 +168,91 @@ class UserRecoveryModel(BaseModel):
     password_check: Mapped[bytes] = mapped_column(LargeBinary)
     wrapped_key: Mapped[bytes] = mapped_column(LargeBinary)
     key_check: Mapped[bytes] = mapped_column(LargeBinary)
+
+
+class UserSecurityKeyModel(BaseModel):
+    __tablename__ = "user_security_keys"
+    __table_args__ = (
+        CheckConstraint("length(uid) = 16", name="ck_user_security_keys_uid"),
+        CheckConstraint("length(prf_salt) = 32", name="ck_user_security_keys_prf_salt"),
+        CheckConstraint(
+            "sign_count >= 0 AND sign_count < 4294967296",
+            name="ck_user_security_keys_sign_count",
+        ),
+        {"sqlite_autoincrement": True},
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    uid: Mapped[bytes] = mapped_column(LargeBinary, unique=True, default=new_uid)
+    name: Mapped[str] = mapped_column(String(64))
+    credential_id: Mapped[bytes] = mapped_column(LargeBinary, unique=True)
+    public_key: Mapped[bytes] = mapped_column(LargeBinary)
+    rp_id: Mapped[str] = mapped_column(String(253))
+    prf_salt: Mapped[bytes] = mapped_column(LargeBinary)
+    wrapped_factor_key: Mapped[bytes] = mapped_column(LargeBinary)
+    sign_count: Mapped[int] = mapped_column(Integer)
+    created: Mapped[datetime] = mapped_column(
+        TIMESTAMP, default=utc_now, server_default=func.current_timestamp()
+    )
+    last_used: Mapped[datetime | None] = mapped_column(TIMESTAMP, nullable=True)
+
+
+class UserDeviceUnlockPolicyModel(BaseModel):
+    __tablename__ = "user_device_unlock_policies"
+    __table_args__ = (
+        CheckConstraint(
+            "password_interval_days IN (7, 14, 30)",
+            name="ck_user_device_unlock_policies_interval",
+        ),
+    )
+
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    password_interval_days: Mapped[Literal[7, 14, 30]] = mapped_column(
+        Integer, default=14, server_default=text("14")
+    )
+    last_password_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP, default=utc_now, server_default=func.current_timestamp()
+    )
+
+
+class UserDeviceUnlockModel(BaseModel):
+    __tablename__ = "user_device_unlocks"
+    __table_args__ = (
+        CheckConstraint("length(uid) = 16", name="ck_user_device_unlocks_uid"),
+        CheckConstraint(
+            "length(prf_salt) = 32", name="ck_user_device_unlocks_prf_salt"
+        ),
+        CheckConstraint(
+            "sign_count >= 0 AND sign_count < 4294967296",
+            name="ck_user_device_unlocks_sign_count",
+        ),
+        {"sqlite_autoincrement": True},
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    uid: Mapped[bytes] = mapped_column(LargeBinary, unique=True, default=new_uid)
+    name: Mapped[str] = mapped_column(String(64))
+    credential_id: Mapped[bytes] = mapped_column(LargeBinary, unique=True)
+    public_key: Mapped[bytes] = mapped_column(LargeBinary)
+    rp_id: Mapped[str] = mapped_column(String(253))
+    prf_salt: Mapped[bytes] = mapped_column(LargeBinary)
+    wrapped_key: Mapped[bytes] = mapped_column(LargeBinary)
+    requires_factor: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default=false()
+    )
+    sign_count: Mapped[int] = mapped_column(Integer)
+    created: Mapped[datetime] = mapped_column(
+        TIMESTAMP, default=utc_now, server_default=func.current_timestamp()
+    )
+    last_used: Mapped[datetime | None] = mapped_column(TIMESTAMP, nullable=True)
 
 
 class EntryModel(BaseModel):

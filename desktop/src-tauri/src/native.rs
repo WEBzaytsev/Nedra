@@ -83,6 +83,7 @@ pub(super) async fn file_request(
 pub async fn backup_export(
     session: String,
     password: String,
+    security_key_assertion: Option<Value>,
     core: State<'_, Arc<Supervisor>>,
 ) -> Result<Value, String> {
     if password.len() > 4096 {
@@ -96,14 +97,11 @@ pub async fn backup_export(
     let Some(file) = picked else {
         return Err("Backup cancelled.".into());
     };
-    file_request(
-        &core,
-        "backup_export",
-        file.path().into(),
-        session,
-        json!({"master_password":password}),
-    )
-    .await
+    let mut body = json!({"master_password":password});
+    if let Some(assertion) = security_key_assertion {
+        body["security_key_assertion"] = assertion;
+    }
+    file_request(&core, "backup_export", file.path().into(), session, body).await
 }
 
 #[tauri::command]

@@ -49,6 +49,8 @@ async def test_recovery_code_is_one_time_and_replaces_sessions(client):
         "user": None,
         "session_token": None,
         "idle_timeout_ms": None,
+        "security_key_required": False,
+        "security_key_challenge": None,
         "recovery_code": None,
     }
 

@@ -4,6 +4,7 @@ from starlette.responses import JSONResponse
 
 from api.endpoints import (
     auth,
+    extension,
     folders,
     groups,
     health,
@@ -11,6 +12,7 @@ from api.endpoints import (
     meta,
     password,
     password_access,
+    security,
     settings,
     users,
     vault,
@@ -27,6 +29,7 @@ def make_api_router() -> APIRouter:
     api_router.responses = inject_responses()
 
     api_router.include_router(auth.router, prefix="/auth")
+    api_router.include_router(extension.router, prefix="/extension")
     api_router.include_router(folders.router, prefix="/folders")
     api_router.include_router(groups.router, prefix="/groups")
     api_router.include_router(master_password.router, prefix="/master_password")
@@ -34,6 +37,7 @@ def make_api_router() -> APIRouter:
     api_router.include_router(meta.router, prefix="/meta")
     api_router.include_router(password_access.router, prefix="/passwords")
     api_router.include_router(password.router, prefix="/passwords")
+    api_router.include_router(security.router, prefix="/security")
     api_router.include_router(settings.router, prefix="/settings")
     api_router.include_router(vault.router, prefix="/vault")
     api_router.include_router(users.router, prefix="/users")

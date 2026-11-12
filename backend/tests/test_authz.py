@@ -26,11 +26,18 @@ PUBLIC_ROUTES = {
     ("GET", "/api/auth/status"),
     ("POST", "/api/auth/bootstrap"),
     ("POST", "/api/auth/login"),
+    ("POST", "/api/auth/login/security-key"),
+    ("POST", "/api/auth/login/device-unlock/options"),
+    ("POST", "/api/auth/login/device-unlock"),
     ("POST", "/api/auth/recover"),
     ("GET", "/api/master_password/status"),
     ("POST", "/api/master_password/unlock"),
     ("POST", "/api/master_password/lock"),
     ("POST", "/api/master_password/create"),
+    ("POST", "/api/extension/unlock"),
+    ("POST", "/api/extension/handoffs/start"),
+    ("POST", "/api/extension/handoffs/redeem"),
+    ("POST", "/api/extension/handoffs/cancel"),
     ("GET", "/api/meta"),
     ("GET", "/api/health"),
 }
@@ -63,7 +70,92 @@ PROTECTED_ROUTES: dict[tuple[str, str], Spec] = {
         "/auth/entry-draft-key", headers=h
     ),
     ("GET", "/api/auth/me"): lambda c, h, x: c.get("/auth/me", headers=h),
+    ("GET", "/api/security"): lambda c, h, x: c.get("/security", headers=h),
+    ("GET", "/api/security/device-unlock"): lambda c, h, x: c.get(
+        "/security/device-unlock", headers=h
+    ),
+    ("POST", "/api/security/keys/options"): lambda c, h, x: c.post(
+        "/security/keys/options", headers=h
+    ),
+    ("POST", "/api/security/keys"): lambda c, h, x: c.post(
+        "/security/keys",
+        json={
+            "name": "test key",
+            "current_password": MASTER_PASSWORD,
+            "registration_rp_id": "localhost",
+            "registration": {"client_data_json": "AA", "attestation_object": "AA"},
+            "assertion": {
+                "credential_id": "AA",
+                "client_data_json": "AA",
+                "authenticator_data": "AA",
+                "signature": "AA",
+                "prf_output": "A" * 43,
+            },
+        },
+        headers=h,
+    ),
+    ("POST", "/api/security/device-unlock/options"): lambda c, h, x: c.post(
+        "/security/device-unlock/options",
+        json={"current_password": MASTER_PASSWORD, "rp_id": "localhost"},
+        headers=h,
+    ),
+    ("POST", "/api/security/device-unlock"): lambda c, h, x: c.post(
+        "/security/device-unlock",
+        json={
+            "name": "test device",
+            "current_password": MASTER_PASSWORD,
+            "registration_rp_id": "localhost",
+            "registration": {"client_data_json": "AA", "attestation_object": "AA"},
+            "assertion": {
+                "credential_id": "AA",
+                "client_data_json": "AA",
+                "authenticator_data": "AA",
+                "signature": "AA",
+                "prf_output": "A" * 43,
+            },
+        },
+        headers=h,
+    ),
+    ("DELETE", "/api/security/device-unlock/{device_id}"): lambda c, h, x: c.delete(
+        "/security/device-unlock/1", headers=h
+    ),
+    ("PUT", "/api/security/device-unlock/policy"): lambda c, h, x: c.put(
+        "/security/device-unlock/policy",
+        json={"password_interval_days": 14},
+        headers=h,
+    ),
+    ("POST", "/api/security/step-up/options"): lambda c, h, x: c.post(
+        "/security/step-up/options",
+        json={"action": "password-change", "context": "A" * 43},
+        headers=h,
+    ),
+    ("DELETE", "/api/security/keys/{key_id}"): lambda c, h, x: c.request(
+        "DELETE",
+        "/security/keys/1",
+        json={"current_password": "wrong"},
+        headers=h,
+    ),
+    ("DELETE", "/api/security/keys"): lambda c, h, x: c.request(
+        "DELETE", "/security/keys", json={"current_password": "wrong"}, headers=h
+    ),
     ("POST", "/api/auth/logout"): lambda c, h, x: c.post("/auth/logout", headers=h),
+    ("POST", "/api/extension/handoffs/approve"): lambda c, h, x: c.post(
+        "/extension/handoffs/approve",
+        json={
+            "request": "r" * 43,
+            "tab": "t" * 43,
+            "origin": "http://localhost:3000",
+            "browser": "Firefox",
+            "client": "c" * 22,
+        },
+        headers=h,
+    ),
+    ("GET", "/api/extension/sessions"): lambda c, h, x: c.get(
+        "/extension/sessions", headers=h
+    ),
+    ("DELETE", "/api/extension/sessions/{session_id}"): lambda c, h, x: c.delete(
+        "/extension/sessions/not-a-session", headers=h
+    ),
     ("PUT", "/api/auth/password"): lambda c, h, x: c.put(
         "/auth/password",
         json={"current_password": "wrong", "new_password": NEW_MASTER_PASSWORD},
@@ -347,8 +439,23 @@ PROTECTED_ROUTES: dict[tuple[str, str], Spec] = {
 }
 
 ROUTE_IDS = [f"{method} {path}" for method, path in PROTECTED_ROUTES]
+EXTENSION_ROUTES = {
+    ("POST", "/api/extension/matches"),
+    ("POST", "/api/extension/search"),
+    ("POST", "/api/extension/credential"),
+    ("POST", "/api/extension/totp"),
+    ("POST", "/api/extension/session"),
+    ("POST", "/api/extension/lock"),
+}
 REACHED = {
+    ("POST", "/api/security/keys"): 400,
+    ("POST", "/api/security/device-unlock"): 400,
+    ("DELETE", "/api/security/device-unlock/{device_id}"): 404,
+    ("PUT", "/api/security/device-unlock/policy"): 404,
+    ("DELETE", "/api/security/keys"): 403,
+    ("DELETE", "/api/security/keys/{key_id}"): 403,
     ("PUT", "/api/auth/password"): 403,
+    ("POST", "/api/extension/handoffs/approve"): 403,
     ("POST", "/api/auth/recovery"): 403,
     ("DELETE", "/api/auth/recovery"): 403,
     ("DELETE", "/api/passwords/{entry_id}/access"): 403,
@@ -495,7 +602,7 @@ def test_every_api_route_is_classified() -> None:
         if path.startswith("/api")
         for method in operations
     }
-    assert routes == PUBLIC_ROUTES | set(PROTECTED_ROUTES)
+    assert routes == PUBLIC_ROUTES | set(PROTECTED_ROUTES) | EXTENSION_ROUTES
 
 
 @pytest.mark.parametrize("route", list(PROTECTED_ROUTES), ids=ROUTE_IDS)

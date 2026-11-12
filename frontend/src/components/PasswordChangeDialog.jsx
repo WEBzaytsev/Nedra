@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import apiClient from "../api/client";
 import { errorDetail } from "../lib/http";
 import { getMasterPasswordStrength } from "../lib/passwordStrength";
+import { securityKeyStepUp } from "../lib/securityStepUp";
 import { setCurrentUser, setSessionToken } from "../utils";
 import PasswordField from "./PasswordField";
 
@@ -39,9 +40,14 @@ const PasswordChangeDialog = ({ open, onClose, required = false, onChanged }) =>
     setBusy(true);
     setError("");
     try {
+      const securityKeyAssertion = await securityKeyStepUp("password-change", {
+        current_password: currentPassword,
+        new_password: newPassword,
+      });
       const { data } = await apiClient.put("/auth/password", {
         current_password: currentPassword,
         new_password: newPassword,
+        security_key_assertion: securityKeyAssertion,
       });
       if (!data.session_token || !data.user) throw new Error(t("auth.passwordChangeNoSession"));
       setSessionToken(data.session_token);

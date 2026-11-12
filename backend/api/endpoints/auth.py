@@ -6,7 +6,9 @@ from api.endpoints.deps import (
     AuthContextDep,
     AuthCRUDDep,
     CredentialDep,
+    DeviceUnlockCRUDDep,
     PasswordChangeContextDep,
+    SecurityFactorCRUDDep,
     VaultSessionsDep,
 )
 from api.rate_limit import limiter, rate
@@ -16,6 +18,9 @@ from schemas import (
     AuthResponse,
     AuthStatus,
     AuthUser,
+    DeviceUnlockLoginOptions,
+    DeviceUnlockLoginOptionsRequest,
+    DeviceUnlockLoginPayload,
     EntryDraftKey,
     PasswordChangePayload,
     RecoverPasswordPayload,
@@ -23,6 +28,7 @@ from schemas import (
     RecoveryCodePayload,
     RecoveryCodeResult,
     RecoveryStatus,
+    SecurityKeyLoginPayload,
     SimpleDetailSchema,
 )
 
@@ -44,8 +50,66 @@ async def bootstrap(
 
 @router.post("/login", response_model=AuthResponse)
 @limiter.limit(rate("30/hour"))
-async def login(request: Request, body: AuthPayload, crud: AuthCRUDDep) -> AuthResponse:
-    return await crud.login(body.username, body.password)
+async def login(
+    request: Request,
+    body: AuthPayload,
+    crud: AuthCRUDDep,
+    factors: SecurityFactorCRUDDep,
+) -> AuthResponse:
+    response = await crud.login(body.username, body.password)
+    if response.security_key_required:
+        challenge = await factors.login_challenge_for_username(body.username)
+        return response.model_copy(
+            update={"security_key_challenge": challenge.model_dump(mode="json")}
+        )
+    return response
+
+
+@router.post("/login/security-key", response_model=AuthResponse)
+@limiter.limit(rate("30/hour"))
+async def login_with_security_key(
+    request: Request,
+    body: SecurityKeyLoginPayload,
+    crud: AuthCRUDDep,
+    factors: SecurityFactorCRUDDep,
+) -> AuthResponse:
+    response = await crud.login(body.username, body.password)
+    if not response.security_key_required:
+        return AuthResponse(valid=False)
+    user_id = await factors.user_id_for_username(body.username)
+    if user_id is None:
+        return AuthResponse(valid=False)
+    factor_key = await factors.verify_login(user_id, body.assertion)
+    return await crud.login(body.username, body.password, factor_key)
+
+
+@router.post("/login/device-unlock/options", response_model=DeviceUnlockLoginOptions)
+@limiter.limit(rate("30/hour"))
+async def device_unlock_options(
+    request: Request,
+    body: DeviceUnlockLoginOptionsRequest,
+    devices: DeviceUnlockCRUDDep,
+    factors: SecurityFactorCRUDDep,
+) -> DeviceUnlockLoginOptions:
+    return await devices.login_options(body.username, factors)
+
+
+@router.post("/login/device-unlock", response_model=AuthResponse)
+@limiter.limit(rate("30/hour"))
+async def login_with_device_unlock(
+    request: Request,
+    body: DeviceUnlockLoginPayload,
+    crud: AuthCRUDDep,
+    devices: DeviceUnlockCRUDDep,
+    factors: SecurityFactorCRUDDep,
+) -> AuthResponse:
+    unlocked = await devices.login(
+        body.username, body.assertion, body.security_key_assertion, factors
+    )
+    if unlocked is None:
+        return AuthResponse(valid=False)
+    user_id, key, second_factor = unlocked
+    return await crud.login_with_device(user_id, key, second_factor)
 
 
 @router.post("/recover", response_model=RecoveryAuthResponse)
@@ -85,8 +149,15 @@ async def create_recovery_code(
     body: RecoveryCodePayload,
     context: PasswordChangeContextDep,
     crud: AuthCRUDDep,
+    factors: SecurityFactorCRUDDep,
 ) -> RecoveryCodeResult:
-    return await crud.create_recovery_code(context, body.current_password)
+    factor_key = await factors.step_up(
+        context,
+        "recovery-create",
+        body.security_key_assertion,
+        {"current_password": body.current_password},
+    )
+    return await crud.create_recovery_code(context, body.current_password, factor_key)
 
 
 @router.delete("/recovery", response_model=RecoveryStatus)
@@ -96,8 +167,15 @@ async def revoke_recovery_code(
     body: RecoveryCodePayload,
     context: PasswordChangeContextDep,
     crud: AuthCRUDDep,
+    factors: SecurityFactorCRUDDep,
 ) -> RecoveryStatus:
-    return await crud.revoke_recovery_code(context, body.current_password)
+    factor_key = await factors.step_up(
+        context,
+        "recovery-revoke",
+        body.security_key_assertion,
+        {"current_password": body.current_password},
+    )
+    return await crud.revoke_recovery_code(context, body.current_password, factor_key)
 
 
 @router.get("/entry-draft-key", response_model=EntryDraftKey)
@@ -115,5 +193,14 @@ async def change_password(
     body: PasswordChangePayload,
     context: PasswordChangeContextDep,
     crud: AuthCRUDDep,
+    factors: SecurityFactorCRUDDep,
 ) -> AuthResponse:
-    return await crud.change_password(context, body.current_password, body.new_password)
+    factor_key = await factors.step_up(
+        context,
+        "password-change",
+        body.security_key_assertion,
+        {"current_password": body.current_password, "new_password": body.new_password},
+    )
+    return await crud.change_password(
+        context, body.current_password, body.new_password, factor_key=factor_key
+    )

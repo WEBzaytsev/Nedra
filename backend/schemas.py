@@ -1,3 +1,4 @@
+import base64
 from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Annotated, Literal
@@ -132,11 +133,229 @@ class AuthBootstrapPayload(AuthPayload):
         return validate_master_password_strength(value)
 
 
+class SecurityKeyLoginPayload(AuthPayload):
+    assertion: "SecurityKeyAssertion"
+
+
 class AuthResponse(BaseModel):
     valid: bool
     user: AuthUser | None = None
     session_token: str | None = None
     idle_timeout_ms: int | None = None
+    security_key_required: bool = False
+    security_key_challenge: dict[str, object] | None = None
+
+
+_B64 = r"^[A-Za-z0-9_-]+$"
+
+
+def _b64(value: str) -> bytes:
+    return base64.urlsafe_b64decode(value + "=" * (-len(value) % 4))
+
+
+class SecurityKeyAssertion(BaseModel):
+    credential_id: Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9_-]{1,1400}$")]
+    client_data_json: Annotated[str, StringConstraints(pattern=_B64, max_length=8192)]
+    authenticator_data: Annotated[str, StringConstraints(pattern=_B64, max_length=8192)]
+    signature: Annotated[str, StringConstraints(pattern=_B64, max_length=2048)]
+    prf_output: Annotated[str, StringConstraints(pattern=_B64, max_length=64)]
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("prf_output")
+    @classmethod
+    def _key_size(cls, value: str) -> str:
+        if len(_b64(value)) != 32:
+            raise ValueError("must decode to 32 bytes")
+        return value
+
+    def raw(self, name: str) -> bytes:
+        return _b64(getattr(self, name))
+
+
+class SecurityKeyRegistration(BaseModel):
+    client_data_json: Annotated[str, StringConstraints(pattern=_B64, max_length=8192)]
+    attestation_object: Annotated[
+        str, StringConstraints(pattern=_B64, max_length=16384)
+    ]
+
+    model_config = ConfigDict(extra="forbid")
+
+    def raw(self, name: str) -> bytes:
+        return _b64(getattr(self, name))
+
+
+class SecurityKeyDescriptor(BaseModel):
+    credential_id: str
+    rp_id: str
+    prf_salt: str
+
+
+class SecurityKeyChallenge(BaseModel):
+    challenge: str
+    timeout_ms: int
+    keys: list[SecurityKeyDescriptor]
+
+
+SecurityAction = Literal[
+    "backup",
+    "password-change",
+    "recovery-create",
+    "recovery-revoke",
+    "service-token-create",
+    "service-token-rotate",
+    "service-operations",
+    "security-factor-disable",
+    "security-key-add",
+    "security-key-remove",
+    "device-unlock-enroll",
+]
+
+
+class SecurityKeyStepUpOptionsPayload(BaseModel):
+    action: SecurityAction
+    context: Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9_-]{43}$")]
+
+
+class SecurityKeyStepUpOptions(BaseModel):
+    required: bool
+    challenge: SecurityKeyChallenge | None = None
+
+
+class SecurityKeyStepUpPayload(BaseModel):
+    security_key_assertion: SecurityKeyAssertion | None = None
+
+
+class SecurityKeyRegistrationOptions(BaseModel):
+    challenge: str
+    secret_challenge: str
+    prf_salt: str
+    user_id: str
+    rp_name: str
+    rp_id: str
+    timeout_ms: int
+    algorithms: list[int]
+    exclude_credentials: list[str]
+
+
+class SecurityKeyAdd(BaseModel):
+    name: str = Field(min_length=1, max_length=64)
+    current_password: str = Field(min_length=1, max_length=1024)
+    registration_rp_id: str = Field(min_length=1, max_length=253)
+    registration: SecurityKeyRegistration
+    assertion: SecurityKeyAssertion
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+
+class SecurityKeyAddAuthorization(SecurityKeyStepUpPayload):
+    current_password: str = Field(min_length=1, max_length=1024)
+    rp_id: str = Field(min_length=1, max_length=253)
+
+    @field_validator("current_password")
+    @classmethod
+    def _unicode(cls, value: str) -> str:
+        require_unicode_text(value)
+        return value
+
+
+class SecurityKeyRemove(SecurityKeyStepUpPayload):
+    current_password: str = Field(min_length=1, max_length=1024)
+
+    @field_validator("current_password")
+    @classmethod
+    def _unicode(cls, value: str) -> str:
+        require_unicode_text(value)
+        return value
+
+
+class SecurityKeyDisable(SecurityKeyStepUpPayload):
+    current_password: str = Field(min_length=1, max_length=1024)
+
+    @field_validator("current_password")
+    @classmethod
+    def _unicode(cls, value: str) -> str:
+        require_unicode_text(value)
+        return value
+
+
+class SecurityKeyInfo(BaseModel):
+    id: int
+    name: str
+    rp_id: str
+    created: datetime
+    last_used: datetime | None
+
+
+class SecurityStatus(BaseModel):
+    enabled: bool
+    security_keys: list[SecurityKeyInfo]
+
+
+class DeviceUnlockInfo(BaseModel):
+    id: int
+    name: str
+    rp_id: str
+    requires_factor: bool
+    created: datetime
+    last_used: datetime | None
+
+
+class DeviceUnlockStatus(BaseModel):
+    enabled: bool
+    devices: list[DeviceUnlockInfo]
+    password_interval_days: Literal[7, 14, 30] = 14
+
+
+class DeviceUnlockPolicyUpdate(BaseModel):
+    password_interval_days: Literal[7, 14, 30]
+
+
+class DeviceUnlockEnrollAuthorization(SecurityKeyStepUpPayload):
+    current_password: str = Field(min_length=1, max_length=1024)
+    rp_id: str = Field(min_length=1, max_length=253)
+
+    @field_validator("current_password")
+    @classmethod
+    def _unicode(cls, value: str) -> str:
+        require_unicode_text(value)
+        return value
+
+
+class DeviceUnlockRegistrationOptions(SecurityKeyRegistrationOptions):
+    pass
+
+
+class DeviceUnlockEnroll(BaseModel):
+    name: str = Field(min_length=1, max_length=64)
+    current_password: str = Field(min_length=1, max_length=1024)
+    registration_rp_id: str = Field(min_length=1, max_length=253)
+    registration: SecurityKeyRegistration
+    assertion: SecurityKeyAssertion
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    @field_validator("current_password")
+    @classmethod
+    def _unicode(cls, value: str) -> str:
+        require_unicode_text(value)
+        return value
+
+
+class DeviceUnlockLoginOptionsRequest(BaseModel):
+    username: Username
+
+
+class DeviceUnlockLoginOptions(BaseModel):
+    password_required: bool
+    challenge: SecurityKeyChallenge | None = None
+    security_key_challenge: SecurityKeyChallenge | None = None
+
+
+class DeviceUnlockLoginPayload(BaseModel):
+    username: Username
+    assertion: SecurityKeyAssertion
+    security_key_assertion: SecurityKeyAssertion | None = None
 
 
 class RecoveryStatus(BaseModel):
@@ -148,7 +367,7 @@ class RecoveryCodeResult(RecoveryStatus):
     recovery_code: str
 
 
-class RecoveryCodePayload(BaseModel):
+class RecoveryCodePayload(SecurityKeyStepUpPayload):
     current_password: str = Field(min_length=1, max_length=1024)
 
     @field_validator("current_password")
@@ -184,7 +403,7 @@ class EntryDraftKey(BaseModel):
     key: str = Field(repr=False)
 
 
-class UserCreatePayload(BaseModel):
+class UserCreatePayload(SecurityKeyStepUpPayload):
     username: Username
     role: UserRole = UserRole.member
     temporary_password: str | None = Field(default=None, min_length=1, max_length=1024)
@@ -233,7 +452,7 @@ class UserPasswordResetPayload(BaseModel):
         return validate_master_password_strength(value)
 
 
-class ServiceTokenRotatePayload(BaseModel):
+class ServiceTokenRotatePayload(SecurityKeyStepUpPayload):
     current_password: str = Field(min_length=1, max_length=1024)
 
     @field_validator("current_password")
@@ -254,7 +473,7 @@ class ServiceOperationsUpdatePayload(ServiceTokenRotatePayload):
         return value
 
 
-class PasswordChangePayload(BaseModel):
+class PasswordChangePayload(SecurityKeyStepUpPayload):
     current_password: str = Field(min_length=1, max_length=1024)
     new_password: str = Field(min_length=1, max_length=1024)
 
@@ -406,6 +625,7 @@ class EntryAccess(BaseModel):
 
 class MasterPassword(BaseModel):
     master_password: str = Field(min_length=1, max_length=1024)
+    security_key_assertion: SecurityKeyAssertion | None = None
 
     model_config = ConfigDict(str_strip_whitespace=True)
 
@@ -426,6 +646,8 @@ class VaultUnlock(BaseModel):
     valid: bool
     session_token: str | None = None
     idle_timeout_ms: int | None = None
+    security_key_required: bool = False
+    security_key_challenge: SecurityKeyChallenge | None = None
 
 
 class MasterPasswordCreate(BaseModel):
@@ -438,6 +660,123 @@ class MasterPasswordCreate(BaseModel):
 class VaultSessionStatus(BaseModel):
     idle_timeout_ms: int
     expires_in_ms: int
+
+
+ExtensionBrowser = Literal[
+    "Chrome",
+    "Chromium",
+    "Edge",
+    "Brave",
+    "Opera",
+    "Vivaldi",
+    "Firefox",
+    "Browser",
+]
+_ExtensionClient = Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9_-]{22,43}$")]
+_ExtensionOrigin = Annotated[str, StringConstraints(min_length=1, max_length=2048)]
+
+
+class ExtensionUnlockPayload(AuthPayload):
+    browser: ExtensionBrowser = "Browser"
+    client: _ExtensionClient | None = None
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+
+class ExtensionSessionRequest(BaseModel):
+    browser: ExtensionBrowser
+    client: _ExtensionClient | None = None
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+
+class ExtensionSessionCreated(BaseModel):
+    session_token: str
+    id: str
+    idle_timeout_ms: int
+
+
+class ExtensionHandoffStart(BaseModel):
+    request: _ExtensionClient
+    tab: _ExtensionClient
+    origin: _ExtensionOrigin
+    browser: ExtensionBrowser
+    client: _ExtensionClient
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+
+class ExtensionHandoffApprove(ExtensionHandoffStart):
+    pass
+
+
+class ExtensionHandoffRedeem(BaseModel):
+    request: _ExtensionClient
+    tab: _ExtensionClient
+    redeem: _ExtensionClient
+    browser: ExtensionBrowser
+    client: _ExtensionClient
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+
+class ExtensionHandoffApproved(BaseModel):
+    redeem: str
+
+
+class ExtensionHandoffSession(BaseModel):
+    session_token: str
+    id: str
+    idle_timeout_ms: int
+
+
+class ExtensionSessionInfo(BaseModel):
+    id: str
+    browser: str
+    created: datetime
+    last_used: datetime
+
+
+class ExtensionMatchRequest(BaseModel):
+    origin: _ExtensionOrigin
+    subdomains: bool = False
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+
+class ExtensionSearchRequest(BaseModel):
+    query: str = Field(default="", max_length=200)
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+
+class ExtensionLoginRequest(ExtensionMatchRequest):
+    id: int = Field(ge=1, le=2**62)
+    confirmed_mismatch: bool = False
+
+
+class ExtensionLogin(BaseModel):
+    id: int
+    name: str
+    username: str | None
+    host: str | None
+    favorite: bool
+    has_totp: bool
+
+
+class ExtensionLogins(BaseModel):
+    logins: list[ExtensionLogin]
+    truncated: bool
+
+
+class ExtensionCredential(BaseModel):
+    username: str | None
+    password: str
+
+
+class ExtensionTotp(BaseModel):
+    code: str
+    expires_in: int
 
 
 class VaultLock(BaseModel):

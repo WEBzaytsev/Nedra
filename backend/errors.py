@@ -15,6 +15,18 @@ class InvalidKey(Forbidden):
     pass
 
 
+class WrongScope(Forbidden):
+    """A live token used outside its server-enforced session scope."""
+
+
+class UseHandoff(VaultError):
+    """A hardware-factor account must connect the extension from the web app."""
+
+
+class OriginMismatch(VaultError):
+    """A requested credential is saved for a different origin."""
+
+
 class NotFound(VaultError):
     pass
 

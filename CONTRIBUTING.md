@@ -107,6 +107,14 @@ Everything is optional, the defaults work fine for local use.
 | `DEBUG` | `false` | FastAPI debug mode |
 | `CIPHERMOTH_DATA_DIR` | `data` (`/data` in the image) | Folder that holds `vault.db` and `snapshots/`, created `0700` |
 | `CIPHERMOTH_RATE_LIMIT` | unset | Overrides every route's own limit (e.g. `200/hour`). Unlocking defaults to `30/hour`; each CLI command unlocks once, so raise this if a batch of them trips it |
+| `WEBAUTHN_RP_IDS` | `["localhost"]` | Exact trusted WebAuthn relying-party host names. For a server at `https://vault.example`, set `["vault.example"]`; do not add arbitrary domains. |
+| `CIPHERMOTH_SECURITY_KEY_RP_ID` | `localhost` | Desktop/CLI native CTAP enrollment RP. It must be one of `WEBAUTHN_RP_IDS`; set it to `vault.example` when the desktop app is used with that server vault. |
+
+WebAuthn never trusts the request `Host` header. Before enrolling a security key
+at `https://vault.example`, set `WEBAUTHN_RP_IDS=["vault.example"]` in the
+backend environment and restart it. A browser at an unconfigured address shows a
+configuration error; enroll through the configured HTTPS host rather than adding
+whatever address a request supplies.
 
 **Vault defaults:** backend environment variables use milliseconds (except the
 boolean update flag). The priority is **a saved administrator settings form →

@@ -1,3 +1,4 @@
+import asyncio
 import base64
 import hashlib
 import logging
@@ -8,11 +9,18 @@ from sqlalchemy import delete, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from crud.base import BaseCRUD
-from crud.engine import after_commit, after_rollback
+from crud.engine import Database, after_commit, after_rollback
 from crud.folder import migrate_folder_links
 from crud.master_password import _store, fetch_vault, key_material
 from crud.settings import SettingsCRUD
-from errors import Forbidden, InvalidRequest, NotFound, SessionRequired
+from errors import (
+    Forbidden,
+    InvalidRequest,
+    NotFound,
+    SessionRequired,
+    UseHandoff,
+    VaultBusy,
+)
 from helpers import (
     KDF_NAME,
     DecryptionFailed,
@@ -30,8 +38,11 @@ from models import (
     EntryAccessModel,
     EntryModel,
     FolderModel,
+    UserDeviceUnlockModel,
+    UserDeviceUnlockPolicyModel,
     UserModel,
     UserRecoveryModel,
+    UserSecurityKeyModel,
     VaultModel,
 )
 from schemas import (
@@ -39,6 +50,7 @@ from schemas import (
     AuthResponse,
     AuthStatus,
     AuthUser,
+    ExtensionSessionCreated,
     RecoveryAuthResponse,
     RecoveryCodeResult,
     RecoveryStatus,
@@ -48,7 +60,7 @@ from schemas import (
     service_operation_mask,
     service_operations_from_mask,
 )
-from vault_sessions import VaultSessions
+from vault_sessions import Scope, VaultSessions
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +69,10 @@ _SESSION_ENDED = "Your session expired, was revoked, or the account was disabled
 _DAMAGED = (
     "An account key record failed to verify. The vault file may be damaged; "
     "restore a snapshot (docs/UPDATING.md)."
+)
+_HARDWARE_STEP_UP_REQUIRED = (
+    "Hardware-factor re-confirmation is required; this sensitive action is unavailable "
+    "until that step-up flow is implemented."
 )
 
 
@@ -71,11 +87,25 @@ class AuthContext:
         return self.user.service_owner_id or self.user.id
 
 
+async def _record_password_unlock(database: Database, user_id: int) -> None:
+    try:
+        async with database.transaction() as session:
+            await session.execute(
+                update(UserDeviceUnlockPolicyModel)
+                .where(UserDeviceUnlockPolicyModel.user_id == user_id)
+                .values(last_password_at=func.now())
+            )
+    except VaultBusy:
+        pass
+
+
 def token_digest(token: str) -> bytes:
     return hashlib.sha256(token.encode()).digest()
 
 
-def user_key_material(model: UserModel | UserRecoveryModel) -> KeyMaterial:
+def user_key_material(
+    model: UserModel | UserRecoveryModel, second_factor: bool = False
+) -> KeyMaterial:
     for value, length in (
         (model.kdf_salt, 16),
         (model.password_check, 32),
@@ -97,6 +127,7 @@ def user_key_material(model: UserModel | UserRecoveryModel) -> KeyMaterial:
         password_check=model.password_check,
         wrapped_key=model.wrapped_key,
         key_check=model.key_check,
+        second_factor=second_factor,
     )
 
 
@@ -145,8 +176,8 @@ async def fetch_user(session: AsyncSession, user_id: int) -> UserModel | None:
     return await session.scalar(statement)
 
 
-def credential_fingerprint(model: UserModel) -> bytes:
-    material = user_key_material(model)
+def credential_fingerprint(model: UserModel, second_factor: bool = False) -> bytes:
+    material = user_key_material(model, second_factor)
     digest = hashlib.sha256()
     for value in (
         model.kdf.encode(),
@@ -163,6 +194,27 @@ def credential_fingerprint(model: UserModel) -> bytes:
     return digest.digest()
 
 
+async def hardware_factor_enabled(session: AsyncSession, user_id: int) -> bool:
+    return bool(
+        await session.scalar(
+            select(UserSecurityKeyModel.id)
+            .where(UserSecurityKeyModel.user_id == user_id)
+            .limit(1)
+        )
+    )
+
+
+def _same_stored_material(left: KeyMaterial, right: KeyMaterial) -> bool:
+    """`second_factor` is wrapper semantics, not a vault-table column."""
+    return (
+        left.params == right.params
+        and left.salt == right.salt
+        and left.password_check == right.password_check
+        and left.wrapped_key == right.wrapped_key
+        and left.key_check == right.key_check
+    )
+
+
 async def validate_vault_material(
     session: AsyncSession, vault: VaultModel
 ) -> KeyMaterial:
@@ -170,14 +222,19 @@ async def validate_vault_material(
     if vault.owner_user_id is None:
         return material
     owner = await fetch_user(session, vault.owner_user_id)
-    if owner is None or user_key_material(owner) != material:
+    if owner is None or not _same_stored_material(
+        user_key_material(owner, await hardware_factor_enabled(session, owner.id)),
+        material,
+    ):
         raise InvalidRequest(_DAMAGED)
     return material
 
 
-async def open_material(password: str, material: KeyMaterial) -> VaultKey | None:
+async def open_material(
+    password: str, material: KeyMaterial, factor_key: bytes | None = None
+) -> VaultKey | None:
     try:
-        return await unlock_key_material(password, material)
+        return await unlock_key_material(password, material, factor_key)
     except UnsupportedKdf as error:
         raise InvalidRequest(str(error)) from None
     except DecryptionFailed:
@@ -186,9 +243,15 @@ async def open_material(password: str, material: KeyMaterial) -> VaultKey | None
 
 
 class AuthCRUD(BaseCRUD):
-    def __init__(self, session: AsyncSession, vault_sessions: VaultSessions) -> None:
+    def __init__(
+        self,
+        session: AsyncSession,
+        vault_sessions: VaultSessions,
+        database: Database | None = None,
+    ) -> None:
         super().__init__(session)
         self.vault_sessions = vault_sessions
+        self.database = database
 
     @staticmethod
     def to_user(model: UserModel) -> AuthUser:
@@ -215,8 +278,12 @@ class AuthCRUD(BaseCRUD):
         ).inactivity_ms()
         self.vault_sessions.set_idle_timeout(inactivity_ms)
 
-    def _open_session(self, user: UserModel, key: VaultKey) -> AuthResponse:
-        token = self.vault_sessions.open(key, user.id, credential_fingerprint(user))
+    def _open_session(
+        self, user: UserModel, key: VaultKey, second_factor: bool = False
+    ) -> AuthResponse:
+        token = self.vault_sessions.open(
+            key, user.id, credential_fingerprint(user, second_factor)
+        )
         after_rollback(self.session, lambda: self.vault_sessions.revoke(token))
         return AuthResponse(
             valid=True,
@@ -290,7 +357,9 @@ class AuthCRUD(BaseCRUD):
         await self._refresh_timeout()
         return self._open_session(user, key)
 
-    async def login(self, username: str, password: str) -> AuthResponse:
+    async def login(
+        self, username: str, password: str, factor_key: bytes | None = None
+    ) -> AuthResponse:
         user = await self.session.scalar(
             select(UserModel).where(
                 UserModel.username == username,
@@ -300,17 +369,25 @@ class AuthCRUD(BaseCRUD):
         )
         if user is None:
             await self.session.commit()
-            # Keep invalid-user and invalid-password requests on the same KDF path.
             await create_key_material(password)
             return AuthResponse(valid=False)
-        observed = user_key_material(user)
+        factor_enabled = bool(
+            await self.session.scalar(
+                select(UserSecurityKeyModel.id)
+                .where(UserSecurityKeyModel.user_id == user.id)
+                .limit(1)
+            )
+        )
+        if factor_enabled and factor_key is None:
+            return AuthResponse(valid=False, security_key_required=True)
+        observed = user_key_material(user, factor_enabled)
         user_id = user.id
         vault = await fetch_vault(self.session)
         if vault is None:
             raise InvalidRequest(_DAMAGED)
         key_material(vault)
         await self.session.commit()
-        key = await open_material(password, observed)
+        key = await open_material(password, observed, factor_key)
         if key is None:
             return AuthResponse(valid=False)
         current = await fetch_user(self.session, user_id)
@@ -322,16 +399,30 @@ class AuthCRUD(BaseCRUD):
             current is None
             or not current.active
             or current.role == UserRole.service
-            or user_key_material(current) != observed
+            or user_key_material(current, factor_enabled) != observed
         ):
             return AuthResponse(valid=False)
         if not key.matches(canonical.key_check):
             raise InvalidRequest(_DAMAGED)
+        if (
+            self.database is not None
+            and await self.session.get(UserDeviceUnlockPolicyModel, current.id)
+            is not None
+        ):
+            database = self.database
+            after_commit(
+                self.session,
+                lambda: asyncio.create_task(
+                    _record_password_unlock(database, current.id)
+                ),
+            )
         await migrate_folder_links(self.session, key)
         await self._refresh_timeout()
-        return self._open_session(current, key)
+        return self._open_session(current, key, factor_enabled)
 
-    async def login_primary(self, password: str) -> AuthResponse:
+    async def login_primary(
+        self, password: str, factor_key: bytes | None = None
+    ) -> AuthResponse:
         vault = await fetch_vault(self.session)
         if vault is None:
             raise NotFound("No master password found.")
@@ -340,7 +431,58 @@ class AuthCRUD(BaseCRUD):
         user = await fetch_user(self.session, vault.owner_user_id)
         if user is None:
             raise InvalidRequest(_DAMAGED)
-        return await self.login(user.username, password)
+        return await self.login(user.username, password, factor_key)
+
+    async def login_extension(
+        self, username: str, password: str, browser: str, client: str | None
+    ) -> ExtensionSessionCreated | None:
+        """Mint only a fill-scoped token; a factor account must use web handoff."""
+        response = await self.login(username, password)
+        if response.security_key_required:
+            raise UseHandoff(
+                "This account needs a security key. Unlock it in Nedra, then connect "
+                "the extension."
+            )
+        if not response.valid or response.session_token is None:
+            return None
+        full_token = response.session_token
+        key = self.vault_sessions.resolve(full_token)
+        user_id = self.vault_sessions.user_id(full_token)
+        fingerprint = self.vault_sessions.credential_fingerprint(full_token)
+        token, handle = self.vault_sessions.open_extension(
+            key, user_id, fingerprint, browser, client
+        )
+        self.vault_sessions.revoke(full_token, scope=Scope.FULL)
+        after_rollback(self.session, lambda: self.vault_sessions.revoke(token))
+        return ExtensionSessionCreated(
+            session_token=token,
+            id=handle,
+            idle_timeout_ms=self.vault_sessions.idle_timeout_ms,
+        )
+
+    async def primary_user_id(self) -> int | None:
+        vault = await fetch_vault(self.session)
+        return vault.owner_user_id if vault is not None else None
+
+    async def login_with_device(
+        self, user_id: int, key: VaultKey, second_factor: bool
+    ) -> AuthResponse:
+        current = await fetch_user(self.session, user_id)
+        vault = await fetch_vault(self.session)
+        if (
+            current is None
+            or not current.active
+            or current.role == UserRole.service
+            or vault is None
+            or second_factor != await hardware_factor_enabled(self.session, user_id)
+        ):
+            return AuthResponse(valid=False)
+        canonical = await validate_vault_material(self.session, vault)
+        if not key.matches(canonical.key_check):
+            return AuthResponse(valid=False)
+        await migrate_folder_links(self.session, key)
+        await self._refresh_timeout()
+        return self._open_session(current, key, second_factor)
 
     async def context(
         self,
@@ -348,15 +490,31 @@ class AuthCRUD(BaseCRUD):
         *,
         refresh: bool = True,
         allow_password_change: bool = False,
+        scope: Scope = Scope.FULL,
     ) -> AuthContext:
-        key = self.vault_sessions.resolve(token, refresh=refresh)
-        user_id = self.vault_sessions.user_id(token)
-        session_fingerprint = self.vault_sessions.credential_fingerprint(token)
+        key = self.vault_sessions.resolve(token, refresh=refresh, scope=scope)
+        user_id = self.vault_sessions.user_id(token, scope=scope)
+        session_fingerprint = self.vault_sessions.credential_fingerprint(
+            token, scope=scope
+        )
         user = await fetch_user(self.session, user_id)
+        factor_enabled = (
+            bool(
+                await self.session.scalar(
+                    select(UserSecurityKeyModel.id)
+                    .where(UserSecurityKeyModel.user_id == user_id)
+                    .limit(1)
+                )
+            )
+            if user is not None
+            else False
+        )
         vault = await fetch_vault(self.session)
         try:
             current_fingerprint = (
-                credential_fingerprint(user) if user is not None else None
+                credential_fingerprint(user, factor_enabled)
+                if user is not None
+                else None
             )
         except InvalidRequest:
             current_fingerprint = None
@@ -389,12 +547,13 @@ class AuthCRUD(BaseCRUD):
         role: UserRole,
         temporary_password: str | None,
         current_password: str | None,
+        factor_key: bytes | None = None,
     ) -> UserCreateResponse:
         self.require_admin(actor)
         if role == UserRole.service:
             if current_password is None:
                 raise InvalidRequest("Current administrator password is required.")
-            await self.verify_current_password(actor, current_password)
+            await self.verify_current_password(actor, current_password, factor_key)
         if (
             await self.session.scalar(
                 select(UserModel.id).where(UserModel.username == username)
@@ -533,9 +692,10 @@ class AuthCRUD(BaseCRUD):
         user_id: int,
         operations: list[ServiceOperation],
         current_password: str,
+        factor_key: bytes | None = None,
     ) -> AuthUser:
         self.require_admin(actor)
-        await self.verify_current_password(actor, current_password)
+        await self.verify_current_password(actor, current_password, factor_key)
         target = await self._target(actor, user_id)
         if target.role != UserRole.service:
             raise Forbidden("Only service users have MCP operation permissions.")
@@ -553,10 +713,14 @@ class AuthCRUD(BaseCRUD):
         return self.to_user(target)
 
     async def rotate_service_token(
-        self, actor: AuthContext, user_id: int, current_password: str
+        self,
+        actor: AuthContext,
+        user_id: int,
+        current_password: str,
+        factor_key: bytes | None = None,
     ) -> UserCreateResponse:
         self.require_admin(actor)
-        await self.verify_current_password(actor, current_password)
+        await self.verify_current_password(actor, current_password, factor_key)
         target = await self._target(actor, user_id)
         if target.role != UserRole.service:
             raise Forbidden("Only service users have service tokens.")
@@ -613,6 +777,31 @@ class AuthCRUD(BaseCRUD):
         await self.session.execute(
             delete(UserRecoveryModel).where(UserRecoveryModel.user_id == current.id)
         )
+        removed_factors = await self.session.execute(
+            delete(UserSecurityKeyModel).where(
+                UserSecurityKeyModel.user_id == current.id
+            )
+        )
+        await self.session.execute(
+            delete(UserDeviceUnlockModel).where(
+                UserDeviceUnlockModel.user_id == current.id
+            )
+        )
+        await self.session.execute(
+            delete(UserDeviceUnlockPolicyModel).where(
+                UserDeviceUnlockPolicyModel.user_id == current.id
+            )
+        )
+        if getattr(removed_factors, "rowcount", 0):
+            self.session.add(
+                AccessAuditModel(
+                    actor_user_id=actor.user.id,
+                    action="hardware_factor_reset",
+                    resource_type="user",
+                    resource_id=current.id,
+                    target_user_id=current.id,
+                )
+            )
         if vault.owner_user_id == current.id:
             _store(vault, material)
         self.session.add(
@@ -636,11 +825,14 @@ class AuthCRUD(BaseCRUD):
         )
 
     async def create_recovery_code(
-        self, context: AuthContext, current_password: str
+        self,
+        context: AuthContext,
+        current_password: str,
+        factor_key: bytes | None = None,
     ) -> RecoveryCodeResult:
         if context.user.role == UserRole.service:
             raise Forbidden("Service users do not use recovery codes.")
-        await self.verify_current_password(context, current_password)
+        await self.verify_current_password(context, current_password, factor_key)
         code = recovery_code()
         material = await wrap_key_material(
             normalize_recovery_code(code) or "", context.key
@@ -676,9 +868,12 @@ class AuthCRUD(BaseCRUD):
         )
 
     async def revoke_recovery_code(
-        self, context: AuthContext, current_password: str
+        self,
+        context: AuthContext,
+        current_password: str,
+        factor_key: bytes | None = None,
     ) -> RecoveryStatus:
-        await self.verify_current_password(context, current_password)
+        await self.verify_current_password(context, current_password, factor_key)
         recovery = await self.session.get(UserRecoveryModel, context.user.id)
         if recovery is not None:
             await self.session.delete(recovery)
@@ -747,6 +942,31 @@ class AuthCRUD(BaseCRUD):
             return RecoveryAuthResponse(valid=False)
         store_user_material(current, replacement)
         current.must_change_password = False
+        removed_factors = await self.session.execute(
+            delete(UserSecurityKeyModel).where(
+                UserSecurityKeyModel.user_id == current.id
+            )
+        )
+        await self.session.execute(
+            delete(UserDeviceUnlockModel).where(
+                UserDeviceUnlockModel.user_id == current.id
+            )
+        )
+        await self.session.execute(
+            delete(UserDeviceUnlockPolicyModel).where(
+                UserDeviceUnlockPolicyModel.user_id == current.id
+            )
+        )
+        if getattr(removed_factors, "rowcount", 0):
+            self.session.add(
+                AccessAuditModel(
+                    actor_user_id=current.id,
+                    action="hardware_factor_recovered",
+                    resource_type="user",
+                    resource_id=current.id,
+                    target_user_id=current.id,
+                )
+            )
         if vault.owner_user_id == current.id:
             _store(vault, replacement)
         store_recovery_material(current_recovery, next_material)
@@ -812,21 +1032,25 @@ class AuthCRUD(BaseCRUD):
         new_password: str,
         *,
         open_session: bool = True,
+        factor_key: bytes | None = None,
     ) -> AuthResponse:
         if context.user.role == UserRole.service:
             raise Forbidden("Service users do not use interactive passwords.")
-        observed = user_key_material(context.user)
+        factor_enabled = await hardware_factor_enabled(self.session, context.user.id)
+        if factor_enabled and factor_key is None:
+            raise Forbidden("Fresh hardware-factor confirmation is required.")
+        observed = user_key_material(context.user, factor_enabled)
         user_id = context.user.id
         key = context.key
         await self.session.commit()
-        opened = await open_material(current_password, observed)
+        opened = await open_material(current_password, observed, factor_key)
         if opened is None or not opened.matches(key.check):
             raise Forbidden("Current password is incorrect.")
         if new_password == current_password:
             raise InvalidRequest(
                 "New password must be different from the current password."
             )
-        replacement = await wrap_key_material(new_password, key)
+        replacement = await wrap_key_material(new_password, key, factor_key=factor_key)
         user = await fetch_user(self.session, user_id)
         vault = await fetch_vault(self.session)
         canonical = (
@@ -837,7 +1061,7 @@ class AuthCRUD(BaseCRUD):
         if (
             user is None
             or not user.active
-            or user_key_material(user) != observed
+            or user_key_material(user, factor_enabled) != observed
             or vault is None
             or canonical is None
             or not key.matches(canonical.key_check)
@@ -845,13 +1069,23 @@ class AuthCRUD(BaseCRUD):
             raise SessionRequired(_SESSION_ENDED)
         store_user_material(user, replacement)
         user.must_change_password = False
+        await self.session.execute(
+            delete(UserDeviceUnlockModel).where(
+                UserDeviceUnlockModel.user_id == user.id
+            )
+        )
+        await self.session.execute(
+            delete(UserDeviceUnlockPolicyModel).where(
+                UserDeviceUnlockPolicyModel.user_id == user.id
+            )
+        )
         if vault.owner_user_id == user.id:
             _store(vault, replacement)
         await self._refresh_timeout()
         if not open_session:
             after_commit(self.session, lambda: self.vault_sessions.revoke_user(user_id))
             return AuthResponse(valid=True)
-        response = self._open_session(user, key)
+        response = self._open_session(user, key, factor_enabled)
         token = response.session_token
         assert token is not None
         after_commit(
@@ -861,13 +1095,19 @@ class AuthCRUD(BaseCRUD):
         return response
 
     async def verify_current_password(
-        self, context: AuthContext, current_password: str
+        self,
+        context: AuthContext,
+        current_password: str,
+        factor_key: bytes | None = None,
     ) -> None:
-        observed = user_key_material(context.user)
+        factor_enabled = await hardware_factor_enabled(self.session, context.user.id)
+        if factor_enabled and factor_key is None:
+            raise Forbidden("Fresh hardware-factor confirmation is required.")
+        observed = user_key_material(context.user, factor_enabled)
         user_id = context.user.id
         key = context.key
         await self.session.commit()
-        opened = await open_material(current_password, observed)
+        opened = await open_material(current_password, observed, factor_key)
         if opened is None or not opened.matches(key.check):
             raise Forbidden("Current password is incorrect.")
         user = await fetch_user(self.session, user_id)
@@ -880,7 +1120,7 @@ class AuthCRUD(BaseCRUD):
         if (
             user is None
             or not user.active
-            or user_key_material(user) != observed
+            or user_key_material(user, factor_enabled) != observed
             or vault is None
             or canonical is None
             or not key.matches(canonical.key_check)

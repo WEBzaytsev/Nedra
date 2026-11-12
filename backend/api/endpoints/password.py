@@ -25,6 +25,7 @@ from api.endpoints.deps import (
     CredentialDep,
     EntryName,
     PasswordCRUDDep,
+    SecurityFactorCRUDDep,
     VaultKeyDep,
     VaultSessionsDep,
     get_database,
@@ -552,8 +553,15 @@ async def backup_passwords(
     auth_crud: AuthCRUDDep,
     context: AuthContextDep,
     credential: CredentialDep,
+    factors: SecurityFactorCRUDDep,
 ) -> StreamingResponse:
-    await auth_crud.verify_current_password(context, body.master_password)
+    factor_key = await factors.step_up(
+        context,
+        "backup",
+        body.security_key_assertion,
+        {"master_password": body.master_password},
+    )
+    await auth_crud.verify_current_password(context, body.master_password, factor_key)
     backup = await crud.create_backup(body.master_password, key, verify_current=False)
     await auth_crud.context(credential.token, refresh=False)
     stamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")

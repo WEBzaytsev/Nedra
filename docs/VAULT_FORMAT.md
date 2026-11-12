@@ -1,6 +1,6 @@
 # CipherMoth vault format 2 and backup format 2
 
-This is the specification of how CipherMoth stores a vault on disk (vault format 2, SQLite schema 4) and how it writes an encrypted portable backup (backup cryptographic format 2 with payload version 3, `.cmbackup`). It is written for reviewers and for anyone implementing a second reader. The desktop core runs this same Python code; cryptographic vectors remain in `testdata/vectors/vault-v2.json` and `backup-v2.json`.
+This is the specification of how CipherMoth stores a vault on disk (vault format 2, SQLite schema 8) and how it writes an encrypted portable backup (backup cryptographic format 2 with payload version 3, `.cmbackup`). It is written for reviewers and for anyone implementing a second reader. The desktop core runs this same Python code; cryptographic vectors remain in `testdata/vectors/vault-v2.json` and `backup-v2.json`.
 
 The reference implementation is `backend/helpers.py` (primitives and associated data), `backend/crud/auth.py` (accounts, login and credential rewrapping), `backend/crud/access.py` (authorization), `backend/crud/password.py` and `backend/crud/attachment.py` (records), `backend/crud/backup.py` (backups) and `backend/storage.py` (file identity and schema migration).
 
@@ -74,13 +74,17 @@ vault key VK (32 random bytes, never stored in clear)
 
 **Why a separate commitment and not only GCM?** AES-GCM is not key-committing: one ciphertext can be built to decrypt under many keys. Unlock compares `password_check` first, so whatever is planted in `wrapped_key`, each unlock tests one password. The commitment costs an attacker exactly what testing the wrapped key would: one Argon2id per guess.
 
-## 4. SQLite layout (schema 5)
+## 4. SQLite layout (schema 8)
 
-`PRAGMA application_id` = `0x434D5448` ("CMTH"), `PRAGMA user_version` = 5. The SQLite settings (WAL, `synchronous=FULL`, `secure_delete=ON`, `foreign_keys=ON`, ...) are unchanged from schema 2 and listed in `CLAUDE.md`.
+`PRAGMA application_id` = `0x434D5448` ("CMTH"), `PRAGMA user_version` = 8. The SQLite settings (WAL, `synchronous=FULL`, `secure_delete=ON`, `foreign_keys=ON`, ...) are unchanged from schema 2 and listed in `CLAUDE.md`.
 
 **`vault`** (at most one row, `id = 1`): `owner_user_id`, `folder_links_ready`, plus the primary compatibility account's format version (2), KDF parameters, salt, commitment, wrapped key and key check, with timestamps. `folder_links_ready` is set only after encrypted legacy folder strings have been linked to first-class folder rows after an unlock.
 
 **`users`**: plaintext `username`, `role` (`admin`, `member` or `service`), active and required-password-change flags, optional `service_owner_id`, SHA-256 service-token digest, and `service_operations` bitmask. New services receive only `list` and `get`; migrated services receive no operations until an administrator explicitly re-authorizes them. Every MCP tool checks this mask and the entry/folder ACL. Per-account KDF parameters, salt, commitment, wrapped VK and key check are stored with timestamps. Human passwords and service tokens are never stored.
+
+**`user_security_keys`**: each voluntarily enrolled user hardware factor stores its credential ID, public key, relying-party ID, PRF salt, factor-key wrapper, signature counter and timestamps. Credential material is scoped to that user; it is not part of a portable backup.
+
+**`user_device_unlock_policies`** and **`user_device_unlocks`**: a user-owned password-confirmation interval and up to eight device-bound WebAuthn/PRF key wrappers, respectively. Device records carry public credential metadata, PRF salt, factor requirement, signature counter and timestamps. They are local account state, not portable-backup content.
 
 **`entries`**: `id` (integer, autoincrement, never reused), `uid` (16 random bytes, unique), plaintext `owner_id`, optional plaintext `folder_id`, `name_index` (32 bytes), `document` (sealed entry document), `backed_up`, `created`, `updated`, `deleted`. A partial unique index on `name_index WHERE deleted IS NULL` keeps active names unique across the shared vault; trashed entries may share a name. `folder_id` is authoritative; the encrypted document's folder name is compatibility/display data.
 
@@ -197,7 +201,7 @@ Wrong password, tampering, truncation, reordering, a frame from another backup a
 
 Three independent numbers, each refused when newer than the code understands:
 
-- SQLite `user_version`: the table layout (schema). 3 adds users, ownership and entry grants; 4 adds first-class encrypted folders, groups, expiring folder grants and access audit while keeping vault format 2.
+- SQLite `user_version`: the table layout (schema). 3 adds users, ownership and entry grants; 4 adds first-class encrypted folders, groups, expiring folder grants and access audit; 7 adds personal hardware-factor records; 8 adds voluntary per-user device-unlock records, while keeping vault format 2.
 - `vault.format_version`: the cryptographic layout. 2.
 - The backup header `version`: 2. Its encrypted JSON payload version is 3; payload version 2 remains readable. Backup format 1 was the WinZip-AES ZIP of CipherMoth up to 2.0.x and can still be imported, see below.
 
@@ -216,4 +220,5 @@ A password change replaces that account's wrapper in the live file, and SQLite's
 - **Vaults written by CipherMoth 2.0.x (schema 1, format 1)** are refused, unchanged, with instructions: make a backup in 2.0.x, set the old file aside with `ciphermoth-admin set-aside` (it is moved, never deleted), start a new vault and import the backup. There is no in-place conversion.
 - **Single-user vaults written with schema 2 and vault format 2** are migrated offline with `ciphermoth-admin migrate-users`. The command makes a schema-2 rollback snapshot before adding account and grant tables. On first start, bootstrap the primary administrator with the existing vault password; all ownerless entries are assigned to it.
 - **Multi-user vaults written with schema 3 and vault format 2** are migrated offline with `ciphermoth-admin migrate-folders`. The command requires the backend to be stopped and makes a rollback snapshot before adding schema-4 tables and columns. Because legacy folder names are encrypted, rows are linked to first-class folders atomically after the next successful unlock; no plaintext folder name is exposed by the offline schema migration.
+- **Vaults written with schema 6 and vault format 2** are migrated offline and sequentially with `ciphermoth-admin migrate-hardware-factors`, then `ciphermoth-admin migrate-device-unlock`. Each command makes a checked rollback snapshot and commits only its own schema step. Portable backup format 2 is unchanged: it excludes account-factor and device-registration state and remains importable after schema 8.
 - **Backup ZIPs (format 1)** from CipherMoth 1.x and 2.0.x can still be imported. They are lossy (no history, trash, attachments, settings or timestamps) and protected only by WinZip AES with 1000 PBKDF2-SHA1 iterations; make a new backup afterwards and delete the old ZIPs. This reader is the only format 1 code left and can be removed once 2.0.x is no longer in use.

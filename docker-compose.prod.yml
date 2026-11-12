@@ -10,6 +10,8 @@ services:
     environment:
       # The browser origin that serves the UI; CORS must allow it.
       CORS_ORIGINS: '["${CIPHERMOTH_FRONTEND_ORIGIN:-http://localhost:3000}"]'
+      # Exact hosts allowed to create WebAuthn credentials; never inferred from Host.
+      WEBAUTHN_RP_IDS: '${WEBAUTHN_RP_IDS:-["localhost"]}'
       # Overrides the per-route rate limits (e.g. 200/hour) when set.
       CIPHERMOTH_RATE_LIMIT: ${CIPHERMOTH_RATE_LIMIT:-}
       CIPHERMOTH_INACTIVITY_MS: ${CIPHERMOTH_INACTIVITY_MS:-120000}

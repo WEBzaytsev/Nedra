@@ -492,6 +492,167 @@ async def test_recovery_migration_rejects_unknown_crypto_format_without_writing(
     assert _database_state(vault) == before
 
 
+@pytest.mark.asyncio
+async def test_schema_six_hardware_factor_migration_is_checked_and_keeps_login(
+    tmp_path: Path,
+) -> None:
+    folder = tmp_path / "schema-six"
+    async with client_for_data_dir(folder) as client:
+        token = await create_vault(client)
+        headers = auth(token)
+        created = await client.post(
+            "/passwords/create", json=entry("legacy-backup"), headers=headers
+        )
+        assert created.status_code == 200, created.text
+        backup = await client.post(
+            "/passwords/backup",
+            json={"master_password": MASTER_PASSWORD},
+            headers=headers,
+        )
+        assert backup.status_code == 200, backup.text
+        archive = backup.content
+        assert (
+            await client.delete("/passwords/legacy-backup", headers=headers)
+        ).status_code == 200
+        assert (
+            await client.delete("/passwords/legacy-backup/purge", headers=headers)
+        ).status_code == 200
+    vault = folder / VAULT_FILE
+    with closing(sqlite3.connect(vault)) as connection:
+        connection.execute("DROP TABLE user_security_keys")
+        connection.execute("DROP TABLE user_device_unlocks")
+        connection.execute("DROP TABLE user_device_unlock_policies")
+        connection.execute(
+            f"PRAGMA user_version={storage.HARDWARE_FACTOR_SCHEMA_VERSION}"
+        )
+        connection.commit()
+
+    hardware_snapshot = storage.migrate_hardware_factors(folder)
+    assert hardware_snapshot.is_file()
+    assert (
+        _pragma(hardware_snapshot, "user_version")
+        == storage.HARDWARE_FACTOR_SCHEMA_VERSION
+    )
+    assert check_file(vault, expected_schema=storage.DEVICE_UNLOCK_SCHEMA_VERSION) == []
+    with closing(sqlite3.connect(vault)) as connection:
+        assert connection.execute("PRAGMA user_version").fetchone() == (
+            storage.DEVICE_UNLOCK_SCHEMA_VERSION,
+        )
+        assert connection.execute(
+            "SELECT name FROM sqlite_schema "
+            "WHERE type = 'table' AND name = 'user_security_keys'"
+        ).fetchone() == ("user_security_keys",)
+        assert (
+            connection.execute(
+                "SELECT name FROM sqlite_schema "
+                "WHERE type = 'table' AND name = 'user_device_unlocks'"
+            ).fetchone()
+            is None
+        )
+
+    device_snapshot = storage.migrate_device_unlock(folder)
+    assert device_snapshot.is_file()
+    assert (
+        _pragma(device_snapshot, "user_version") == storage.DEVICE_UNLOCK_SCHEMA_VERSION
+    )
+    assert check_file(vault) == []
+    with closing(sqlite3.connect(vault)) as connection:
+        assert connection.execute("PRAGMA user_version").fetchone() == (SCHEMA_VERSION,)
+        assert connection.execute(
+            "SELECT name FROM sqlite_schema "
+            "WHERE type = 'table' AND name = 'user_device_unlocks'"
+        ).fetchone() == ("user_device_unlocks",)
+
+    async with client_for_data_dir(folder) as client:
+        logged_in = await client.post(
+            "/auth/login", json={"username": "admin", "password": MASTER_PASSWORD}
+        )
+        assert logged_in.json()["valid"] is True
+        restored = await client.post(
+            "/passwords/import",
+            data={"master_password": MASTER_PASSWORD},
+            files={"file": ("legacy.cmbackup", archive, "application/octet-stream")},
+            headers=auth(await unlock(client)),
+        )
+        assert restored.json()["imported"] == 1
+        assert await _names(client, MASTER_PASSWORD) == ["legacy-backup"]
+
+
+@pytest.mark.asyncio
+async def test_schema_seven_device_unlock_migration_is_checked(tmp_path: Path) -> None:
+    folder = tmp_path / "schema-seven"
+    async with client_for_data_dir(folder) as client:
+        assert await create_vault(client)
+    vault = folder / VAULT_FILE
+    with closing(sqlite3.connect(vault)) as connection:
+        connection.execute("DROP TABLE user_device_unlocks")
+        connection.execute("DROP TABLE user_device_unlock_policies")
+        connection.execute(
+            f"PRAGMA user_version={storage.DEVICE_UNLOCK_SCHEMA_VERSION}"
+        )
+        connection.commit()
+
+    snapshot = storage.migrate_device_unlock(folder)
+    assert snapshot.is_file()
+    assert _pragma(snapshot, "user_version") == storage.DEVICE_UNLOCK_SCHEMA_VERSION
+    assert check_file(vault) == []
+    with closing(sqlite3.connect(vault)) as connection:
+        assert connection.execute("PRAGMA user_version").fetchone() == (SCHEMA_VERSION,)
+        assert connection.execute(
+            "SELECT name FROM sqlite_schema "
+            "WHERE type = 'table' AND name = 'user_device_unlocks'"
+        ).fetchone() == ("user_device_unlocks",)
+
+
+@pytest.mark.asyncio
+async def test_hardware_factor_migration_rejects_bad_legacy_vault_atomically(
+    tmp_path: Path,
+) -> None:
+    folder = tmp_path / "schema-six-unsupported-format"
+    async with client_for_data_dir(folder) as client:
+        assert await create_vault(client)
+    vault = folder / VAULT_FILE
+    with closing(sqlite3.connect(vault)) as connection:
+        connection.execute("DROP TABLE user_security_keys")
+        connection.execute("DROP TABLE user_device_unlocks")
+        connection.execute("DROP TABLE user_device_unlock_policies")
+        connection.execute(
+            f"PRAGMA user_version={storage.HARDWARE_FACTOR_SCHEMA_VERSION}"
+        )
+        connection.execute("UPDATE vault SET format_version = 0")
+        connection.commit()
+
+    before = _database_state(vault)
+    with pytest.raises(StorageError, match="unsupported vault format"):
+        storage.migrate_hardware_factors(folder)
+    assert _database_state(vault) == before
+    assert not list(storage.snapshot_dir(folder).glob("pre-hardware-factors-*"))
+
+
+@pytest.mark.asyncio
+async def test_device_unlock_migration_rejects_bad_legacy_vault_atomically(
+    tmp_path: Path,
+) -> None:
+    folder = tmp_path / "schema-seven-unsupported-format"
+    async with client_for_data_dir(folder) as client:
+        assert await create_vault(client)
+    vault = folder / VAULT_FILE
+    with closing(sqlite3.connect(vault)) as connection:
+        connection.execute("DROP TABLE user_device_unlocks")
+        connection.execute("DROP TABLE user_device_unlock_policies")
+        connection.execute(
+            f"PRAGMA user_version={storage.DEVICE_UNLOCK_SCHEMA_VERSION}"
+        )
+        connection.execute("UPDATE vault SET format_version = 0")
+        connection.commit()
+
+    before = _database_state(vault)
+    with pytest.raises(StorageError, match="unsupported vault format"):
+        storage.migrate_device_unlock(folder)
+    assert _database_state(vault) == before
+    assert not list(storage.snapshot_dir(folder).glob("pre-device-unlock-*"))
+
+
 async def _names(client: httpx.AsyncClient, password: str) -> list[str]:
     resp = await client.get("/passwords", headers=auth(await unlock(client, password)))
     assert resp.status_code == 200, resp.text

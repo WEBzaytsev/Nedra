@@ -65,6 +65,9 @@ async def reset_vault() -> None:
         for table in (
             "attachments",
             "user_recovery",
+            "user_security_keys",
+            "user_device_unlocks",
+            "user_device_unlock_policies",
             "entry_access",
             "folder_user_access",
             "folder_group_access",

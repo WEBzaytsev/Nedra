@@ -43,6 +43,7 @@ const LoginPage = () => {
   const {
     fetchStatus,
     authenticate,
+    authenticateDevice,
     recover,
     continueRecovery,
     setUsername,
@@ -312,6 +313,17 @@ const LoginPage = () => {
           >
             {t(recovering ? "auth.recoveryReset" : initialized ? "auth.unlock" : "auth.create")}
           </Button>
+          {initialized && !recovering && (
+            <Button
+              disabled={loading || !username.trim()}
+              onClick={() => authenticateDevice({ username, returnTo: state?.returnTo })}
+              size="xl"
+              view="outlined"
+              width="max"
+            >
+              {t("auth.deviceUnlock")}
+            </Button>
+          )}
           {initialized && (
             <Button
               disabled={loading}

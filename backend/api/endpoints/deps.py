@@ -11,13 +11,16 @@ from crud.access import AuthorizedAttachmentCRUD, AuthorizedPasswordCRUD, EntryA
 from crud.auth import AuthContext, AuthCRUD
 from crud.backup import BackupCRUD
 from crud.damage import DamageCRUD
+from crud.device_unlock import DeviceUnlockCRUD
 from crud.engine import Database
+from crud.extension import ExtensionCRUD
 from crud.master_password import MasterPasswordCRUD
+from crud.security_factor import SecurityFactorCRUD
 from crud.settings import SettingsCRUD
 from crud.vault_access import SessionToken, VaultAccess
 from errors import Forbidden, InvalidRequest, SessionRequired
 from helpers import VaultKey
-from vault_sessions import VaultSessions
+from vault_sessions import Scope, VaultSessions
 
 SESSION_HEADER = "x-ciphermoth-session"
 _session_header = APIKeyHeader(
@@ -40,7 +43,22 @@ VaultSessionsDep = Annotated[VaultSessions, Depends(get_vault_sessions)]
 
 _READ_ONLY_METHODS = frozenset({"GET", "HEAD"})
 _READ_ONLY_ROUTES = frozenset(
-    {"master-password:unlock", "master-password:session-activity", "passwords:backup"}
+    {
+        "master-password:unlock",
+        "master-password:session-activity",
+        "passwords:backup",
+        "extension:unlock",
+        "extension:handoff-start",
+        "extension:handoff-approve",
+        "extension:handoff-redeem",
+        "extension:handoff-cancel",
+        "extension:disconnect",
+        "extension:matches",
+        "extension:search",
+        "extension:credential",
+        "extension:totp",
+        "extension:session-activity",
+    }
 )
 
 
@@ -67,9 +85,11 @@ async def get_master_password_crud(session: SessionDep) -> MasterPasswordCRUD:
 
 
 async def get_auth_crud(
-    session: SessionDep, vault_sessions: VaultSessionsDep
+    session: SessionDep,
+    vault_sessions: VaultSessionsDep,
+    database: Annotated[Database, Depends(get_database)],
 ) -> AuthCRUD:
-    return AuthCRUD(session, vault_sessions)
+    return AuthCRUD(session, vault_sessions, database)
 
 
 async def get_settings_crud(
@@ -78,7 +98,25 @@ async def get_settings_crud(
     return SettingsCRUD(session, vault_sessions)
 
 
+async def get_security_factor_crud(
+    request: Request, session: SessionDep, vault_sessions: VaultSessionsDep
+) -> SecurityFactorCRUD:
+    return SecurityFactorCRUD(
+        session, request.app.state.security_challenges, vault_sessions
+    )
+
+
+async def get_device_unlock_crud(
+    request: Request, session: SessionDep, vault_sessions: VaultSessionsDep
+) -> DeviceUnlockCRUD:
+    return DeviceUnlockCRUD(
+        session, request.app.state.security_challenges, vault_sessions
+    )
+
+
 AuthCRUDDep = Annotated[AuthCRUD, Depends(get_auth_crud)]
+SecurityFactorCRUDDep = Annotated[SecurityFactorCRUD, Depends(get_security_factor_crud)]
+DeviceUnlockCRUDDep = Annotated[DeviceUnlockCRUD, Depends(get_device_unlock_crud)]
 
 
 async def get_vault_access(
@@ -129,8 +167,26 @@ async def get_auth_context_quietly(
     return await crud.context(credential.token, refresh=False)
 
 
+async def get_extension_credential(
+    token: SessionTokenHeader, vault_sessions: VaultSessionsDep
+) -> SessionToken:
+    if token is None:
+        raise SessionRequired("The vault is locked. Unlock it first.")
+    vault_sessions.resolve(token, refresh=False, scope=Scope.EXTENSION)
+    return SessionToken(token)
+
+
+async def get_extension_context(
+    crud: AuthCRUDDep,
+    credential: Annotated[SessionToken, Depends(get_extension_credential)],
+) -> AuthContext:
+    return await crud.context(credential.token, scope=Scope.EXTENSION)
+
+
 AuthContextDep = Annotated[AuthContext, Depends(get_auth_context)]
 PasswordChangeContextDep = Annotated[AuthContext, Depends(get_password_change_context)]
+ExtensionCredentialDep = Annotated[SessionToken, Depends(get_extension_credential)]
+ExtensionContextDep = Annotated[AuthContext, Depends(get_extension_context)]
 
 
 async def get_damage_crud(
@@ -195,6 +251,15 @@ async def get_attachment_crud(
 
 PasswordCRUDDep = Annotated[AuthorizedPasswordCRUD, Depends(get_password_crud)]
 AttachmentCRUDDep = Annotated[AuthorizedAttachmentCRUD, Depends(get_attachment_crud)]
+
+
+async def get_extension_crud(
+    session: SessionDep, context: ExtensionContextDep
+) -> ExtensionCRUD:
+    return ExtensionCRUD(session, context)
+
+
+ExtensionCRUDDep = Annotated[ExtensionCRUD, Depends(get_extension_crud)]
 
 
 async def get_vault_key(context: AuthContextDep) -> VaultKey:

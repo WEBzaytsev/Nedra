@@ -43,6 +43,7 @@ from tests.support import (
 )
 from vault_sessions import (
     EXPIRY_TOLERANCE_MS,
+    HANDOFF_TTL_MS,
     MAX_LIFETIME_MS,
     TOKEN_BYTES,
     Instant,
@@ -118,6 +119,29 @@ def test_the_store_keeps_only_token_digests_and_never_prints_keys(
     assert token not in held
     assert KEY_TEXT not in held
     assert KEY.check.hex() not in held
+
+
+def test_extension_handoffs_expire_and_replay_fails(
+    store: VaultSessions, clock: FakeClock
+) -> None:
+    web = store.open(KEY, user_id=7)
+    request = "r" * 43
+    tab = "t" * 43
+    client = "c" * 22
+    assert store.start_extension_handoff(
+        request, tab, "https://vault.test", "Chromium", client
+    )
+    redeem = store.approve_extension_handoff(
+        request, tab, "https://vault.test", "Chromium", client, 7, web
+    )
+    assert redeem is not None
+    clock.advance(HANDOFF_TTL_MS + 1)
+    assert (
+        store.redeem_extension_handoff(request, tab, redeem, "Chromium", client) is None
+    )
+    assert (
+        store.redeem_extension_handoff(request, tab, redeem, "Chromium", client) is None
+    )
 
 
 def test_a_session_resolves_to_its_key_until_it_is_idle_too_long(
@@ -1057,6 +1081,9 @@ async def test_the_server_no_longer_advertises_the_vault_key_protocol(
         "bulk-entry-actions",
         "bulk-entry-move",
         "mcp",
+        "security-factor-step-up",
+        "device-unlock",
+        "browser-extension",
     ]
     paths = app.openapi()["paths"]
     assert "/api/master_password/check" not in paths

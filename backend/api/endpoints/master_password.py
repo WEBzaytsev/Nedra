@@ -9,6 +9,7 @@ from api.endpoints.deps import (
     AuthContextDep,
     AuthCRUDDep,
     CredentialDep,
+    SecurityFactorCRUDDep,
     SessionTokenHeader,
     VaultAccessDep,
     VaultSessionsDep,
@@ -61,8 +62,23 @@ async def unlock(
     request: Request,
     body: MasterPassword,
     crud: AuthCRUDDep,
+    factors: SecurityFactorCRUDDep,
 ) -> VaultUnlock:
     result = await crud.login_primary(body.master_password)
+    if result.security_key_required:
+        user_id = await crud.primary_user_id()
+        if user_id is None:
+            raise RuntimeError("The primary vault owner is missing.")
+        if body.security_key_assertion is None:
+            return VaultUnlock(
+                valid=False,
+                security_key_required=True,
+                security_key_challenge=await factors.login_challenge(user_id),
+            )
+        result = await crud.login_primary(
+            body.master_password,
+            await factors.verify_login(user_id, body.security_key_assertion),
+        )
     return VaultUnlock(
         valid=result.valid,
         session_token=result.session_token,

@@ -3,7 +3,7 @@ from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -30,7 +30,17 @@ class APISettings(BaseSettings):
     version: str = _package_version()
     disable_docs: bool = False
     cors_origins: list[str] = ["http://localhost:3000"]
+    webauthn_rp_ids: list[str] = ["localhost"]
     mcp_max_request_bytes: int = Field(default=1_048_576, ge=1_024, le=4_194_304)
+
+    @field_validator("webauthn_rp_ids")
+    @classmethod
+    def _trusted_webauthn_rps(cls, value: list[str]) -> list[str]:
+        if not value or any(
+            not rp or "/" in rp or ":" in rp or rp != rp.lower() for rp in value
+        ):
+            raise ValueError("webauthn_rp_ids must contain host names only")
+        return list(dict.fromkeys(value))
 
     @property
     def fastapi_kwargs(self) -> dict[str, Any]:

@@ -42,6 +42,11 @@ _FORMAT_LABEL = b"ciphermoth/v2"
 _WRAP_LABEL = b"ciphermoth/v2/wrapped-vault-key"
 _PASSWORD_COMMITMENT = "ciphermoth/v2/password-commitment"
 _KEY_WRAPPING = "ciphermoth/v2/key-wrapping"
+_SECOND_FACTOR_WRAP_LABEL = b"ciphermoth/v2/wrapped-vault-key/second-factor"
+_SECOND_FACTOR_COMMITMENT = "ciphermoth/v2/password-and-factor-commitment"
+_SECOND_FACTOR_WRAPPING = "ciphermoth/v2/password-and-factor-key-wrapping"
+_SECURITY_KEY_WRAPPING = "ciphermoth/v2/security-key-wrapping"
+_DEVICE_UNLOCK_WRAPPING = "nedra/device-unlock/v1/key-wrapping"
 _RECORD_ENCRYPTION = "ciphermoth/v2/record-encryption"
 _NAME_INDEX = "ciphermoth/v2/name-index"
 _KEY_CHECK = "ciphermoth/v2/key-check"
@@ -287,11 +292,14 @@ class KeyMaterial:
     password_check: bytes
     wrapped_key: bytes = field(repr=False)
     key_check: bytes
+    second_factor: bool = False
 
 
-def _wrap_associated_data(params: KdfParams, salt: bytes) -> bytes:
+def _wrap_associated_data(
+    params: KdfParams, salt: bytes, second_factor: bool = False
+) -> bytes:
     return (
-        _WRAP_LABEL
+        (_SECOND_FACTOR_WRAP_LABEL if second_factor else _WRAP_LABEL)
         + struct.pack(
             ">HIII", FORMAT_VERSION, params.memory_kib, params.iterations, params.lanes
         )
@@ -299,24 +307,46 @@ def _wrap_associated_data(params: KdfParams, salt: bytes) -> bytes:
     )
 
 
+def _password_keys(derived: bytes, factor_key: bytes | None) -> tuple[bytes, AESGCM]:
+    if factor_key is None:
+        return _hkdf(derived, _PASSWORD_COMMITMENT), AESGCM(
+            _hkdf(derived, _KEY_WRAPPING)
+        )
+    if len(factor_key) != KEY_BYTES:
+        raise DecryptionFailed
+    combined = derived + factor_key
+    return _hkdf(combined, _SECOND_FACTOR_COMMITMENT), AESGCM(
+        _hkdf(combined, _SECOND_FACTOR_WRAPPING)
+    )
+
+
 def seal_key_material(
-    derived: bytes, raw_key: bytes, params: KdfParams, salt: bytes
+    derived: bytes,
+    raw_key: bytes,
+    params: KdfParams,
+    salt: bytes,
+    factor_key: bytes | None = None,
 ) -> KeyMaterial:
+    second_factor = factor_key is not None
+    commitment, cipher = _password_keys(derived, factor_key)
     wrapped = _seal(
-        AESGCM(_hkdf(derived, _KEY_WRAPPING)),
+        cipher,
         raw_key,
-        _wrap_associated_data(params, salt),
+        _wrap_associated_data(params, salt, second_factor),
     )
     return KeyMaterial(
         params=params,
         salt=salt,
-        password_check=_hkdf(derived, _PASSWORD_COMMITMENT),
+        password_check=commitment,
         wrapped_key=wrapped,
         key_check=VaultKey(raw_key).check,
+        second_factor=second_factor,
     )
 
 
-def open_key_material(derived: bytes, material: KeyMaterial) -> VaultKey | None:
+def open_key_material(
+    derived: bytes, material: KeyMaterial, factor_key: bytes | None = None
+) -> VaultKey | None:
     """
     The vault key, or None if ``derived`` comes from a wrong password. The
     password commitment is compared first, so a crafted wrapped key cannot
@@ -324,14 +354,15 @@ def open_key_material(derived: bytes, material: KeyMaterial) -> VaultKey | None:
     key-committing). A matching commitment with a wrapped key or key check
     that does not verify raises DecryptionFailed: the row is damaged.
     """
-    if not hmac.compare_digest(
-        _hkdf(derived, _PASSWORD_COMMITMENT), bytes(material.password_check)
-    ):
+    if material.second_factor != (factor_key is not None):
+        return None
+    commitment, cipher = _password_keys(derived, factor_key)
+    if not hmac.compare_digest(commitment, bytes(material.password_check)):
         return None
     raw = _open(
-        AESGCM(_hkdf(derived, _KEY_WRAPPING)),
+        cipher,
         material.wrapped_key,
-        _wrap_associated_data(material.params, material.salt),
+        _wrap_associated_data(material.params, material.salt, material.second_factor),
     )
     if len(raw) != KEY_BYTES:
         raise DecryptionFailed
@@ -342,27 +373,141 @@ def open_key_material(derived: bytes, material: KeyMaterial) -> VaultKey | None:
 
 
 async def create_key_material(
-    password: str, params: KdfParams = DEFAULT_KDF
+    password: str, params: KdfParams = DEFAULT_KDF, factor_key: bytes | None = None
 ) -> tuple[KeyMaterial, VaultKey]:
     """A new random vault key and salt, wrapped under ``password``."""
     salt = os.urandom(SALT_BYTES)
     raw_key = os.urandom(KEY_BYTES)
     derived = await derive(password, salt, params)
-    return seal_key_material(derived, raw_key, params, salt), VaultKey(raw_key)
+    return seal_key_material(derived, raw_key, params, salt, factor_key), VaultKey(
+        raw_key
+    )
 
 
 async def wrap_key_material(
-    password: str, key: VaultKey, params: KdfParams = DEFAULT_KDF
+    password: str,
+    key: VaultKey,
+    params: KdfParams = DEFAULT_KDF,
+    factor_key: bytes | None = None,
 ) -> KeyMaterial:
     """Wrap an existing vault key for another account credential."""
     salt = os.urandom(SALT_BYTES)
     derived = await derive(password, salt, params)
-    return seal_key_material(derived, key._raw, params, salt)
+    return seal_key_material(derived, key._raw, params, salt, factor_key)
 
 
-async def unlock_key_material(password: str, material: KeyMaterial) -> VaultKey | None:
+async def unlock_key_material(
+    password: str, material: KeyMaterial, factor_key: bytes | None = None
+) -> VaultKey | None:
     derived = await derive(password, material.salt, material.params)
-    return open_key_material(derived, material)
+    return open_key_material(derived, material, factor_key)
+
+
+@dataclass(frozen=True, slots=True)
+class SecurityKeySlot:
+    uid: bytes
+    credential_id: bytes
+    public_key: bytes
+    rp_id: str
+    prf_salt: bytes
+
+    def associated_data(self) -> bytes:
+        return _associated_data(
+            b"security-key",
+            self.uid,
+            self.credential_id,
+            self.public_key,
+            self.rp_id.encode(),
+            self.prf_salt,
+        )
+
+
+def new_factor_key() -> bytes:
+    return os.urandom(KEY_BYTES)
+
+
+def _security_key_cipher(prf_output: bytes) -> AESGCM:
+    if len(prf_output) != KEY_BYTES:
+        raise DecryptionFailed
+    return AESGCM(_hkdf(prf_output, _SECURITY_KEY_WRAPPING))
+
+
+def wrap_factor_key(
+    prf_output: bytes, factor_key: bytes, slot: SecurityKeySlot
+) -> bytes:
+    return _seal(_security_key_cipher(prf_output), factor_key, slot.associated_data())
+
+
+def unwrap_factor_key(
+    prf_output: bytes, sealed: object, slot: SecurityKeySlot
+) -> bytes:
+    factor_key = _open(_security_key_cipher(prf_output), sealed, slot.associated_data())
+    if len(factor_key) != KEY_BYTES:
+        raise DecryptionFailed
+    return factor_key
+
+
+@dataclass(frozen=True, slots=True)
+class DeviceUnlockSlot:
+    user_id: int
+    uid: bytes
+    credential_id: bytes
+    public_key: bytes
+    rp_id: str
+    prf_salt: bytes
+    requires_factor: bool
+
+    def associated_data(self) -> bytes:
+        return _associated_data(
+            b"device-unlock",
+            self.user_id.to_bytes(8, "big"),
+            self.uid,
+            self.credential_id,
+            self.public_key,
+            self.rp_id.encode(),
+            self.prf_salt,
+            b"\x01" if self.requires_factor else b"\x00",
+        )
+
+
+def _device_unlock_cipher(device_secret: bytes, factor_key: bytes | None) -> AESGCM:
+    if len(device_secret) != KEY_BYTES or (
+        factor_key is not None and len(factor_key) != KEY_BYTES
+    ):
+        raise DecryptionFailed
+    material = device_secret if factor_key is None else device_secret + factor_key
+    return AESGCM(_hkdf(material, _DEVICE_UNLOCK_WRAPPING))
+
+
+def wrap_device_unlock_key(
+    device_secret: bytes,
+    key: VaultKey,
+    slot: DeviceUnlockSlot,
+    factor_key: bytes | None = None,
+) -> bytes:
+    if slot.requires_factor != (factor_key is not None):
+        raise DecryptionFailed
+    return _seal(
+        _device_unlock_cipher(device_secret, factor_key),
+        key._raw,
+        slot.associated_data(),
+    )
+
+
+def unwrap_device_unlock_key(
+    device_secret: bytes,
+    sealed: object,
+    slot: DeviceUnlockSlot,
+    factor_key: bytes | None = None,
+) -> VaultKey:
+    if slot.requires_factor != (factor_key is not None):
+        raise DecryptionFailed
+    raw = _open(
+        _device_unlock_cipher(device_secret, factor_key), sealed, slot.associated_data()
+    )
+    if len(raw) != KEY_BYTES:
+        raise DecryptionFailed
+    return VaultKey(raw)
 
 
 BACKUP_MAGIC = b"CMBACKUP"
@@ -501,7 +646,9 @@ def read_legacy_backup(data: bytes, password: str, max_bytes: int) -> bytes:
     return content
 
 
-def generate_totp(secret: str, *, digits: int = 6, period: int = 30) -> str:
+def generate_totp(
+    secret: str, *, digits: int = 6, period: int = 30, now: int | None = None
+) -> str:
     """
     Return the current TOTP code for a base32 secret (RFC 6238, HMAC-SHA1).
 
@@ -510,7 +657,7 @@ def generate_totp(secret: str, *, digits: int = 6, period: int = 30) -> str:
     two-factor path is easy to audit.
     """
     key = base64.b32decode(secret + "=" * (-len(secret) % 8), casefold=True)
-    counter = int(time.time()) // period
+    counter = (int(time.time()) if now is None else now) // period
     digest = hmac.new(key, struct.pack(">Q", counter), hashlib.sha1).digest()
     offset = digest[-1] & 0x0F
     code = struct.unpack(">I", digest[offset : offset + 4])[0] & 0x7FFFFFFF

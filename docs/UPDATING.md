@@ -122,6 +122,29 @@ The backend checks the vault before serving anything, through a read-only connec
 
 If part of the vault file is damaged (a failing disk) or was altered, the affected entries and attachments are left out of the vault and the web UI shows a warning (`cip damaged` lists them). Everything else keeps working, but a portable backup refuses to omit damaged visible rows. Either restore a snapshot from before the damage (keeps everything), or intentionally remove the damaged items: the **Remove** button in the warning, or `cip damaged --remove`. Removing a damaged entry also permanently removes its attachments, including any that are still readable. Each requested row is checked again before removal; a readable entry cannot be removed through this recovery action.
 
+## Moving from schema 6 to schema 8
+
+Schema 7 adds personal hardware-factor records. Schema 8 adds voluntary
+per-user device-unlock records and the password-confirmation policy. The server
+does not start on either older schema. Stop it, then run both checked migrations
+in order:
+
+```shell
+docker compose -f docker-compose.prod.yml stop backend
+docker compose -f docker-compose.prod.yml run --rm backend ciphermoth-admin migrate-hardware-factors --yes
+docker compose -f docker-compose.prod.yml run --rm backend ciphermoth-admin migrate-device-unlock --yes
+docker compose -f docker-compose.prod.yml up -d
+```
+
+Each command accepts only its exact source schema, makes its own checked rollback
+snapshot (`pre-hardware-factors-<time>.db`, then `pre-device-unlock-<time>.db`),
+and applies its table changes and `user_version` change in one SQLite transaction.
+If either command fails, it leaves that stage unchanged. Portable `.cmbackup`
+files do not include account factors or device registrations; their format is
+unchanged and they remain importable after schema 8. To roll back a stage, stop
+the backend and restore that stage's snapshot with the release that understands
+its schema; changes made after that snapshot are lost.
+
 ## Moving from schema 3
 
 Schema 3 has multi-user entry grants but stores a folder only as an encrypted string inside each entry. Schema 4 introduces encrypted first-class folders, group membership, expiring folder grants and access audit. Docker migration is explicit and requires the backend to be stopped:

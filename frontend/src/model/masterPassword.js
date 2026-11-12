@@ -3,6 +3,7 @@ import { action, thunk } from "easy-peasy";
 import { enterVault } from "../platform";
 import apiClient from "../api/client";
 import { errorDetail } from "../lib/http";
+import { securityKeyAssertion } from "../lib/securityKey";
 import i18n from "../i18n";
 import { setCurrentUser, setSessionToken } from "../utils";
 
@@ -50,7 +51,15 @@ const MasterPassword = {
     actions.setError(null);
     actions.setLoading(true);
     try {
-      const { data } = await apiClient.post(endpoint, { username, password });
+      let { data } = await apiClient.post(endpoint, { username, password });
+      if (data.security_key_required) {
+        const assertion = await securityKeyAssertion(data.security_key_challenge);
+        ({ data } = await apiClient.post("/auth/login/security-key", {
+          username,
+          password,
+          assertion,
+        }));
+      }
       if (!data.valid || !data.session_token || !data.user) {
         actions.setError(i18n.t("errors.invalidCredentials"));
         return;
@@ -66,6 +75,40 @@ const MasterPassword = {
           ? i18n.t("errors.tooManyAttempts")
           : await errorDetail(err, i18n.t("errors.authentication"));
       actions.setError(message);
+    } finally {
+      actions.setLoading(false);
+    }
+  }),
+  authenticateDevice: thunk(async (actions, { username, returnTo }) => {
+    actions.setError(null);
+    actions.setLoading(true);
+    try {
+      const { data: options } = await apiClient.post("/auth/login/device-unlock/options", {
+        username,
+      });
+      if (options.password_required || !options.challenge) {
+        actions.setError(i18n.t("auth.deviceUnlockPasswordRequired"));
+        return;
+      }
+      const assertion = await securityKeyAssertion(options.challenge);
+      const factorAssertion = options.security_key_challenge
+        ? await securityKeyAssertion(options.security_key_challenge)
+        : undefined;
+      const { data } = await apiClient.post("/auth/login/device-unlock", {
+        username,
+        assertion,
+        ...(factorAssertion ? { security_key_assertion: factorAssertion } : {}),
+      });
+      if (!data.valid || !data.session_token || !data.user) {
+        actions.setError(i18n.t("errors.invalidCredentials"));
+        return;
+      }
+      setSessionToken(data.session_token);
+      setCurrentUser(data.user);
+      actions.setValue("");
+      enterVault(returnTo);
+    } catch (err) {
+      actions.setError(await errorDetail(err, i18n.t("errors.authentication")));
     } finally {
       actions.setLoading(false);
     }

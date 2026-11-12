@@ -545,11 +545,13 @@ async def test_a_copy_that_fails_its_own_check_is_never_kept_or_restored(
     before = _raw(folder)
     original = storage.check_connection
 
-    def copy_damaged_on_the_way(connection: sqlite3.Connection) -> list[str]:
+    def copy_damaged_on_the_way(
+        connection: sqlite3.Connection, *, expected_schema: int = storage.SCHEMA_VERSION
+    ) -> list[str]:
         name = connection.execute("PRAGMA database_list").fetchone()[2]
         if name.endswith(".partial"):
             return ["simulated damage in the copy"]
-        return original(connection)
+        return original(connection, expected_schema=expected_schema)
 
     monkeypatch.setattr(storage, "check_connection", copy_damaged_on_the_way)
     with pytest.raises(StorageError, match="failed its integrity check"):

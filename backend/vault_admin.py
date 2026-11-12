@@ -202,6 +202,46 @@ def migrate_recovery(
 
 
 @app.command(
+    "migrate-hardware-factors",
+    help="Upgrade a stopped schema-6 vault for personal FIDO2 hardware factors.",
+)
+def migrate_hardware_factors(
+    yes: Annotated[bool, typer.Option("--yes", help="Do not ask to confirm.")] = False,
+) -> None:
+    if not yes:
+        typer.confirm(
+            "Migrate the stopped schema-6 vault for personal hardware factors? "
+            "A rollback snapshot will be created.",
+            abort=True,
+        )
+    try:
+        saved = storage.migrate_hardware_factors(_data_dir())
+    except storage.StorageError as error:
+        raise _fail(error) from None
+    typer.echo(f"Migrated. Rollback snapshot: {saved}")
+
+
+@app.command(
+    "migrate-device-unlock",
+    help="Upgrade a stopped schema-7 vault for voluntary per-user device unlock.",
+)
+def migrate_device_unlock(
+    yes: Annotated[bool, typer.Option("--yes", help="Do not ask to confirm.")] = False,
+) -> None:
+    if not yes:
+        typer.confirm(
+            "Migrate the stopped schema-7 vault for voluntary device unlock? "
+            "A rollback snapshot will be created.",
+            abort=True,
+        )
+    try:
+        saved = storage.migrate_device_unlock(_data_dir())
+    except storage.StorageError as error:
+        raise _fail(error) from None
+    typer.echo(f"Migrated. Rollback snapshot: {saved}")
+
+
+@app.command(
     "set-aside",
     help=(
         "Move the vault file (with its WAL) into a new folder in the snapshot "

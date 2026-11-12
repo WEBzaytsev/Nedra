@@ -82,6 +82,24 @@ const en = {
     newPassword: "New password",
     changePassword: "Change password",
     changePasswordTitle: "Change your password",
+    securityKey: "Security key",
+    securityKeyAdd: "Add security key",
+    securityKeyDefaultName: "Security key",
+    securityKeyDescription:
+      "Use a PRF-capable security key for sign-in and sensitive changes. Recovery codes are removed when you enable it.",
+    securityKeyDisable: "Disable security key",
+    securityKeyDisableDescription:
+      "Disabling requires your current password and this physical key, signs out every session, and does not restore a recovery code.",
+    securityKeyName: "Key name",
+    deviceUnlock: "Device unlock",
+    deviceUnlockAdd: "Add device unlock",
+    deviceUnlockName: "Device name",
+    deviceUnlockPasswordRequired:
+      "Enter your password to unlock this vault; device unlock needs a fresh password confirmation.",
+    securityKeyPin: "Security key PIN",
+    securityKeyPinHint: "Enter the PIN of the physical key, not your Nedra password.",
+    securityKeyPinInvalid: "That PIN is not right. Try again.",
+    securityKeyTouch: "Touch your security key to continue.",
     recoveryTitle: "Recovery code",
     recoveryDescription:
       "A recovery code can reset your password. It is shown once; store it offline.",

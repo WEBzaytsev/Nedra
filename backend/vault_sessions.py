@@ -1,31 +1,4 @@
-"""
-Unlocked vault sessions, held in the memory of the one process that serves the
-vault.
-
-A session maps an opaque bearer token to the keys unwrapped at unlock
-(``helpers.VaultKey``), so session clients never hold them. Only a SHA-256
-digest of each token is kept, as the lookup key. Sessions end when they sit
-idle longer than the configured inactivity timeout (plus
-``EXPIRY_TOLERANCE_MS``), after an absolute lifetime, when they are locked,
-when the master password changes, and when the process exits. An ended session
-is deleted and can never be used again. Nothing is ever written to disk.
-
-The tolerance exists only for request latency: a client measures inactivity
-from when it sent its last request, the server from when it received it, so a
-request a client sends just before its own deadline can reach the server a
-moment after it. It never lets a session outlive the setting by more than that.
-
-Server mode keeps one session per client (browser tab or CLI command), bounded
-by ``max_sessions``: when full, expired sessions are dropped first and then the
-least recently used one. A desktop core uses ``max_sessions=1``: unlocking
-replaces the previous session and the shell, not the renderer, holds the token.
-
-Limits: Python cannot reliably erase a secret from memory. Locking drops every
-reference to the key, but copies made by ``str``, ``base64`` and
-``cryptography`` stay in freed memory until it is reused. Sessions protect the
-key from clients and from storage, not from someone who can read the process's
-memory.
-"""
+"""In-memory full and browser-extension vault sessions."""
 
 import hashlib
 import re
@@ -35,18 +8,27 @@ import time
 from collections import OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from enum import StrEnum
 from typing import NamedTuple
 
-from errors import SessionRequired
+from errors import SessionRequired, WrongScope
 from helpers import VaultKey
 
 TOKEN_BYTES = 32
+HANDLE_BYTES = 16
 EXPIRY_TOLERANCE_MS = 5_000
 MAX_LIFETIME_MS = 12 * 60 * 60 * 1000
 DEFAULT_MAX_SESSIONS = 32
+DEFAULT_MAX_EXTENSION_SESSIONS = 8
+HANDOFF_TTL_MS = 5 * 60 * 1000
 
 _TOKEN = re.compile(r"[A-Za-z0-9_-]{43}", re.ASCII)
 _ENDED = "Your session expired or was locked. Unlock the vault again."
+
+
+class Scope(StrEnum):
+    FULL = "full"
+    EXTENSION = "extension"
 
 
 class Instant(NamedTuple):
@@ -54,11 +36,6 @@ class Instant(NamedTuple):
     wall: float
 
     def ms_since(self, earlier: "Instant") -> float:
-        """
-        The larger of the two clocks' elapsed times. The monotonic clock stops
-        while the machine sleeps on macOS and Linux, and the wall clock can be
-        set back, so each one covers the other's blind spot.
-        """
         return 1000 * max(self.monotonic - earlier.monotonic, self.wall - earlier.wall)
 
 
@@ -77,12 +54,37 @@ class _Session:
     credential_fingerprint: bytes | None = field(repr=False)
     created: Instant
     last_used: Instant
+    scope: Scope = Scope.FULL
+    handle: str = ""
+    browser: str | None = None
+    client: str | None = None
+
+
+@dataclass(slots=True)
+class _ExtensionHandoff:
+    request_digest: bytes = field(repr=False)
+    tab_digest: bytes = field(repr=False)
+    client: str
+    browser: str
+    origin: str
+    created: Instant
+    user_id: int | None = None
+    web_session_digest: bytes | None = field(default=None, repr=False)
+    redeem_digest: bytes | None = field(default=None, repr=False)
 
 
 @dataclass(frozen=True, slots=True)
 class SessionInfo:
     idle_timeout_ms: int
     expires_in_ms: int
+
+
+@dataclass(frozen=True, slots=True)
+class ExtensionSessionInfo:
+    handle: str
+    browser: str
+    created: float
+    last_used: float
 
 
 class VaultSessions:
@@ -93,16 +95,19 @@ class VaultSessions:
         tolerance_ms: int = EXPIRY_TOLERANCE_MS,
         max_lifetime_ms: int = MAX_LIFETIME_MS,
         max_sessions: int = DEFAULT_MAX_SESSIONS,
+        max_extension_sessions: int = DEFAULT_MAX_EXTENSION_SESSIONS,
         clock: Callable[[], Instant] = system_clock,
     ) -> None:
-        if max_sessions < 1:
-            raise ValueError("max_sessions must be at least 1")
+        if max_sessions < 1 or max_extension_sessions < 1:
+            raise ValueError("session limits must be at least 1")
         self._idle_timeout_ms = idle_timeout_ms
         self._tolerance_ms = tolerance_ms
         self._max_lifetime_ms = max_lifetime_ms
         self._max_sessions = max_sessions
+        self._max_extension_sessions = max_extension_sessions
         self._clock = clock
         self._sessions: OrderedDict[bytes, _Session] = OrderedDict()
+        self._handoffs: dict[bytes, _ExtensionHandoff] = {}
         self._lock = threading.Lock()
 
     @property
@@ -110,11 +115,6 @@ class VaultSessions:
         return self._idle_timeout_ms
 
     def set_idle_timeout(self, idle_timeout_ms: int) -> None:
-        """
-        Apply a new inactivity timeout to every open session, measured from its
-        last activity. Sessions that already expired under the old timeout are
-        deleted first, so raising it never revives one.
-        """
         now = self._clock()
         with self._lock:
             self._drop_expired(now)
@@ -130,75 +130,237 @@ class VaultSessions:
         user_id: int = 0,
         credential_fingerprint: bytes | None = None,
     ) -> str:
-        token = secrets.token_urlsafe(TOKEN_BYTES)
+        return self._open(key, user_id, credential_fingerprint, Scope.FULL, None, None)[
+            0
+        ]
+
+    def open_extension(
+        self,
+        key: VaultKey,
+        user_id: int,
+        credential_fingerprint: bytes | None,
+        browser: str,
+        client: str | None,
+    ) -> tuple[str, str]:
+        return self._open(
+            key, user_id, credential_fingerprint, Scope.EXTENSION, browser, client
+        )
+
+    def start_extension_handoff(
+        self, request: str, tab: str, origin: str, browser: str, client: str
+    ) -> bool:
+        now = self._clock()
+        request_digest = _digest(request)
+        with self._lock:
+            self._drop_expired(now)
+            if request_digest in self._handoffs:
+                return False
+            self._handoffs[request_digest] = _ExtensionHandoff(
+                request_digest=request_digest,
+                tab_digest=_digest(tab),
+                origin=origin,
+                browser=browser,
+                client=client,
+                created=now,
+            )
+            return True
+
+    def approve_extension_handoff(
+        self,
+        request: str,
+        tab: str,
+        origin: str,
+        browser: str,
+        client: str,
+        user_id: int,
+        web_token: str,
+    ) -> str | None:
+        now = self._clock()
+        request_digest = _digest(request)
+        with self._lock:
+            self._drop_expired(now)
+            handoff = self._handoffs.get(request_digest)
+            if (
+                handoff is None
+                or handoff.user_id is not None
+                or handoff.origin != origin
+                or handoff.browser != browser
+                or handoff.client != client
+                or not secrets.compare_digest(handoff.tab_digest, _digest(tab))
+            ):
+                return None
+            redeem = secrets.token_urlsafe(HANDLE_BYTES)
+            handoff.user_id = user_id
+            handoff.web_session_digest = _digest(web_token)
+            handoff.redeem_digest = _digest(redeem)
+            return redeem
+
+    def redeem_extension_handoff(
+        self, request: str, tab: str, redeem: str, browser: str, client: str
+    ) -> tuple[str, str] | None:
+        now = self._clock()
+        request_digest = _digest(request)
+        with self._lock:
+            self._drop_expired(now)
+            handoff = self._handoffs.pop(request_digest, None)
+            if (
+                handoff is None
+                or handoff.user_id is None
+                or handoff.web_session_digest is None
+                or handoff.redeem_digest is None
+                or handoff.browser != browser
+                or handoff.client != client
+                or not secrets.compare_digest(handoff.tab_digest, _digest(tab))
+                or not secrets.compare_digest(handoff.redeem_digest, _digest(redeem))
+            ):
+                return None
+            source = self._sessions.get(handoff.web_session_digest)
+            if (
+                source is None
+                or source.scope is not Scope.FULL
+                or source.user_id != handoff.user_id
+                or self._remaining_ms(source, now) <= 0
+            ):
+                return None
+            return self._open_locked(
+                source.key,
+                source.user_id,
+                source.credential_fingerprint,
+                Scope.EXTENSION,
+                browser,
+                client,
+            )
+
+    def cancel_extension_handoff(self, request: str, tab: str, client: str) -> None:
+        request_digest = _digest(request)
+        with self._lock:
+            handoff = self._handoffs.get(request_digest)
+            if (
+                handoff is not None
+                and handoff.client == client
+                and secrets.compare_digest(handoff.tab_digest, _digest(tab))
+            ):
+                del self._handoffs[request_digest]
+
+    def _open(
+        self,
+        key: VaultKey,
+        user_id: int,
+        credential_fingerprint: bytes | None,
+        scope: Scope,
+        browser: str | None,
+        client: str | None,
+    ) -> tuple[str, str]:
         now = self._clock()
         with self._lock:
             self._drop_expired(now)
-            while len(self._sessions) >= self._max_sessions:
-                self._sessions.popitem(last=False)
-            self._sessions[_digest(token)] = _Session(
-                key=key,
-                user_id=user_id,
-                credential_fingerprint=credential_fingerprint,
-                created=now,
-                last_used=now,
+            return self._open_locked(
+                key, user_id, credential_fingerprint, scope, browser, client
             )
-        return token
 
-    def resolve(self, token: str | None, *, refresh: bool = True) -> VaultKey:
-        """
-        Return the vault key of a live session. ``refresh`` records the request
-        as activity, restarting the inactivity timeout; a session that has
-        already expired is deleted, never refreshed.
-        """
+    def _open_locked(
+        self,
+        key: VaultKey,
+        user_id: int,
+        credential_fingerprint: bytes | None,
+        scope: Scope,
+        browser: str | None,
+        client: str | None,
+    ) -> tuple[str, str]:
+        token = secrets.token_urlsafe(TOKEN_BYTES)
+        handle = secrets.token_urlsafe(HANDLE_BYTES)
+        now = self._clock()
+        if client is not None:
+            for digest in [
+                digest
+                for digest, session in self._sessions.items()
+                if session.scope is Scope.EXTENSION and session.client == client
+            ]:
+                del self._sessions[digest]
+        cap = (
+            self._max_extension_sessions
+            if scope is Scope.EXTENSION
+            else self._max_sessions
+        )
+        matching = [
+            digest
+            for digest, session in self._sessions.items()
+            if session.scope is scope
+        ]
+        while len(matching) >= cap:
+            del self._sessions[matching.pop(0)]
+        self._sessions[_digest(token)] = _Session(
+            key=key,
+            user_id=user_id,
+            credential_fingerprint=credential_fingerprint,
+            created=now,
+            last_used=now,
+            scope=scope,
+            handle=handle,
+            browser=browser,
+            client=client,
+        )
+        return token, handle
+
+    def resolve(
+        self, token: str | None, *, refresh: bool = True, scope: Scope = Scope.FULL
+    ) -> VaultKey:
         now = self._clock()
         with self._lock:
-            digest, session = self._live(token, now)
+            digest, session = self._live(token, now, scope)
             if refresh:
                 session.last_used = now
                 self._sessions.move_to_end(digest)
             return session.key
 
-    def info(self, token: str | None) -> SessionInfo:
-        """How long the session has left, measured against the configured
-        timeout without the tolerance. Reading it is not activity."""
+    def info(self, token: str | None, *, scope: Scope = Scope.FULL) -> SessionInfo:
         now = self._clock()
         with self._lock:
-            _, session = self._live(token, now)
-            remaining = self._remaining_ms(session, now, tolerance=False)
+            _, session = self._live(token, now, scope)
             return SessionInfo(
                 idle_timeout_ms=self._idle_timeout_ms,
-                expires_in_ms=max(0, int(remaining)),
+                expires_in_ms=max(
+                    0, int(self._remaining_ms(session, now, tolerance=False))
+                ),
             )
 
-    def user_id(self, token: str | None) -> int:
-        """Return the account bound to a live session without refreshing it."""
+    def user_id(self, token: str | None, *, scope: Scope = Scope.FULL) -> int:
         now = self._clock()
         with self._lock:
-            _, session = self._live(token, now)
+            _, session = self._live(token, now, scope)
             return session.user_id
 
-    def credential_fingerprint(self, token: str | None) -> bytes | None:
-        """Return the account-credential revision bound to a live session."""
+    def credential_fingerprint(
+        self, token: str | None, *, scope: Scope = Scope.FULL
+    ) -> bytes | None:
         now = self._clock()
         with self._lock:
-            _, session = self._live(token, now)
+            _, session = self._live(token, now, scope)
             return session.credential_fingerprint
 
     def user_ids(self) -> tuple[int, ...]:
         with self._lock:
             return tuple(session.user_id for session in self._sessions.values())
 
-    def revoke(self, token: str | None) -> bool:
+    def revoke(self, token: str | None, *, scope: Scope | None = None) -> bool:
         if token is None or not _TOKEN.fullmatch(token):
             return False
         with self._lock:
-            return self._sessions.pop(_digest(token), None) is not None
+            digest = _digest(token)
+            session = self._sessions.get(digest)
+            if session is None or (scope is not None and session.scope is not scope):
+                return False
+            del self._sessions[digest]
+            for handoff_digest, handoff in list(self._handoffs.items()):
+                if handoff.web_session_digest == digest:
+                    del self._handoffs[handoff_digest]
+            return True
 
     def revoke_all(self) -> int:
         with self._lock:
             count = len(self._sessions)
             self._sessions.clear()
+            self._handoffs.clear()
             return count
 
     def revoke_user(self, user_id: int) -> int:
@@ -210,6 +372,9 @@ class VaultSessions:
             ]
             for digest in matching:
                 del self._sessions[digest]
+            for digest, handoff in list(self._handoffs.items()):
+                if handoff.user_id == user_id:
+                    del self._handoffs[digest]
             return len(matching)
 
     def revoke_user_except(self, user_id: int, token: str) -> int:
@@ -224,17 +389,51 @@ class VaultSessions:
                 del self._sessions[digest]
             return len(matching)
 
+    def extension_sessions(self, user_id: int) -> list[ExtensionSessionInfo]:
+        now = self._clock()
+        with self._lock:
+            self._drop_expired(now)
+            return [
+                ExtensionSessionInfo(
+                    handle=session.handle,
+                    browser=session.browser or "Browser",
+                    created=session.created.wall,
+                    last_used=session.last_used.wall,
+                )
+                for session in reversed(self._sessions.values())
+                if session.scope is Scope.EXTENSION and session.user_id == user_id
+            ]
+
+    def revoke_extension(self, handle: str, user_id: int) -> bool:
+        with self._lock:
+            for digest, session in self._sessions.items():
+                if (
+                    session.scope is Scope.EXTENSION
+                    and session.user_id == user_id
+                    and secrets.compare_digest(session.handle.encode(), handle.encode())
+                ):
+                    del self._sessions[digest]
+                    return True
+        return False
+
     def drop_expired(self) -> int:
         with self._lock:
             return self._drop_expired(self._clock())
 
-    def _live(self, token: str | None, now: Instant) -> tuple[bytes, _Session]:
+    def _live(
+        self, token: str | None, now: Instant, scope: Scope
+    ) -> tuple[bytes, _Session]:
         if token is None or not _TOKEN.fullmatch(token):
             raise SessionRequired(_ENDED)
         digest = _digest(token)
         session = self._sessions.get(digest)
         if session is None:
             raise SessionRequired(_ENDED)
+        if session.scope is not scope:
+            raise WrongScope(
+                "A browser extension session can only fill logins. "
+                "Open Nedra to do this."
+            )
         if self._remaining_ms(session, now) <= 0:
             del self._sessions[digest]
             raise SessionRequired(_ENDED)
@@ -257,4 +456,7 @@ class VaultSessions:
         ]
         for digest in expired:
             del self._sessions[digest]
+        for digest, handoff in list(self._handoffs.items()):
+            if now.ms_since(handoff.created) >= HANDOFF_TTL_MS:
+                del self._handoffs[digest]
         return len(expired)

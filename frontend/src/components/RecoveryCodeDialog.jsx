@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 
 import apiClient from "../api/client";
 import { errorDetail } from "../lib/http";
+import { securityKeyStepUp } from "../lib/securityStepUp";
 import PasswordField from "./PasswordField";
 import Dialog from "./TaskSurface";
 
@@ -31,8 +32,12 @@ const RecoveryCodeDialog = ({ open, onClose }) => {
     setBusy(true);
     setError("");
     try {
+      const securityKeyAssertion = await securityKeyStepUp("recovery-create", {
+        current_password: currentPassword,
+      });
       const { data } = await apiClient.post("/auth/recovery", {
         current_password: currentPassword,
+        security_key_assertion: securityKeyAssertion,
       });
       setConfigured(true);
       setCode(data.recovery_code);
@@ -48,10 +53,13 @@ const RecoveryCodeDialog = ({ open, onClose }) => {
     setBusy(true);
     setError("");
     try {
+      const securityKeyAssertion = await securityKeyStepUp("recovery-revoke", {
+        current_password: currentPassword,
+      });
       await apiClient.request({
         method: "DELETE",
         url: "/auth/recovery",
-        data: { current_password: currentPassword },
+        data: { current_password: currentPassword, security_key_assertion: securityKeyAssertion },
       });
       setConfigured(false);
       setCode("");
