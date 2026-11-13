@@ -121,7 +121,7 @@ class DeviceUnlockCRUD:
     @staticmethod
     def _password_required(policy: UserDeviceUnlockPolicyModel | None) -> bool:
         if policy is None:
-            return False
+            return True
         now = datetime.now(UTC).replace(tzinfo=None)
         elapsed = now - policy.last_password_at
         return elapsed < -_CLOCK_TOLERANCE or elapsed >= timedelta(
@@ -329,7 +329,7 @@ class DeviceUnlockCRUD:
         rows = await self._rows(user.id)
         policy = await self._policy(user.id)
         if not rows or self._password_required(policy):
-            return DeviceUnlockLoginOptions(password_required=bool(rows and policy))
+            return DeviceUnlockLoginOptions(password_required=bool(rows))
         challenge = self.challenges.issue("device-login", _login_binding(user.id))
         needs_factor = any(row.requires_factor for row in rows)
         return DeviceUnlockLoginOptions(
