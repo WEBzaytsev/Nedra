@@ -367,6 +367,8 @@ class DeviceUnlockCRUD:
         )
         if user is None:
             return None
+        if self._password_required(await self._policy(user.id)):
+            return None
         rows = await self._rows(user.id)
         credential_id = assertion.raw("credential_id")
         row = next(
