@@ -81,6 +81,7 @@ const UsersPage = () => {
   const taskOpen = mobile && ["create", "groups", "access"].includes(view);
   const CreateSurface = mobile ? TaskSurface : Box;
   const [temporaryPassword, setTemporaryPassword] = useState("");
+  const [resetCurrentPassword, setResetCurrentPassword] = useState("");
   const [temporaryPasswordError, setTemporaryPasswordError] = useState(false);
   const temporaryPasswordRef = useRef(null);
   const servicePasswordRef = useRef(null);
@@ -98,6 +99,12 @@ const UsersPage = () => {
         document.querySelector(`[data-user-menu="${userId}"]`)?.focus()
       );
     }
+  };
+
+  const closeReset = () => {
+    closeUserAction(setResetTarget, resetTarget);
+    setTemporaryPassword("");
+    setResetCurrentPassword("");
   };
 
   const loadUsers = useCallback(async () => {
@@ -157,12 +164,16 @@ const UsersPage = () => {
 
   const saveReset = async () => {
     const ok = await run(
-      () => resetPassword({ userId: resetTarget.id, temporaryPassword }),
+      () =>
+        resetPassword({
+          userId: resetTarget.id,
+          temporaryPassword,
+          currentPassword: resetCurrentPassword,
+        }),
       t("users.messages.passwordReset")
     );
     if (!ok) return;
-    closeUserAction(setResetTarget, resetTarget);
-    setTemporaryPassword("");
+    closeReset();
   };
 
   const saveServiceOperations = async () => {
@@ -433,7 +444,11 @@ const UsersPage = () => {
                             ) : (
                               <MenuItem
                                 disabled={busy || isCurrent}
-                                onClick={() => setResetTarget(user)}
+                                onClick={() => {
+                                  setTemporaryPassword("");
+                                  setResetCurrentPassword("");
+                                  setResetTarget(user);
+                                }}
                               >
                                 {t("users.resetPassword")}
                               </MenuItem>
@@ -721,7 +736,7 @@ const UsersPage = () => {
         maxWidth="s"
         open={Boolean(resetTarget)}
         onOpenChange={(nextOpen) => {
-          if (!nextOpen && !busy) closeUserAction(setResetTarget, resetTarget);
+          if (!nextOpen && !busy) closeReset();
         }}
       >
         <Dialog.Header caption={t("users.resetPasswordFor", { username: resetTarget?.username })} />
@@ -739,14 +754,25 @@ const UsersPage = () => {
               autoComplete="new-password"
               autoFocus
             />
+            <PasswordField
+              label={t("auth.currentPassword")}
+              value={resetCurrentPassword}
+              disabled={busy}
+              onChange={(event) => setResetCurrentPassword(event.target.value)}
+              autoComplete="current-password"
+            />
           </Flex>
         </Dialog.Body>
         <Dialog.Footer
           onClickButtonApply={saveReset}
-          onClickButtonCancel={() => closeUserAction(setResetTarget, resetTarget)}
+          onClickButtonCancel={closeReset}
           textButtonApply={t("users.resetPassword")}
           textButtonCancel={t("common.actions.cancel")}
-          propsButtonApply={{ disabled: busy || !temporaryPassword, loading: busy, view: "action" }}
+          propsButtonApply={{
+            disabled: busy || !temporaryPassword || !resetCurrentPassword,
+            loading: busy,
+            view: "action",
+          }}
           propsButtonCancel={{ disabled: busy }}
         />
       </Dialog>

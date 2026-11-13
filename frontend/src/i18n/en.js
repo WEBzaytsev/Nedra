@@ -741,7 +741,7 @@ Object.assign(en.users, {
   resetPassword: "Reset password",
   resetPasswordFor: "Reset password for {{username}}",
   resetPasswordDescription:
-    "This ends the user's current sessions and requires them to change the temporary password at login.",
+    "Confirm your current administrator password. This ends the user's current sessions, removes their device and hardware-key unlocks, and requires a temporary-password change at login.",
   deleteConfirm: "Delete {{username}}?",
   configureService: "Configure MCP access",
   configureServiceFor: "MCP access for {{username}}",

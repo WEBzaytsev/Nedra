@@ -750,8 +750,14 @@ class AuthCRUD(BaseCRUD):
         )
 
     async def reset_password(
-        self, actor: AuthContext, user_id: int, temporary_password: str
+        self,
+        actor: AuthContext,
+        user_id: int,
+        temporary_password: str,
+        current_password: str,
+        factor_key: bytes | None = None,
     ) -> AuthUser:
+        await self.verify_current_password(actor, current_password, factor_key)
         target = await self._target(actor, user_id)
         if target.role == UserRole.service:
             raise Forbidden("Service users do not use interactive passwords.")

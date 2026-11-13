@@ -59,10 +59,17 @@ const Users = {
     }
   }),
 
-  resetPassword: thunk(async (actions, { userId, temporaryPassword }) => {
+  resetPassword: thunk(async (actions, { userId, temporaryPassword, currentPassword }) => {
     try {
+      const securityKeyAssertion = await securityKeyStepUp("admin-password-reset", {
+        current_password: currentPassword,
+        target_user_id: userId,
+        temporary_password: temporaryPassword,
+      });
       await apiClient.put(`/users/${userId}/password`, {
         temporary_password: temporaryPassword,
+        current_password: currentPassword,
+        security_key_assertion: securityKeyAssertion,
       });
       await actions.get();
     } catch (err) {

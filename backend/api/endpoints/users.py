@@ -154,8 +154,21 @@ async def reset_password(
     body: UserPasswordResetPayload,
     context: AdminContextDep,
     crud: AuthCRUDDep,
+    factors: SecurityFactorCRUDDep,
 ) -> AuthUser:
-    return await crud.reset_password(context, user_id, body.temporary_password)
+    factor_key = await factors.step_up(
+        context,
+        "admin-password-reset",
+        body.security_key_assertion,
+        {
+            "current_password": body.current_password,
+            "target_user_id": user_id,
+            "temporary_password": body.temporary_password,
+        },
+    )
+    return await crud.reset_password(
+        context, user_id, body.temporary_password, body.current_password, factor_key
+    )
 
 
 @router.delete("/{user_id}", response_model=SimpleDetailSchema)

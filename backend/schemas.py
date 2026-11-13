@@ -198,6 +198,7 @@ class SecurityKeyChallenge(BaseModel):
 
 
 SecurityAction = Literal[
+    "admin-password-reset",
     "backup",
     "password-change",
     "recovery-create",
@@ -443,13 +444,20 @@ class UserUpdatePayload(BaseModel):
     active: bool | None = None
 
 
-class UserPasswordResetPayload(BaseModel):
+class UserPasswordResetPayload(SecurityKeyStepUpPayload):
     temporary_password: str = Field(min_length=1, max_length=1024)
+    current_password: str = Field(min_length=1, max_length=1024)
 
     @field_validator("temporary_password")
     @classmethod
     def _strong(cls, value: str) -> str:
         return validate_master_password_strength(value)
+
+    @field_validator("current_password")
+    @classmethod
+    def _current_password_unicode(cls, value: str) -> str:
+        require_unicode_text(value)
+        return value
 
 
 class ServiceTokenRotatePayload(SecurityKeyStepUpPayload):
