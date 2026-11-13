@@ -94,6 +94,9 @@ const en = {
     deviceUnlock: "Device unlock",
     deviceUnlockAdd: "Add device unlock",
     deviceUnlockName: "Device name",
+    deviceUnlockPasswordInterval: "Ask for your password",
+    deviceUnlockPasswordIntervalOption: "Every {{days}} days",
+    deviceUnlockPasswordIntervalHint: "This keeps your password fresh.",
     deviceUnlockPasswordRequired:
       "Enter your password to unlock this vault; device unlock needs a fresh password confirmation.",
     securityKeyPin: "Security key PIN",

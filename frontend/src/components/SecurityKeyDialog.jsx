@@ -1,5 +1,5 @@
 import { useEffect, useId, useState } from "react";
-import { Alert, Button, Flex, Text, TextInput } from "@gravity-ui/uikit";
+import { Alert, Button, Flex, Select, Text, TextInput } from "@gravity-ui/uikit";
 import { useTranslation } from "react-i18next";
 
 import apiClient from "../api/client";
@@ -18,6 +18,7 @@ const SecurityKeyDialog = ({ open, onClose }) => {
   const [enabled, setEnabled] = useState(false);
   const [keys, setKeys] = useState([]);
   const [devices, setDevices] = useState([]);
+  const [passwordIntervalDays, setPasswordIntervalDays] = useState(14);
   const [adding, setAdding] = useState(false);
   const [deviceAdding, setDeviceAdding] = useState(false);
   const [error, setError] = useState("");
@@ -35,6 +36,7 @@ const SecurityKeyDialog = ({ open, onClose }) => {
         setEnabled(security.data.enabled);
         setKeys(security.data.security_keys);
         setDevices(deviceUnlock.data.devices);
+        setPasswordIntervalDays(deviceUnlock.data.password_interval_days);
       })
       .catch(async (err) => setError(await errorDetail(err, t("errors.load"))));
   }, [open, t]);
@@ -109,6 +111,21 @@ const SecurityKeyDialog = ({ open, onClose }) => {
     try {
       await apiClient.delete(`/security/device-unlock/${deviceId}`);
       await endSession();
+    } catch (err) {
+      setError(await errorDetail(err, err.message || t("errors.save")));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const updateDeviceUnlockPolicy = async (next) => {
+    setBusy(true);
+    setError("");
+    try {
+      const { data } = await apiClient.put("/security/device-unlock/policy", {
+        password_interval_days: Number(next),
+      });
+      setPasswordIntervalDays(data.password_interval_days);
     } catch (err) {
       setError(await errorDetail(err, err.message || t("errors.save")));
     } finally {
@@ -215,6 +232,20 @@ const SecurityKeyDialog = ({ open, onClose }) => {
                   </Button>
                 </Flex>
               ))}
+              <Select
+                aria-label={t("auth.deviceUnlockPasswordInterval")}
+                disabled={busy}
+                label={t("auth.deviceUnlockPasswordInterval")}
+                onUpdate={([value = passwordIntervalDays]) => updateDeviceUnlockPolicy(value)}
+                options={[7, 14, 30].map((days) => ({
+                  value: String(days),
+                  content: t("auth.deviceUnlockPasswordIntervalOption", { days }),
+                }))}
+                value={[String(passwordIntervalDays)]}
+              />
+              <Text color="secondary" variant="caption-2">
+                {t("auth.deviceUnlockPasswordIntervalHint")}
+              </Text>
             </Flex>
           )}
           {!deviceAdding && (

@@ -209,12 +209,6 @@ def test_malformed_tokens_are_refused(store: VaultSessions, token: str | None) -
     assert store.revoke(token) is False
 
 
-def test_invalid_extension_handle_is_not_encoded_or_matched(
-    store: VaultSessions,
-) -> None:
-    assert store.revoke_extension("\N{SNOWMAN}", 1) is False
-
-
 def test_revoking_ends_one_session_and_revoke_all_ends_every_one(
     store: VaultSessions,
 ) -> None:

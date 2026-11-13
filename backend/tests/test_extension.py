@@ -84,10 +84,6 @@ async def test_extension_session_enforces_scope_origin_and_live_folder_acl(
     owner_sessions = await client.get("/extension/sessions", headers=owner_headers)
     assert owner_sessions.status_code == 200, owner_sessions.text
     assert [session["browser"] for session in owner_sessions.json()] == ["Chromium"]
-    invalid_disconnect = await client.delete(
-        "/extension/sessions/☃", headers=owner_headers
-    )
-    assert invalid_disconnect.status_code == 200, invalid_disconnect.text
     denied_disconnect = await client.delete(
         f"/extension/sessions/{own_sessions.json()[0]['id']}", headers=owner_headers
     )

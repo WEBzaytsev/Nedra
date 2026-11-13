@@ -94,6 +94,9 @@ const ru = {
     deviceUnlock: "Разблокировка устройством",
     deviceUnlockAdd: "Добавить устройство",
     deviceUnlockName: "Название устройства",
+    deviceUnlockPasswordInterval: "Запрашивать пароль",
+    deviceUnlockPasswordIntervalOption: "Каждые {{days}} дней",
+    deviceUnlockPasswordIntervalHint: "Так пароль не забудется.",
     deviceUnlockPasswordRequired:
       "Введите пароль: для разблокировки устройством нужно свежее подтверждение паролем.",
     securityKeyPin: "PIN аппаратного ключа",
