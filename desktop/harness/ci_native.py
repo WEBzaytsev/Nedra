@@ -11,6 +11,14 @@ root = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser()
 parser.add_argument("--out", type=Path, required=True)
 args = parser.parse_args()
+qa_home = args.out / "home"
+qa_home.mkdir(parents=True, exist_ok=True)
+qa_env = {
+    "HOME": str(qa_home),
+    "XDG_CONFIG_HOME": str(qa_home / ".config"),
+    "XDG_CACHE_HOME": str(qa_home / ".cache"),
+    "XDG_DATA_HOME": str(qa_home / ".local/share"),
+}
 bundle = root / "src-tauri/target/release/bundle"
 python = (
     root
@@ -33,7 +41,7 @@ elif sys.platform == "win32":
 else:
     packages = list((bundle / "deb").glob("*.deb"))
     package = max(packages, key=lambda p: p.stat().st_mtime)
-    subprocess.run(["sudo", "apt-get", "install", "-y", str(package)], check=True)
+    subprocess.run(["sudo", "apt-get", "install", "--reinstall", "-y", str(package)], check=True)
     executable = Path("/usr/bin/ciphermoth-desktop")
 command = [
     str(python),
@@ -43,7 +51,7 @@ command = [
     "--root",
     str(args.out),
 ]
-if sys.platform.startswith("linux") and not os.environ.get("DISPLAY"):
+if sys.platform.startswith("linux"):
     command = [
         "xvfb-run",
         "-a",
@@ -51,9 +59,11 @@ if sys.platform.startswith("linux") and not os.environ.get("DISPLAY"):
         "-screen 0 1280x1024x24",
         "dbus-run-session",
         "--",
+        "env",
+        *[f"{key}={value}" for key, value in qa_env.items()],
         *command,
     ]
-subprocess.run(command, check=True)
+subprocess.run(command, check=True, env={**os.environ, **qa_env})
 result_path = args.out / "results.json"
 result = json.loads(result_path.read_text(encoding="utf-8"))
 result["artifacts"] = [

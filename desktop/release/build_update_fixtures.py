@@ -82,7 +82,8 @@ def main():
                     config["version"] = version
                     path.write_text(json.dumps(config, indent=2) + "\n")
                 else:
-                    # Preserve existing CRLF without a second Windows text-mode translation.
+                    # Preserve existing CRLF without a second Windows text-mode
+                    # translation.
                     path.write_bytes(
                         re.sub(
                             r'(?m)^(version|CORE_VERSION) = "[^"\n]+"',

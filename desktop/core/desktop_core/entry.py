@@ -102,7 +102,11 @@ def main(started):
                 0,
                 {
                     "code": "startup_failed",
-                    "message": "The vault could not be opened. Check folder permissions, close other Nedra windows, or restore a compatible backup. Your vault was not replaced.",
+                    "message": (
+                        "The vault could not be opened. Check folder permissions, "
+                        "close other Nedra windows, or restore a compatible backup. "
+                        "Your vault was not replaced."
+                    ),
                 },
             ),
         )

@@ -19,13 +19,16 @@ async function until(fn) {
 const button = (label) =>
   [...document.querySelectorAll("button")].find((x) => x.textContent === label && !x.disabled);
 function input(label, value) {
-  const node = [...document.querySelectorAll("label")].find(
-    (x) => x.textContent.replace(/\s*\*$/, "") === label
-  );
-  const field = node && document.getElementById(node.htmlFor);
+  const field = document.querySelector(`input[aria-label="${label}"]`);
   ensure(field, `Missing input ${label}`);
   Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(field, value);
   field.dispatchEvent(new Event("input", { bubbles: true }));
+}
+function checkAcknowledgement() {
+  const field = document.querySelector('input[type="checkbox"]');
+  const label = field?.closest("label");
+  ensure(label, "Missing recovery acknowledgement");
+  label.click();
 }
 async function unlock() {
   await until(
@@ -39,7 +42,7 @@ async function unlock() {
   input("Password", password);
   if (fresh) {
     input("Confirm password", password);
-    document.querySelector('input[type="checkbox"]').click();
+    checkAcknowledgement();
   }
   await pause(100);
   (await until(() => button(fresh ? "Create Vault" : "Unlock Vault"))).click();

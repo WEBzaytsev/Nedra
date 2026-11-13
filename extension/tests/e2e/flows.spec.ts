@@ -269,12 +269,30 @@ test("lock ends the session on the server too", async () => {
 });
 
 test("unlock in CipherMoth: the handoff through the real web app", async () => {
+  await configure(browser);
+  const options = await browser.context.newPage();
+  await options.goto(`chrome-extension://${browser.extensionId}/options.html`);
+  await options.getByRole("button", { name: /Connect|Save/ }).click();
+  await expect(options.getByRole("status")).toContainText("Connected");
+  await options.close();
   const popup = await openPopup(browser, null);
+  const opened = browser.context.waitForEvent("page");
   await popup.getByRole("button", { name: /Unlock in CipherMoth/ }).click();
-  const vault = await browser.context.waitForEvent("page", (p) =>
-    p.url().startsWith("https://vault.test/")
-  );
+  const vault = await opened;
+  await vault.waitForURL("https://vault.test/**");
   await vault.waitForLoadState("domcontentloaded");
+  expect(
+    await browser.worker.evaluate(async () => {
+      const { handoff } = (await chrome.storage.session.get("handoff")) as {
+        handoff?: { tabId: number };
+      };
+      return {
+        handoff,
+        allowed: await chrome.permissions.contains({ origins: ["https://vault.test/*"] }),
+        tab: handoff ? await chrome.tabs.get(handoff.tabId) : null,
+      };
+    })
+  ).toMatchObject({ allowed: true, handoff: expect.any(Object), tab: { url: expect.any(String) } });
   await expect(vault.getByRole("heading", { name: "Unlock vault" })).toBeVisible();
   expect(vault.url()).not.toContain("request=");
   await vault.getByLabel("Username").fill("admin");
@@ -283,9 +301,18 @@ test("unlock in CipherMoth: the handoff through the real web app", async () => {
   const dialog = vault.getByRole("heading", { name: "Connect Nedra extension" }).locator("..");
   await expect(dialog).toBeVisible();
   await expect(dialog).toContainText("fill-only session");
+  const requestStart = stack.requests.length;
   await dialog.getByRole("button", { name: "Connect Chromium" }).click();
   await expect(vault.getByText("Connected. Return to the extension.")).toBeVisible();
   await expect.poll(() => sessionToken(browser)).toMatch(/^[A-Za-z0-9_-]{43}$/);
+  expect(
+    stack.requests
+      .slice(requestStart)
+      .filter((request) => request.path === "/api/extension/handoffs/redeem")
+  ).toHaveLength(1);
+  expect(
+    await browser.worker.evaluate(async () => (await chrome.storage.session.get("handoff")).handoff)
+  ).toBeUndefined();
   await expect.poll(() => vault.isClosed(), { timeout: 5_000 }).toBe(true);
   const after = await openPopup(browser, null);
   await expect(after.getByPlaceholder("Search logins")).toBeVisible();
@@ -299,7 +326,7 @@ test("disconnect from the vault's Settings locks the extension", async () => {
   await web.getByRole("button", { name: "Settings" }).click();
   await web.getByRole("tab", { name: "Browser extension" }).click();
   const list = web.getByRole("list", { name: "Connected browsers" });
-  await expect(list.getByText("Chromium")).toBeVisible();
+  await expect(list.getByText("Chromium", { exact: true })).toBeVisible();
   await web.getByRole("button", { name: "Disconnect Chromium" }).click();
   await expect(web.getByText("No browser is connected right now")).toBeVisible();
   const popup = await openPopup(browser, null);

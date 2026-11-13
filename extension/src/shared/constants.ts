@@ -27,6 +27,7 @@ export const BRIDGE_SCRIPT_ID = "ciphermoth-vault-bridge";
 export const SESSION_MESSAGE = "ciphermoth:extension-session";
 export const CONNECTED_MESSAGE = "ciphermoth:extension-connected";
 export const TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
+export const HANDOFF_REDEEM_PATTERN = /^[A-Za-z0-9_-]{22,43}$/;
 
 export const BROWSERS = [
   "Chrome",

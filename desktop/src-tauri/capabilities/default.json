@@ -26,6 +26,10 @@
     "allow-update-cancel",
     "allow-security-key-register",
     "allow-security-key-answer",
-    "allow-security-key-cancel"
+    "allow-security-key-cancel",
+    "allow-extension-status",
+    "allow-extension-set-enabled",
+    "allow-extension-unpair",
+    "allow-extension-pairing-answer"
   ]
 }

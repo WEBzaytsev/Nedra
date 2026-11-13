@@ -140,7 +140,10 @@ def main():
         "native_architecture": True,
         "no_qa_hooks": True,
         "installed_core_tests": True,
-        "signature_scope": "macOS ad-hoc bundle integrity; Tauri updater authorization checked separately",
+        "signature_scope": (
+            "macOS ad-hoc bundle integrity; "
+            "Tauri updater authorization checked separately"
+        ),
     }
     (out / "results.json").write_text(json.dumps(result, indent=2) + "\n")
     if sys.platform.startswith("linux"):

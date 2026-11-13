@@ -1,5 +1,6 @@
 mod clipboard;
 mod commands;
+mod extension;
 #[cfg(windows)]
 mod job;
 mod lock;
@@ -134,7 +135,11 @@ pub fn run() {
         updates::update_cancel,
         security_key::security_key_register,
         security_key::security_key_answer,
-        security_key::security_key_cancel
+        security_key::security_key_cancel,
+        extension::extension_status,
+        extension::extension_set_enabled,
+        extension::extension_unpair,
+        extension::extension_pairing_answer
     ]);
     #[cfg(feature = "gui-test")]
     let builder = builder.invoke_handler(tauri::generate_handler![
@@ -157,6 +162,10 @@ pub fn run() {
         security_key::security_key_register,
         security_key::security_key_answer,
         security_key::security_key_cancel,
+        extension::extension_status,
+        extension::extension_set_enabled,
+        extension::extension_unpair,
+        extension::extension_pairing_answer,
         qa::qa_report,
         qa::qa_backup,
         qa::qa_lock,
@@ -182,6 +191,13 @@ pub fn run() {
             app.manage(supervisor);
             app.manage(native::Files::default());
             app.manage(security_key::SecurityKeys::new(core_config(&handle)?));
+            // Browser extensions are optional: a local host failure never blocks the vault.
+            match extension::Extension::start(&handle) {
+                Ok(extension) => {
+                    app.manage(extension);
+                }
+                Err(error) => eprintln!("browser extensions unavailable: {}", error.kind()),
+            }
             app.manage(clipboard::Clipboard::start());
             menu::install(&handle)?;
             lock::install(handle);
@@ -213,6 +229,9 @@ pub fn run() {
     app.run(|handle, event| {
         if let RunEvent::Exit = event {
             handle.state::<Arc<clipboard::Clipboard>>().clear();
+            if let Some(extension) = handle.try_state::<Arc<extension::Extension>>() {
+                extension.shutdown();
+            }
             if let Some(core) = handle.try_state::<Arc<Supervisor>>() {
                 core.shutdown();
             }

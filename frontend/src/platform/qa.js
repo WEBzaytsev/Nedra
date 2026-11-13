@@ -1,5 +1,6 @@
 // Only imported by a dedicated QA frontend build. Runs inside the native webview.
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import api from "../api/client";
 import { coreStatus, coreRequest } from "./core";
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -12,16 +13,32 @@ async function until(fn) {
   throw new Error("UI condition timed out");
 }
 function input(label, value) {
+  const control = document.querySelector(`input[aria-label="${label}"]`);
   const node = [...document.querySelectorAll("label")].find(
-    (x) => x.textContent.replace(/\s*\*$/, "") === label
+    (item) => item.textContent.replace(/\s*\*$/, "") === label
   );
-  const field = node && document.getElementById(node.htmlFor);
+  const field =
+    control ||
+    (node && document.getElementById(node.htmlFor)) ||
+    (label === "Password" && document.querySelector('input[type="password"]'));
   if (!field) throw new Error(`Missing field: ${label}`);
   Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set.call(field, value);
   field.dispatchEvent(new Event("input", { bubbles: true }));
 }
+async function checkAcknowledgement() {
+  const field = document.querySelector('input[type="checkbox"]');
+  const label = field?.closest("label");
+  if (!label) throw new Error("Missing recovery acknowledgement");
+  await invoke("qa_report", {
+    result: { stage: "bootstrap_acknowledgement" },
+  });
+  if (!field.checked) throw new Error("native acknowledgement click did not update the checkbox");
+  await pause(0);
+}
 const button = (label) =>
-  [...document.querySelectorAll("button")].find((x) => x.textContent === label && !x.disabled);
+  [...document.querySelectorAll("button")].find(
+    (x) => x.textContent.trim().toLowerCase() === label.toLowerCase() && !x.disabled
+  );
 const checks = [];
 try {
   await until(
@@ -42,14 +59,20 @@ try {
   input("Password", sessionStorage.getItem("qa-password") || "Desktop-GUI-Canary-2026!");
   if (fresh) {
     input("Confirm password", "Desktop-GUI-Canary-2026!");
-    document.querySelector('input[type="checkbox"]').click();
+    await checkAcknowledgement();
   }
   await pause(100);
-  (await until(() => button(fresh ? "Create Vault" : "Unlock Vault"))).click();
+  const submit = button(fresh ? "Create Vault" : "Unlock Vault");
+  if (!submit) {
+    const acknowledgement = document.querySelector('input[type="checkbox"]');
+    throw new Error(`login submit stayed disabled (acknowledged=${acknowledgement?.checked})`);
+  }
+  submit.click();
   await until(() => button("Log out"));
   checks.push(fresh ? "create vault through UI" : "unlock persisted vault through UI");
-  if (fresh) {
-    (await until(() => button("Add First Password"))).click();
+  let { data } = await api.get("/passwords");
+  if (!data.some((row) => row.password_name === "Native GUI entry")) {
+    (await until(() => button("Add First Password") || button("Add entry"))).click();
     await until(() =>
       [...document.querySelectorAll("label")].some((x) => x.textContent.startsWith("Name"))
     );
@@ -62,8 +85,8 @@ try {
       () => ![...document.querySelectorAll("button")].some((x) => x.textContent === "Create")
     );
     checks.push("create password through UI");
+    ({ data } = await api.get("/passwords"));
   }
-  const { data } = await api.get("/passwords");
   if (
     !data.some(
       (row) =>
@@ -91,6 +114,28 @@ try {
   if (fresh) {
     const { workflows } = await import("./qaWorkflows");
     await workflows(checks);
+  }
+  if (!localStorage.getItem("qa-extension-done")) {
+    let paired = false;
+    const stopPairing = await listen("extension-pairing", async ({ payload }) => {
+      await invoke("qa_report", {
+        result: { stage: "extension_pairing", browser: payload.browser, code: payload.code },
+      });
+      await invoke("extension_pairing_answer", { id: payload.id, allow: true });
+      paired = true;
+    });
+    try {
+      await invoke("extension_set_enabled", { enabled: true });
+      await invoke("qa_report", { result: { stage: "extension_ready" } });
+      await until(() => paired);
+      await invoke("qa_report", { result: { stage: "extension_on_complete" } });
+      await invoke("extension_set_enabled", { enabled: false });
+      await invoke("qa_report", { result: { stage: "extension_off" } });
+      localStorage.setItem("qa-extension-done", "1");
+      checks.push("desktop extension enable, pair, fill, revoke and disable");
+    } finally {
+      stopPairing();
+    }
   }
   if (import.meta.env.VITE_DESKTOP_DIALOG_QA === "1" && !sessionStorage.getItem("qa-files")) {
     const { getSessionToken } = await import("../utils");

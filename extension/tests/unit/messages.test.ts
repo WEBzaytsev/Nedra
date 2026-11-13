@@ -7,6 +7,7 @@ import { HANDOFF_CHECK_TIMEOUT_MS, REQUEST_TIMEOUT_MS } from "../../src/shared/c
 import { parseMessage } from "../../src/shared/messages";
 
 const TOKEN = "kM3x1y8Qe0bWv7c2Z9pL4tR6sN5aH1jD0fG3uY8iO2w";
+const REDEEM = "kM3x1y8Qe0bWv7c2Z9pL4t";
 
 describe("parseMessage", () => {
   it.each([
@@ -18,6 +19,7 @@ describe("parseMessage", () => {
     { type: "copied", digest: "ab".repeat(32) },
     { type: "settings", subdomains: true, strictClipboard: false },
     { type: "handoff-token", request: TOKEN, redeem: TOKEN },
+    { type: "handoff-token", request: TOKEN, redeem: REDEEM },
   ])("accepts %j", (message) => {
     expect(parseMessage(message)).toEqual(message);
   });

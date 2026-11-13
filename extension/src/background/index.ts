@@ -6,7 +6,13 @@
 import { ApiError } from "./api";
 import { CLIPBOARD_ALARM, runClear, scheduleClear } from "./clipboard";
 import { credential, fill, pageInfo, totp } from "./fill";
-import { HANDOFF_ALARM, cancelHandoff, injectHandoffBridge, receiveToken, startHandoff } from "./handoff";
+import {
+  HANDOFF_ALARM,
+  cancelHandoff,
+  injectHandoffBridge,
+  receiveToken,
+  startHandoff,
+} from "./handoff";
 import { cancelPairing, launchApp, showApp, startPairing, unpair } from "./desktop";
 import {
   SESSION_ALARM,
@@ -131,7 +137,7 @@ ext.runtime.onMessage.addListener((raw: unknown, sender, respond) => {
 });
 
 ext.tabs.onUpdated.addListener((tabId, change, tab) => {
-  if (change.status === "loading" || change.url) void injectHandoffBridge(tabId, tab.url ?? change.url);
+  if (change.status === "loading") void injectHandoffBridge(tabId, tab.url ?? change.url);
 });
 
 const openPopup = async (tabId?: number): Promise<void> => {

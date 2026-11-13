@@ -4,7 +4,7 @@
 // type is dropped. Nothing outside the extension can send these at all
 // (externally_connectable is empty and there is no onMessageExternal).
 
-import { BROWSERS, type BrowserName, TOKEN_PATTERN } from "./constants";
+import { BROWSERS, HANDOFF_REDEEM_PATTERN, type BrowserName, TOKEN_PATTERN } from "./constants";
 
 type Shape = Record<string, "string" | "number" | "boolean" | "string?" | "id" | "tab">;
 
@@ -90,7 +90,7 @@ export const parseMessage = (raw: unknown): Message | null => {
   }
   if (type === "handoff-token") {
     if (!TOKEN_PATTERN.test(record.request as string)) return null;
-    if (!TOKEN_PATTERN.test(record.redeem as string)) return null;
+    if (!HANDOFF_REDEEM_PATTERN.test(record.redeem as string)) return null;
   }
   return record as Message;
 };

@@ -1,11 +1,20 @@
 import { useEffect, useRef, useState } from "react";
 import { BrowserRouter as Router, Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { useStoreActions } from "easy-peasy";
-import { Box, Button, Container, Flex, ToasterComponent, useLayoutContext } from "@gravity-ui/uikit";
+import {
+  Box,
+  Button,
+  Container,
+  Flex,
+  ToasterComponent,
+  useLayoutContext,
+} from "@gravity-ui/uikit";
 
 import DesktopGate from "./platform/DesktopGate";
+import { IS_DESKTOP } from "./platform";
 import apiClient from "./api/client";
 import PasswordChangeDialog from "./components/PasswordChangeDialog";
+import PairingDialog from "./components/extension/PairingDialog";
 import SecurityKeyPrompt from "./components/SecurityKeyPrompt";
 import TopMenu from "./components/TopMenu";
 import { ColorModeProvider } from "./hooks/useColorMode";
@@ -15,12 +24,7 @@ import { getCurrentUser, isAuth, setCurrentUser } from "./utils";
 import { setMenuUnlocked } from "./platform/menu";
 import { VaultViewContext } from "./hooks/VaultViewContext";
 import { MobileTaskActionsContext } from "./hooks/MobileTaskActionsContext";
-import {
-  captureHandoff,
-  clearHandoff,
-  deliverToken,
-  pendingHandoff,
-} from "./lib/extensionHandoff";
+import { captureHandoff, clearHandoff, deliverToken, pendingHandoff } from "./lib/extensionHandoff";
 
 const ExtensionHandoff = ({ handoff }) => {
   const [state, setState] = useState("ready");
@@ -48,10 +52,18 @@ const ExtensionHandoff = ({ handoff }) => {
     <Container paddingBlock="spacing-6" gutters="spacing-6">
       <Box maxWidth="480px">
         <h1>Connect Nedra extension</h1>
-        <p>The extension will receive a fill-only session. It cannot browse or change your vault.</p>
-        {state === "ready" && <Button view="action" onClick={connect}>Connect {handoff.browser}</Button>}
+        <p>
+          The extension will receive a fill-only session. It cannot browse or change your vault.
+        </p>
+        {state === "ready" && (
+          <Button view="action" onClick={connect}>
+            Connect {handoff.browser}
+          </Button>
+        )}
         {state === "connecting" && <p>Connecting…</p>}
-        {state === "waiting" && <p>Extension did not confirm the connection. Open its popup and try again.</p>}
+        {state === "waiting" && (
+          <p>Extension did not confirm the connection. Open its popup and try again.</p>
+        )}
         {state === "connected" && <p>Connected. Return to the extension.</p>}
         {state === "error" && <p>Could not connect the extension. Unlock Nedra again and retry.</p>}
       </Box>
@@ -186,6 +198,7 @@ const AppFrame = () => {
           <DesktopGate>
             <AppContent />
           </DesktopGate>
+          {IS_DESKTOP && <PairingDialog />}
           <SecurityKeyPrompt />
         </Box>
         {phone ? (

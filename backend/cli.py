@@ -34,6 +34,12 @@ pw_app = typer.Typer(
     rich_markup_mode="rich",
 )
 app.add_typer(pw_app, name="password")
+browser_app = typer.Typer(
+    help="List and disconnect browser-extension sessions.",
+    no_args_is_help=True,
+    rich_markup_mode="rich",
+)
+app.add_typer(browser_app, name="browser")
 
 _out = Console()
 _err = Console(stderr=True)
@@ -361,6 +367,45 @@ def _print_details(item: dict) -> None:
             _out.print(f"  {' ' * width}{escape(line)}")
 
     _out.print()
+
+
+@browser_app.command("list", help="List browser-extension sessions for your account.")
+def browser_list() -> None:
+    with _vault() as vault:
+        resp = vault.send("GET", "/extension/sessions")
+    _check(resp)
+    sessions = resp.json()
+    if not sessions:
+        _out.print("[dim]No browser extension sessions.[/dim]")
+        return
+    table = Table(show_header=True, header_style="bold", box=None, padding=(0, 2, 0, 0))
+    table.add_column("ID", style="cyan")
+    table.add_column("Browser")
+    table.add_column("Connected")
+    table.add_column("Last used")
+    for session in sessions:
+        table.add_row(
+            escape(session["id"]),
+            escape(session["browser"]),
+            escape(session["created"]),
+            escape(session["last_used"]),
+        )
+    _out.print(table)
+
+
+@browser_app.command("disconnect", help="End one browser-extension session by its ID.")
+def browser_disconnect(
+    session_id: Annotated[str, typer.Argument(help="Session ID from 'browser list'.")],
+    yes: Annotated[
+        bool, typer.Option("--yes", "-y", help="Do not ask to confirm.")
+    ] = False,
+) -> None:
+    if not yes:
+        typer.confirm("Disconnect this browser extension session?", abort=True)
+    with _vault() as vault:
+        resp = vault.send("DELETE", f"/extension/sessions/{quote(session_id, safe='')}")
+    _check(resp)
+    _ok("Browser extension session disconnected.")
 
 
 @pw_app.command("list", help="List every entry in the vault.")

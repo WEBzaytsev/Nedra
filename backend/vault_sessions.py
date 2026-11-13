@@ -58,6 +58,7 @@ class _Session:
     handle: str = ""
     browser: str | None = None
     client: str | None = None
+    desktop_full_digest: bytes | None = field(default=None, repr=False)
 
 
 @dataclass(slots=True)
@@ -145,6 +146,22 @@ class VaultSessions:
         return self._open(
             key, user_id, credential_fingerprint, Scope.EXTENSION, browser, client
         )
+
+    def open_desktop_extension(self, browser: str, client: str) -> tuple[str, str]:
+        """Open an extension session bound to the one current desktop user."""
+        now = self._clock()
+        with self._lock:
+            self._drop_expired(now)
+            full_digest, full = self._sole_full_locked()
+            return self._open_locked(
+                full.key,
+                full.user_id,
+                full.credential_fingerprint,
+                Scope.EXTENSION,
+                browser,
+                client,
+                desktop_full_digest=full_digest,
+            )
 
     def start_extension_handoff(
         self, request: str, tab: str, origin: str, browser: str, client: str
@@ -266,6 +283,7 @@ class VaultSessions:
         scope: Scope,
         browser: str | None,
         client: str | None,
+        desktop_full_digest: bytes | None = None,
     ) -> tuple[str, str]:
         token = secrets.token_urlsafe(TOKEN_BYTES)
         handle = secrets.token_urlsafe(HANDLE_BYTES)
@@ -299,6 +317,7 @@ class VaultSessions:
             handle=handle,
             browser=browser,
             client=client,
+            desktop_full_digest=desktop_full_digest,
         )
         return token, handle
 
@@ -337,6 +356,14 @@ class VaultSessions:
         with self._lock:
             _, session = self._live(token, now, scope)
             return session.credential_fingerprint
+
+    def sole_full_session(self) -> tuple[VaultKey, int, bytes | None]:
+        """Return the one desktop-owned full session, never an extension token."""
+        now = self._clock()
+        with self._lock:
+            self._drop_expired(now)
+            _, session = self._sole_full_locked()
+            return session.key, session.user_id, session.credential_fingerprint
 
     def user_ids(self) -> tuple[int, ...]:
         with self._lock:
@@ -416,6 +443,19 @@ class VaultSessions:
                     return True
         return False
 
+    def revoke_extensions(self, client: str | None = None) -> int:
+        """End desktop browser sessions, optionally for one pairing client."""
+        with self._lock:
+            matching = [
+                digest
+                for digest, session in self._sessions.items()
+                if session.scope is Scope.EXTENSION
+                and (client is None or session.client == client)
+            ]
+            for digest in matching:
+                del self._sessions[digest]
+            return len(matching)
+
     def drop_expired(self) -> int:
         with self._lock:
             return self._drop_expired(self._clock())
@@ -437,7 +477,30 @@ class VaultSessions:
         if self._remaining_ms(session, now) <= 0:
             del self._sessions[digest]
             raise SessionRequired(_ENDED)
+        if session.desktop_full_digest is not None:
+            try:
+                full_digest, full = self._sole_full_locked()
+            except SessionRequired:
+                del self._sessions[digest]
+                raise SessionRequired(_ENDED) from None
+            if (
+                full_digest != session.desktop_full_digest
+                or full.user_id != session.user_id
+                or full.credential_fingerprint != session.credential_fingerprint
+            ):
+                del self._sessions[digest]
+                raise SessionRequired(_ENDED)
         return digest, session
+
+    def _sole_full_locked(self) -> tuple[bytes, _Session]:
+        sessions = [
+            (digest, session)
+            for digest, session in self._sessions.items()
+            if session.scope is Scope.FULL
+        ]
+        if len(sessions) != 1:
+            raise SessionRequired
+        return sessions[0]
 
     def _remaining_ms(
         self, session: _Session, now: Instant, *, tolerance: bool = True

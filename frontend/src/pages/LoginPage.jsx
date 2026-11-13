@@ -113,6 +113,11 @@ const LoginPage = () => {
     });
   };
 
+  const handleAcknowledgement = (checked) => {
+    setAcknowledged(checked);
+    setError(null);
+  };
+
   const handleRecovery = () => {
     if (!username.trim() || !recoveryCode.trim() || !value || value !== confirm) {
       reportError(t("auth.validation.enterRecovery"), "recovery", passwordRef);
@@ -295,10 +300,7 @@ const LoginPage = () => {
                 checked={acknowledged}
                 disabled={loading}
                 size="l"
-                onUpdate={(checked) => {
-                  setAcknowledged(checked);
-                  setError(null);
-                }}
+                onUpdate={handleAcknowledgement}
                 content={t("auth.noRecoveryAcknowledgement")}
               />
             </>

@@ -119,6 +119,36 @@ async def test_cli_entry_lifecycle(api: str) -> None:
     assert "The trash is empty" in ok(cli(api, "password", "trash"))
 
 
+async def test_cli_lists_and_disconnects_only_its_browser_session(api: str) -> None:
+    unlocked = httpx.post(
+        f"{api}/extension/unlock",
+        json={"username": "admin", "password": MASTER_PASSWORD, "browser": "Firefox"},
+    )
+    assert unlocked.status_code == 200, unlocked.text
+    token = unlocked.json()["session_token"]
+
+    listed = ok(cli(api, "browser", "list"))
+    assert "Firefox" in listed
+    web = httpx.post(
+        f"{api}/master_password/unlock", json={"master_password": MASTER_PASSWORD}
+    )
+    assert web.status_code == 200, web.text
+    sessions = httpx.get(
+        f"{api}/extension/sessions",
+        headers={"x-ciphermoth-session": web.json()["session_token"]},
+    )
+    assert sessions.status_code == 200, sessions.text
+    [session] = sessions.json()
+    handle = session["id"]
+    ok(cli(api, "browser", "disconnect", handle, "--yes"))
+    assert (
+        httpx.post(
+            f"{api}/extension/session", headers={"x-ciphermoth-session": token}
+        ).status_code
+        == 401
+    )
+
+
 async def test_cli_backup_import_and_csv(api: str, tmp_path: Path) -> None:
     ok(
         cli(

@@ -7,12 +7,18 @@
 // this origin, with the exact message shape. The background then checks the
 // tab, the frame, the origin and the single-use request nonce.
 
-const SESSION_MESSAGE = "ciphermoth:extension-session";
-const CONNECTED_MESSAGE = "ciphermoth:extension-connected";
-const TOKEN = /^[A-Za-z0-9_-]{43}$/;
+import {
+  CONNECTED_MESSAGE,
+  HANDOFF_REDEEM_PATTERN,
+  SESSION_MESSAGE,
+  TOKEN_PATTERN,
+} from "../shared/constants";
 
 (() => {
   if (window.top !== window) return;
+  const bridgeWindow = window as typeof window & { __ciphermothVaultBridge?: boolean };
+  if (bridgeWindow.__ciphermothVaultBridge) return;
+  bridgeWindow.__ciphermothVaultBridge = true;
   const runtime =
     (globalThis as unknown as { browser?: typeof chrome }).browser?.runtime ?? chrome.runtime;
   // A wrong message must not stop the right one (the background ignores a
@@ -31,8 +37,8 @@ const TOKEN = /^[A-Za-z0-9_-]{43}$/;
       data.type !== SESSION_MESSAGE ||
       typeof data.request !== "string" ||
       typeof data.redeem !== "string" ||
-      !TOKEN.test(data.request) ||
-      !TOKEN.test(data.redeem)
+      !TOKEN_PATTERN.test(data.request) ||
+      !HANDOFF_REDEEM_PATTERN.test(data.redeem)
     )
       return;
     attempts += 1;

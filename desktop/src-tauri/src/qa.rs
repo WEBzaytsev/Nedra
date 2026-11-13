@@ -133,9 +133,16 @@ pub async fn qa_backup(
 pub async fn qa_report(mut result: serde_json::Value) -> Result<(), String> {
     let root = std::env::var("CIPHERMOTH_QA_ROOT").map_err(|_| "QA root missing")?;
     let root = std::path::Path::new(&root);
-    let ack = if cfg!(target_os = "macos")
+    let ack = if (cfg!(target_os = "macos")
         && [Some("clipboard_timeout"), Some("clipboard_replaced")]
-            .contains(&result["stage"].as_str())
+            .contains(&result["stage"].as_str()))
+        || [
+            Some("extension_pairing"),
+            Some("extension_on_complete"),
+            Some("extension_off"),
+            Some("bootstrap_acknowledgement"),
+        ]
+        .contains(&result["stage"].as_str())
     {
         let nonce = uuid::Uuid::new_v4().to_string();
         result["ack"] = serde_json::json!(nonce);

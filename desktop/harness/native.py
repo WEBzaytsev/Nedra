@@ -62,11 +62,35 @@ class MemorySampler:
             "peak_total_rss": self.peak,
             "samples": self.samples,
             "macos_new_webkit_pids": sorted(self.webviews),
-            "scope": "process tree plus WebKit XPCs started during this isolated launch; RSS includes shared pages",
+            "scope": (
+                "process tree plus WebKit XPCs started during this isolated launch; "
+                "RSS includes shared pages"
+            ),
         }
 
 
-def wait_report(path, process, timeout=240, dialogs=False, started=None):
+def acknowledge_bootstrap(report, path):
+    if not __import__("sys").platform.startswith("linux"):
+        raise AssertionError("native bootstrap input is only configured on Linux")
+    # The username field has autofocus; tab through the real WebKit controls.
+    # This validates keyboard access instead of changing the controlled DOM input.
+    subprocess.run(
+        ["xdotool", "key", "Tab", "Tab", "Tab", "Tab", "Tab", "Tab", "space"],
+        check=True,
+        timeout=10,
+    )
+    (path.parent / (report["ack"] + ".done")).touch()
+
+
+def wait_report(
+    path,
+    process,
+    timeout=240,
+    dialogs=False,
+    started=None,
+    app_executable=None,
+    extension_results=None,
+):
     started = started or time.monotonic()
     interactive = None
     initial_core = None
@@ -76,6 +100,33 @@ def wait_report(path, process, timeout=240, dialogs=False, started=None):
         if path.exists():
             report = json.loads(path.read_text(encoding="utf-8"))
             stage = report.get("stage")
+            if stage == "bootstrap_acknowledgement":
+                acknowledge_bootstrap(report, path)
+            if (
+                stage == "extension_ready"
+                and extension_results is not None
+                and "on" not in extension_results
+            ):
+                import extension
+
+                extension_results["on"] = extension.check_on(
+                    path.parent, report, path, app_executable
+                )
+            if (
+                stage == "extension_on_complete"
+                and extension_results is not None
+                and "on" in extension_results
+            ):
+                (path.parent / report["ack"]).with_suffix(".done").touch()
+            if (
+                stage == "extension_off"
+                and extension_results is not None
+                and "off" not in extension_results
+            ):
+                import extension
+
+                extension_results["off"] = extension.check_off(path.parent)
+                (path.parent / report["ack"]).with_suffix(".done").touch()
             if stage == "interactive" and interactive is None:
                 interactive = round(time.monotonic() - started, 3)
                 initial_core = report.get("core")
@@ -204,8 +255,16 @@ def main():
     with (args.root / "shell.log").open("wb") as log:
         app = subprocess.Popen([str(args.app)], env=env, stdout=log, stderr=log)
         sampler = MemorySampler(app.pid)
+        extension_results = {}
         try:
-            first = wait_report(report_path, app, dialogs=args.dialogs, started=started)
+            first = wait_report(
+                report_path,
+                app,
+                dialogs=args.dialogs,
+                started=started,
+                app_executable=args.app,
+                extension_results=extension_results,
+            )
             first["launch_to_ui_s"] = round(time.monotonic() - started, 3)
             core_pid = first["core"]["info"]["pid"]
             if __import__("sys").platform.startswith("linux"):
@@ -228,7 +287,13 @@ def main():
                 ]
             report_path.unlink()
             psutil.Process(core_pid).kill()
-            restarted = wait_report(report_path, app, dialogs=args.dialogs)
+            restarted = wait_report(
+                report_path,
+                app,
+                dialogs=args.dialogs,
+                app_executable=args.app,
+                extension_results=extension_results,
+            )
             assert restarted["core"]["generation"] > first["core"]["generation"]
             assert "retrieve password through native IPC" in restarted["checks"]
             new_core = restarted["core"]["info"]["pid"]
@@ -239,7 +304,12 @@ def main():
             started = time.monotonic()
             app = subprocess.Popen([str(args.app)], env=env, stdout=log, stderr=log)
             reopened = wait_report(
-                report_path, app, dialogs=args.dialogs, started=started
+                report_path,
+                app,
+                dialogs=args.dialogs,
+                started=started,
+                app_executable=args.app,
+                extension_results=extension_results,
             )
             assert not reopened["fresh"]
             core_pid = reopened["core"]["info"]["pid"]
@@ -271,6 +341,7 @@ def main():
                 "crash_restart": restarted,
                 "reopen": reopened,
                 "orphan_checks": True,
+                "desktop_extension": extension_results,
             }
             (args.root / "results.json").write_text(json.dumps(result, indent=2))
             print(json.dumps(result, indent=2))

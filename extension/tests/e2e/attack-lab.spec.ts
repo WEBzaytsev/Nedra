@@ -10,7 +10,6 @@ import {
   type Stack,
   GITHUB_PASSWORD,
   allFrameValues,
-  api,
   configure,
   fillCommand,
   launch,
@@ -404,10 +403,10 @@ test.describe("6. Messaging", () => {
     // A pending request, but the wrong nonce, a frame and a bogus token.
     const popup = await openPopup(browser, null);
     await popup.getByRole("button", { name: "Lock" }).click();
+    const opened = browser.context.waitForEvent("page");
     await popup.getByRole("button", { name: /Unlock in CipherMoth/ }).click();
-    const handoff = await browser.context.waitForEvent("page", (p) =>
-      p.url().startsWith("https://vault.test/")
-    );
+    const handoff = await opened;
+    await handoff.waitForURL("https://vault.test/**");
     await handoff.waitForLoadState("domcontentloaded");
     const pending = await browser.worker.evaluate(async () => {
       const { handoff } = (await chrome.storage.session.get("handoff")) as {

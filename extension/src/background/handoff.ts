@@ -24,23 +24,34 @@ const CLOSE_DELAY_MS = 1500;
 
 const waitForHandoffPage = (tabId: number, vault: string): Promise<void> =>
   new Promise((resolve, reject) => {
-    const ready = (tab: chrome.tabs.Tab) => {
-      if (tab.id !== tabId || !tab.url || new URL(tab.url).origin !== vault) return;
+    let onVaultOrigin = false;
+    const ready = (tab: chrome.tabs.Tab, url?: string) => {
+      if (tab.id !== tabId) return;
+      if (url) {
+        try {
+          onVaultOrigin = new URL(url).origin === vault;
+        } catch {
+          onVaultOrigin = false;
+        }
+      }
+      if (!onVaultOrigin || tab.status !== "complete") return;
       ext.tabs.onUpdated.removeListener(onUpdated);
       resolve();
     };
-    const onUpdated = (_id: number, _change: chrome.tabs.OnUpdatedInfo, tab: chrome.tabs.Tab) => {
-      ready(tab);
-    };
+    const onUpdated = (_id: number, change: chrome.tabs.OnUpdatedInfo, tab: chrome.tabs.Tab) =>
+      ready(tab, change.url);
     ext.tabs.onUpdated.addListener(onUpdated);
-    ext.tabs.get(tabId).then(ready, reject);
+    ext.tabs.get(tabId).then((tab) => ready(tab, tab.url), reject);
   });
 
 const bridgeInTab = async (tabId: number): Promise<void> => {
   await ext.scripting.executeScript({ target: { tabId }, files: ["bridge.js"] });
 };
 
-export const injectHandoffBridge = async (tabId: number, url: string | undefined): Promise<void> => {
+export const injectHandoffBridge = async (
+  tabId: number,
+  url: string | undefined
+): Promise<void> => {
   const pending = await getHandoff();
   if (!pending || pending.tabId !== tabId || Date.now() >= pending.expires || !url) return;
   try {
@@ -88,7 +99,7 @@ export const startHandoff = async (): Promise<void> => {
   // neighbour). Only its id is read: no tabs permission, no address.
   const [current] = await ext.tabs.query({ active: true, lastFocusedWindow: true });
   const returnTo = current?.id ?? null;
-  const handoffTab = await ext.tabs.create({ url, active: true });
+  const handoffTab = await ext.tabs.create({ url: "about:blank", active: true });
   if (handoffTab.id === undefined) {
     await request(config.api, "/extension/handoffs/cancel", {
       body: { request: requestNonce, tab, origin: config.vault, browser, client },
@@ -97,11 +108,19 @@ export const startHandoff = async (): Promise<void> => {
   }
   const handoffTabId = handoffTab.id;
   const expires = Date.now() + HANDOFF_TTL_MS;
-  await setHandoff({ request: requestNonce, tab, tabId: handoffTabId, vault: config.vault, expires, returnTo });
+  await setHandoff({
+    request: requestNonce,
+    tab,
+    tabId: handoffTabId,
+    vault: config.vault,
+    expires,
+    returnTo,
+  });
   await ext.alarms.create(HANDOFF_ALARM, { when: expires });
   try {
-    await waitForHandoffPage(handoffTabId, config.vault);
-    await bridgeInTab(handoffTabId);
+    const ready = waitForHandoffPage(handoffTabId, config.vault);
+    await ext.tabs.update(handoffTabId, { url });
+    await ready;
   } catch {
     await request(config.api, "/extension/handoffs/cancel", {
       body: { request: requestNonce, tab, origin: config.vault, browser, client },

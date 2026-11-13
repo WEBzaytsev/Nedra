@@ -13,8 +13,14 @@ from crud.records import EntryDocument, open_entry
 from errors import InvalidRequest, NotFound, OriginMismatch, VaultDamaged
 from helpers import VaultKey, generate_totp
 from models import EntryModel
-from schemas import ExtensionCredential, ExtensionLogin, ExtensionLogins, ExtensionTotp
-from url_match import candidate_filter, could_match, normalize, origins_match
+from schemas import (
+    EntryPermission,
+    ExtensionCredential,
+    ExtensionLogin,
+    ExtensionLogins,
+    ExtensionTotp,
+)
+from url_match import Origin, candidate_filter, could_match, normalize, origins_match
 from validators import normalize_totp_secret
 
 logger = logging.getLogger(__name__)
@@ -26,7 +32,7 @@ TOTP_PERIOD = 30
 class _Login:
     model: EntryModel
     document: EntryDocument
-    origin: object | None
+    origin: Origin | None
 
 
 def _display_host(origin: object | None) -> str | None:
@@ -143,7 +149,7 @@ class ExtensionCRUD(BaseCRUD):
         confirmed_mismatch: bool,
     ) -> EntryDocument:
         page = self._page(origin)
-        await self.acl.require(entry_id, "read")
+        await self.acl.require(entry_id, EntryPermission.read)
         model = await self.session.scalar(
             select(EntryModel).where(
                 EntryModel.id == entry_id, EntryModel.deleted.is_(None)

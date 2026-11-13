@@ -3,6 +3,7 @@ import pytest
 
 from tests.support import auth, entry
 from tests.test_folder_access import (
+    ADMIN_PASSWORD,
     MEMBER_PASSWORD,
     bootstrap,
     create_folder,
@@ -53,6 +54,12 @@ async def test_extension_session_enforces_scope_origin_and_live_folder_acl(
     )
     assert changed_member_password.status_code == 200, changed_member_password.text
 
+    owner_extension = await client.post(
+        "/extension/unlock",
+        json={"username": "owner", "password": ADMIN_PASSWORD, "browser": "Chromium"},
+    )
+    assert owner_extension.status_code == 200, owner_extension.text
+
     unlocked = await client.post(
         "/extension/unlock",
         json={
@@ -63,6 +70,27 @@ async def test_extension_session_enforces_scope_origin_and_live_folder_acl(
     )
     assert unlocked.status_code == 200, unlocked.text
     extension_headers = auth(unlocked.json()["session_token"])
+
+    member_web = await client.post(
+        "/auth/login",
+        json={"username": "extension-member", "password": member_password},
+    )
+    assert member_web.status_code == 200, member_web.text
+    member_headers = auth(member_web.json()["session_token"])
+
+    own_sessions = await client.get("/extension/sessions", headers=member_headers)
+    assert own_sessions.status_code == 200, own_sessions.text
+    assert [session["browser"] for session in own_sessions.json()] == ["Firefox"]
+    owner_sessions = await client.get("/extension/sessions", headers=owner_headers)
+    assert owner_sessions.status_code == 200, owner_sessions.text
+    assert [session["browser"] for session in owner_sessions.json()] == ["Chromium"]
+    denied_disconnect = await client.delete(
+        f"/extension/sessions/{own_sessions.json()[0]['id']}", headers=owner_headers
+    )
+    assert denied_disconnect.status_code == 200, denied_disconnect.text
+    assert (
+        await client.post("/extension/session", headers=extension_headers)
+    ).status_code == 200
 
     denied_full_api = await client.get("/passwords", headers=extension_headers)
     assert denied_full_api.status_code == 403
