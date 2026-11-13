@@ -7,6 +7,7 @@ import { endSession } from "../api/session";
 import { errorDetail } from "../lib/http";
 import { registerSecurityKey } from "../lib/securityKey";
 import { securityKeyStepUp } from "../lib/securityStepUp";
+import { IS_DESKTOP } from "../platform";
 import PasswordField from "./PasswordField";
 import Dialog from "./TaskSurface";
 
@@ -76,6 +77,14 @@ const SecurityKeyDialog = ({ open, onClose }) => {
     setBusy(true);
     setError("");
     try {
+      if (!IS_DESKTOP) {
+        const supported =
+          window.isSecureContext &&
+          window.PublicKeyCredential &&
+          (await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()) &&
+          (await PublicKeyCredential.getClientCapabilities?.())?.["extension:prf"] !== false;
+        if (!supported) throw new Error(t("auth.deviceUnlockUnavailable"));
+      }
       const securityKeyAssertion = enabled
         ? await securityKeyStepUp("device-unlock-enroll", {
             current_password: password,
@@ -87,7 +96,7 @@ const SecurityKeyDialog = ({ open, onClose }) => {
         rp_id: window.location.hostname,
         ...(securityKeyAssertion ? { security_key_assertion: securityKeyAssertion } : {}),
       });
-      const response = await registerSecurityKey(options);
+      const response = await registerSecurityKey(options, { platformAuthenticator: true });
       const { data } = await apiClient.post("/security/device-unlock", {
         name,
         current_password: password,

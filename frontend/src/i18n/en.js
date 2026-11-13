@@ -99,6 +99,8 @@ const en = {
     deviceUnlockPasswordIntervalHint: "This keeps your password fresh.",
     deviceUnlockPasswordRequired:
       "Enter your password to unlock this vault; device unlock needs a fresh password confirmation.",
+    deviceUnlockUnavailable:
+      "Device unlock needs a PRF-capable platform authenticator over HTTPS or localhost.",
     securityKeyPin: "Security key PIN",
     securityKeyPinHint: "Enter the PIN of the physical key, not your Nedra password.",
     securityKeyPinInvalid: "That PIN is not right. Try again.",

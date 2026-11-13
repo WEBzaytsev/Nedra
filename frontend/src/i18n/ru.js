@@ -99,6 +99,8 @@ const ru = {
     deviceUnlockPasswordIntervalHint: "Так пароль не забудется.",
     deviceUnlockPasswordRequired:
       "Введите пароль: для разблокировки устройством нужно свежее подтверждение паролем.",
+    deviceUnlockUnavailable:
+      "Для разблокировки устройством нужен поддерживающий PRF встроенный аутентификатор по HTTPS или localhost.",
     securityKeyPin: "PIN аппаратного ключа",
     securityKeyPinHint: "Введите PIN физического ключа, а не пароль Недры.",
     securityKeyPinInvalid: "PIN неверный. Попробуйте ещё раз.",

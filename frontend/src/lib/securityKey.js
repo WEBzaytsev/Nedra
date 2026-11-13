@@ -105,7 +105,7 @@ export const securityKeyAssertion = async (options, session) => {
   return assertion(credential);
 };
 
-export const registerSecurityKey = async (options) => {
+export const registerSecurityKey = async (options, { platformAuthenticator = false } = {}) => {
   const session = {};
   if (IS_DESKTOP) {
     const created = await nativeRun("security_key_register", { options }, session);
@@ -143,7 +143,10 @@ export const registerSecurityKey = async (options) => {
       })),
       timeout: options.timeout_ms,
       attestation: "none",
-      authenticatorSelection: { userVerification: "required" },
+      authenticatorSelection: {
+        ...(platformAuthenticator ? { authenticatorAttachment: "platform" } : {}),
+        userVerification: "required",
+      },
       extensions: { prf: { eval: { first: bytes(options.prf_salt) } } },
     },
   });
