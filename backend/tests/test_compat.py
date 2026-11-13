@@ -54,6 +54,7 @@ async def test_vault_lifecycle_and_unlock(client: httpx.AsyncClient) -> None:
             "mcp",
             "security-factor-step-up",
             "device-unlock",
+            "browser-extension",
         ],
     }
 

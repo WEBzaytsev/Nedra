@@ -5,7 +5,14 @@ const TTL_MS = 5 * 60 * 1000;
 const NONCE = /^[A-Za-z0-9_-]{43}$/;
 const CLIENT = /^[A-Za-z0-9_-]{22,43}$/;
 const BROWSERS = new Set([
-  "Chrome", "Chromium", "Edge", "Brave", "Opera", "Vivaldi", "Firefox", "Browser",
+  "Chrome",
+  "Chromium",
+  "Edge",
+  "Brave",
+  "Opera",
+  "Vivaldi",
+  "Firefox",
+  "Browser",
 ]);
 
 export const captureHandoff = ({ location = window.location, history = window.history } = {}) => {
@@ -17,7 +24,13 @@ export const captureHandoff = ({ location = window.location, history = window.hi
   const browser = params.get("browser");
   const client = params.get("client");
   const tab = params.get("tab");
-  if (!NONCE.test(request ?? "") || !NONCE.test(tab ?? "") || !BROWSERS.has(browser) || (client && !CLIENT.test(client))) return null;
+  if (
+    !NONCE.test(request ?? "") ||
+    !NONCE.test(tab ?? "") ||
+    !BROWSERS.has(browser) ||
+    (client && !CLIENT.test(client))
+  )
+    return null;
   const handoff = { request, tab, browser, client: client || null, expires: Date.now() + TTL_MS };
   sessionStorage.setItem(HANDOFF_KEY, JSON.stringify(handoff));
   return handoff;
@@ -26,7 +39,14 @@ export const captureHandoff = ({ location = window.location, history = window.hi
 export const pendingHandoff = () => {
   try {
     const handoff = JSON.parse(sessionStorage.getItem(HANDOFF_KEY) || "null");
-    if (handoff?.expires > Date.now() && NONCE.test(handoff.request) && NONCE.test(handoff.tab) && BROWSERS.has(handoff.browser) && CLIENT.test(handoff.client ?? "")) return handoff;
+    if (
+      handoff?.expires > Date.now() &&
+      NONCE.test(handoff.request) &&
+      NONCE.test(handoff.tab) &&
+      BROWSERS.has(handoff.browser) &&
+      CLIENT.test(handoff.client ?? "")
+    )
+      return handoff;
   } catch {
     // Malformed tab-local state is discarded below.
   }
