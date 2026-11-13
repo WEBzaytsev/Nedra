@@ -18,3 +18,7 @@ backend/.db.env
 backend/data
 backend/tests
 docker/frontend/browser/node_modules
+extension/node_modules
+desktop/node_modules
+desktop/src-tauri/target
+desktop-results
