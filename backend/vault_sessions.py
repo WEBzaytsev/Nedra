@@ -23,6 +23,7 @@ DEFAULT_MAX_EXTENSION_SESSIONS = 8
 HANDOFF_TTL_MS = 5 * 60 * 1000
 
 _TOKEN = re.compile(r"[A-Za-z0-9_-]{43}", re.ASCII)
+_HANDLE = re.compile(r"[A-Za-z0-9_-]{22}", re.ASCII)
 _ENDED = "Your session expired or was locked. Unlock the vault again."
 
 
@@ -432,6 +433,8 @@ class VaultSessions:
             ]
 
     def revoke_extension(self, handle: str, user_id: int) -> bool:
+        if not _HANDLE.fullmatch(handle):
+            return False
         with self._lock:
             for digest, session in self._sessions.items():
                 if (
