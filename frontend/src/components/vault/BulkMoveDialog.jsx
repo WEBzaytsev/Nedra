@@ -1,14 +1,25 @@
 import { useEffect, useMemo, useState } from "react";
-import { Flex, Select, Text } from "@gravity-ui/uikit";
+import { Button, Flex, Select, Text, TextInput } from "@gravity-ui/uikit";
 import { useTranslation } from "react-i18next";
 
 import Dialog from "../TaskSurface";
 
 const NO_FOLDER = "none";
 
-const BulkMoveDialog = ({ open, entries, folders, onClose, onMove, pending }) => {
+const BulkMoveDialog = ({
+  open,
+  entries,
+  folders,
+  onClose,
+  onMove,
+  onCreateFolder,
+  canCreateFolder,
+  pending,
+}) => {
   const { t } = useTranslation();
   const [selected, setSelected] = useState(NO_FOLDER);
+  const [newFolder, setNewFolder] = useState("");
+  const [creating, setCreating] = useState(false);
   const owners = useMemo(() => new Set(entries.map((entry) => entry.owner_id)), [entries]);
   const options = useMemo(
     () => [
@@ -24,10 +35,27 @@ const BulkMoveDialog = ({ open, entries, folders, onClose, onMove, pending }) =>
   );
 
   useEffect(() => {
-    if (open) setSelected(NO_FOLDER);
+    if (open) {
+      setSelected(NO_FOLDER);
+      setNewFolder("");
+    }
   }, [open]);
 
   const folderId = selected === NO_FOLDER ? null : Number(selected);
+  const createFolder = async () => {
+    const name = newFolder.trim();
+    if (!name || creating || !onCreateFolder) return;
+    setCreating(true);
+    try {
+      const id = await onCreateFolder(name);
+      if (id != null) {
+        setSelected(String(id));
+        setNewFolder("");
+      }
+    } finally {
+      setCreating(false);
+    }
+  };
   return (
     <Dialog
       open={open}
@@ -56,6 +84,33 @@ const BulkMoveDialog = ({ open, entries, folders, onClose, onMove, pending }) =>
               aria-label={t("vault.bulk.destination")}
               onUpdate={([value = NO_FOLDER]) => setSelected(value)}
             />
+            {canCreateFolder && (
+              <Flex gap="spacing-2" wrap="wrap">
+                <TextInput
+                  size="xl"
+                  value={newFolder}
+                  placeholder={t("folderAccess.createFolder")}
+                  aria-label={t("folderAccess.createFolder")}
+                  disabled={pending || creating}
+                  onUpdate={setNewFolder}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      createFolder();
+                    }
+                  }}
+                />
+                <Button
+                  size="xl"
+                  view="outlined"
+                  disabled={!newFolder.trim() || pending || creating}
+                  loading={creating}
+                  onClick={createFolder}
+                >
+                  {t("folderAccess.createFolder")}
+                </Button>
+              </Flex>
+            )}
           </Flex>
         </Flex>
       </Dialog.Body>

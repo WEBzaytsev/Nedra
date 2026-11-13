@@ -89,6 +89,7 @@ const PasswordsPage = () => {
     removeDamaged,
   } = useStoreActions((actions) => actions.ciphermothModels.passwords);
   const getFolders = useStoreActions((actions) => actions.ciphermothModels.access.getFolders);
+  const createFolder = useStoreActions((actions) => actions.ciphermothModels.access.createFolder);
   const { error, loading, passwords, trash, damaged, damageCheckError } = useStoreState(
     (state) => state.ciphermothModels.passwords
   );
@@ -250,6 +251,15 @@ const PasswordsPage = () => {
   const writableFolderOptions = useMemo(
     () => folders.filter((folder) => ["owner", "write"].includes(folder.access)),
     [folders]
+  );
+  const folderEntryCounts = useMemo(
+    () =>
+      passwords.reduce((counts, entry) => {
+        if (entry.folder_id != null)
+          counts.set(entry.folder_id, (counts.get(entry.folder_id) ?? 0) + 1);
+        return counts;
+      }, new Map()),
+    [passwords]
   );
   const formFolderOptions = useMemo(
     () =>
@@ -498,6 +508,18 @@ const PasswordsPage = () => {
       }
     },
     [bulkMove, bulkMoveTargets, handleUndoBulkMove, notify, t]
+  );
+
+  const createBulkMoveFolder = useCallback(
+    async (name) => {
+      try {
+        return (await createFolder(name)).id;
+      } catch (requestError) {
+        notify(requestError.message, { theme: "danger" });
+        return null;
+      }
+    },
+    [createFolder, notify]
   );
 
   const handleRestore = async (name) => {
@@ -812,7 +834,7 @@ const PasswordsPage = () => {
                           { value: "", content: t("vault.allFolders") },
                           ...folderOptions.map((folder) => ({
                             value: String(folder.id),
-                            content: `${folder.name} · ${folder.owner_username ?? folder.owner_id}`,
+                            content: `${folder.name} · ${folder.owner_username ?? folder.owner_id} (${folderEntryCounts.get(folder.id) ?? 0})`,
                           })),
                         ]}
                       />
@@ -1015,6 +1037,11 @@ const PasswordsPage = () => {
         folders={writableFolderOptions}
         onClose={() => setBulkMoveTargets(null)}
         onMove={handleBulkMove}
+        onCreateFolder={createBulkMoveFolder}
+        canCreateFolder={
+          (bulkMoveTargets?.length ?? 0) > 0 &&
+          bulkMoveTargets?.every((entry) => entry.owner_id === getCurrentUser()?.id)
+        }
         pending={bulkMovePending}
       />
       <TrashDialog

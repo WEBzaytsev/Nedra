@@ -52,6 +52,8 @@ _LOCAL_HOSTS = ("localhost", "127.0.0.1", "::1")
 _SESSION_HEADER = "x-ciphermoth-session"
 _SESSIONS = "vault-sessions"
 _SLASH_NAMES = "entry-names-with-slash"
+_BULK = "bulk-entry-actions"
+_BULK_MOVE = "bulk-entry-move"
 _SECURITY_FACTOR_STEP_UP = "security-factor-step-up"
 _SERVER_TOO_OLD = (
     "This server runs a CipherMoth release older than 1.5.0, which this CLI no "
@@ -549,13 +551,45 @@ def pw_update(name: Annotated[str, typer.Argument(help="Entry name.")]) -> None:
     _ok(f"Updated [cyan]{escape(name)}[/cyan]")
 
 
-@pw_app.command("delete", help="Move an entry to the trash. It can be restored later.")
+@pw_app.command(
+    "delete",
+    help=(
+        "Move one or more entries to the trash. "
+        "Several names move together or not at all."
+    ),
+)
 def pw_delete(
-    name: Annotated[str, typer.Argument(help="Entry name.")],
+    names: Annotated[list[str], typer.Argument(help="Entry names.")],
     yes: Annotated[
         bool, typer.Option("--yes", "-y", help="Skip confirmation.")
     ] = False,
 ) -> None:
+    names = list(dict.fromkeys(names))
+    if len(names) == 1:
+        _delete_one(names[0], yes)
+        return
+    with _vault() as vault:
+        if _BULK not in vault.features:
+            _die("Deleting several entries needs Nedra 3.3.0 or newer.")
+        entries = _entry_rows(vault, names)
+        if not yes:
+            _out.print("\n".join(f"  {escape(name)}" for name in names))
+            typer.confirm(f"Move these {len(names)} entries to trash?", abort=True)
+        resp = vault.send(
+            "POST",
+            "/vault/entries/trash",
+            json={
+                "entries": [
+                    {"password_name": entry["password_name"], "entry_id": entry["id"]}
+                    for entry in entries
+                ]
+            },
+        )
+    _check(resp)
+    _ok(f"Moved {len(names)} entries to trash")
+
+
+def _delete_one(name: str, yes: bool) -> None:
     with _vault() as vault:
         exists = vault.send("GET", vault.entry_path(name), name=name)
         if exists.status_code == 404:
@@ -569,6 +603,99 @@ def pw_delete(
     _check(resp)
 
     _ok(f"Moved [cyan]{escape(name)}[/cyan] to trash")
+
+
+@pw_app.command(
+    "move",
+    help="Move one or more entries into an accessible folder, or out with --no-folder.",
+)
+def pw_move(
+    names: Annotated[list[str], typer.Argument(help="Entry names.")],
+    folder: Annotated[
+        str | None,
+        typer.Option("--folder", "-f", help="Existing destination folder name."),
+    ] = None,
+    no_folder: Annotated[
+        bool,
+        typer.Option("--no-folder", help="Take the entries out of their folder."),
+    ] = False,
+) -> None:
+    if (folder is None) == (not no_folder):
+        _die("Give either --folder NAME or --no-folder.")
+    names = list(dict.fromkeys(names))
+    with _vault() as vault:
+        if _BULK_MOVE not in vault.features:
+            _die("Moving entries needs Nedra 3.5.0 or newer.")
+        entries = _entry_rows(vault, names)
+        folder_id = None
+        if folder is not None:
+            targets = [
+                item
+                for item in vault.send("GET", "/folders").json()
+                if item.get("name", "").casefold() == folder.casefold()
+                and item.get("access") in ("owner", "write")
+            ]
+            if len(targets) != 1:
+                _die("Choose one existing writable folder by its exact name.")
+            folder_id = targets[0]["id"]
+        resp = vault.send(
+            "POST",
+            "/vault/entries/move",
+            json={
+                "entries": [{"entry_id": entry["id"]} for entry in entries],
+                "folder_id": folder_id,
+            },
+        )
+    _check(resp)
+    count = resp.json().get("count", 0)
+    destination = escape(folder) if folder is not None else "no folder"
+    _ok(
+        f"Moved {count} {'entry' if count == 1 else 'entries'} to "
+        f"[cyan]{destination}[/cyan]"
+    )
+
+
+def _entry_rows(vault: _Vault, names: list[str]) -> list[dict]:
+    rows = vault.send("GET", "/passwords")
+    _check(rows)
+    by_name = {row.get("password_name"): row for row in rows.json()}
+    missing = [name for name in names if name not in by_name]
+    if missing:
+        _die(f"No accessible entry named {missing[0]!r}.")
+    return [by_name[name] for name in names]
+
+
+@pw_app.command(
+    "history",
+    help="Reveal an entry's earlier passwords, newest first (the last 10 are kept).",
+)
+def pw_history(name: Annotated[str, typer.Argument(help="Entry name.")]) -> None:
+    with _vault() as vault:
+        item = _entry(vault.send("GET", vault.entry_path(name), name=name), name)
+    history = item.get("password_history") or []
+    if not history:
+        _out.print(f"[dim]No earlier passwords for {escape(name)}.[/dim]")
+        return
+    table = Table(show_header=True, header_style="bold", box=None, padding=(0, 2, 0, 0))
+    table.add_column("In use until", style="dim", no_wrap=True)
+    table.add_column("Password")
+    for entry in history:
+        table.add_row(
+            escape(_local_time(entry.get("changed_at"))),
+            escape(str(entry.get("value", ""))),
+        )
+    _out.print(f"\n  [bold cyan]{escape(name)}[/bold cyan]")
+    _out.print(table)
+
+
+def _local_time(value: object) -> str:
+    try:
+        moment = datetime.fromisoformat(str(value))
+    except ValueError:
+        return str(value)
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=UTC)
+    return moment.astimezone().strftime("%Y-%m-%d %H:%M")
 
 
 @pw_app.command("trash", help="List the entries waiting in the trash.")
