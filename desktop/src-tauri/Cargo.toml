@@ -20,7 +20,7 @@ uuid = { version = "1", features = ["v4"] }
 percent-encoding = "2"
 url = "2"
 arboard = { version = "3.6", default-features = false }
-rfd = "0.15"
+rfd = "0.18"
 open = "5"
 tauri = { version = "2.12.5", features = [] }
 serde = { version = "1", features = ["derive"] }
@@ -29,7 +29,7 @@ tokio = { version = "1", features = ["sync", "time", "macros", "rt"] }
 tauri-plugin-updater = "=2.14.1"
 semver = "1"
 minisign-verify = "0.3"
-base64 = { version = "0.22", default-features = false, features = ["std"] }
+base64 = { version = "0.23", default-features = false, features = ["std"] }
 reqwest = { version = "0.13", default-features = false }
 ciphermoth-extension-link = { path = "extension-link" }
 
