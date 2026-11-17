@@ -7,8 +7,9 @@ images tagged ghcr.io/webzaytsev/nedra-{backend,frontend}:<tag>.
     python3 docker/smoke/compose_smoke.py --tag smoke --legacy-compose old.yml
 
 Only Python's standard library is used. Every project and volume it creates is
-removed at the end. --installer creates and removes a volume named
-nedra_postgres_data, so it refuses to run outside GitHub Actions.
+removed at the end. --installer creates and preserves a simulated legacy
+PostgreSQL volume while removing the disposable Nedra stack, so it refuses to
+run outside GitHub Actions.
 """
 
 import argparse
@@ -946,33 +947,57 @@ def legacy(tag: str, prefix: str, workdir: Path, old_compose: Path) -> None:
         stack.down()
 
 
-def installer(workdir: Path) -> None:
+def installer(workdir: Path, tag: str) -> None:
     if os.environ.get("GITHUB_ACTIONS") != "true":
         fail("--installer creates a volume named nedra_postgres_data; CI only")
     volume = "nedra_postgres_data"
     if run("docker", "volume", "inspect", volume, check=False).returncode == 0:
         fail(f"{volume} already exists here; refusing to touch it")
     run("docker", "volume", "create", volume)
+    target = workdir / "installed"
+    env = {
+        **os.environ,
+        "NEDRA_DIR": str(target),
+        "NEDRA_VERSION": tag,
+        "NEDRA_SKIP_PULL": "1",
+        "NEDRA_BACKEND_PORT": str(free_port()),
+        "NEDRA_FRONTEND_PORT": str(free_port()),
+    }
     try:
-        target = workdir / "installed"
         result = run(
             "sh",
             str(ROOT / "install.sh"),
             check=False,
-            env={**os.environ, "NEDRA_DIR": str(target)},
+            env=env,
             stdin=subprocess.DEVNULL,
         )
-        output = result.stdout + result.stderr
-        if result.returncode == 0 or "Nothing was changed" not in output:
+        if result.returncode != 0:
             fail(
-                f"install.sh with an old PostgreSQL volume: {result.returncode}\n{output}"
+                f"install.sh with an old PostgreSQL volume: {result.returncode}\n{result.stdout}{result.stderr}"
             )
-        if target.exists():
-            fail("install.sh created its folder before refusing")
+        if not (target / "docker-compose.prod.yml").is_file():
+            fail("install.sh did not create the Nedra Compose file")
+        if (target / ".env").read_text(encoding="utf-8").splitlines()[
+            1
+        ] != f"NEDRA_VERSION={tag}":
+            fail("install.sh did not preserve the requested image version")
         if run("docker", "volume", "inspect", volume, check=False).returncode != 0:
             fail("install.sh removed the old volume")
-        ok("install.sh stops before touching an existing PostgreSQL install")
+        ok("install.sh leaves an existing PostgreSQL volume untouched")
     finally:
+        if (target / "docker-compose.prod.yml").is_file():
+            run(
+                "docker",
+                "compose",
+                "-f",
+                str(target / "docker-compose.prod.yml"),
+                "down",
+                "--volumes",
+                "--remove-orphans",
+                check=False,
+                cwd=target,
+                env=env,
+            )
         run("docker", "volume", "rm", volume, check=False)
 
 
@@ -995,7 +1020,7 @@ def main() -> None:
         if args.legacy_compose:
             legacy(args.tag, args.prefix, workdir, args.legacy_compose)
         if args.installer:
-            installer(workdir)
+            installer(workdir, args.tag)
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
     print(f"ALL {len(CHECKS)} CHECKS PASSED", flush=True)

@@ -3,7 +3,7 @@
 #
 #   curl -fsSL https://raw.githubusercontent.com/WEBzaytsev/Nedra/main/install.sh | sh
 #
-# Optional: NEDRA_REPO, NEDRA_REF, NEDRA_DIR.
+# Optional: NEDRA_REPO, NEDRA_REF, NEDRA_DIR, NEDRA_VERSION.
 set -eu
 
 REPO="${NEDRA_REPO:-WEBzaytsev/Nedra}"
@@ -55,20 +55,24 @@ mv "$tmp/nedra" nedra
 
 if [ ! -f .env ]; then
   umask 077
-  cat >.env <<'EOF'
-# Nedra self-hosted configuration.
-NEDRA_VERSION=latest
-# NEDRA_API_URL=https://vault.example/api
-# NEDRA_FRONTEND_ORIGIN=https://vault.example
-# NEDRA_BIND_ADDRESS=127.0.0.1
-EOF
+  {
+    printf '%s\n' '# Nedra self-hosted configuration.'
+    printf 'NEDRA_VERSION=%s\n' "${NEDRA_VERSION:-latest}"
+    printf '%s\n' '# NEDRA_API_URL=https://vault.example/api'
+    printf '%s\n' '# NEDRA_FRONTEND_ORIGIN=https://vault.example'
+    printf '%s\n' '# NEDRA_BIND_ADDRESS=127.0.0.1'
+  } >.env
   say "created .env"
 else
   say "kept existing .env"
 fi
 
-say "pulling images"
-docker compose -f docker-compose.prod.yml pull
+if [ "${NEDRA_SKIP_PULL:-0}" = "1" ]; then
+  say "using already available images"
+else
+  say "pulling images"
+  docker compose -f docker-compose.prod.yml pull
+fi
 say "starting services"
 docker compose -f docker-compose.prod.yml up -d --remove-orphans
 docker compose -f docker-compose.prod.yml ps
