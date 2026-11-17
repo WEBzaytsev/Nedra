@@ -4,7 +4,6 @@ import { useTranslation } from "react-i18next";
 
 const STORAGE_KEY = "nedra-theme";
 
-
 const ModeContext = createContext(null);
 
 const initialMode = () => {

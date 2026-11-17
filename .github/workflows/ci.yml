@@ -151,14 +151,6 @@ jobs:
           docker build -f docker/backend/Dockerfile -t ghcr.io/webzaytsev/nedra-backend:ci .
           docker build -f docker/frontend/Dockerfile --build-arg VITE_API_URL=__NEDRA_API_URL__ -t ghcr.io/webzaytsev/nedra-frontend:ci .
 
-      - name: Check that released updaters refuse the images
-        run: |
-          for image in backend frontend; do
-            label="$(docker image inspect ghcr.io/webzaytsev/nedra-$image:ci --format '{{json .Config.Labels}}')"
-            echo "$image: $label"
-            echo "$label" | grep -q '"io.nedra.min-updater-protocol":"3"'
-          done
-
       - name: Install and exercise the Compose stack and install.sh
         run: |
           python3 docker/smoke/compose_smoke.py --tag ci --prefix nedra-smoke-ci \

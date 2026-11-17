@@ -20,7 +20,6 @@ const normalizeLanguage = (language) => {
   return SUPPORTED_LANGUAGES.includes(base) ? base : "en";
 };
 
-
 const applyLanguage = (language) => {
   const normalized = normalizeLanguage(language);
 

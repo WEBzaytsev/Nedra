@@ -43,7 +43,11 @@ describe("imports", () => {
     const actions = build({ "POST /passwords/import": [200, RESULT] });
     const file = new File([new TextEncoder().encode("NEDRABKP")], "backup.nedrabackup");
     await expect(
-      actions.importPasswords({ file, masterPassword: "Nedra-Test-Vault-2026!", onConflict: "skip" })
+      actions.importPasswords({
+        file,
+        masterPassword: "Nedra-Test-Vault-2026!",
+        onConflict: "skip",
+      })
     ).resolves.toEqual(RESULT);
 
     const [request, refresh] = seen;
@@ -102,7 +106,9 @@ describe("backup", () => {
     expect(request.responseType).toBe("blob");
     expect(request.signal).toBe(controller.signal);
     expect(JSON.parse(request.data)).toEqual({ master_password: "Nedra-Test-Vault-2026!" });
-    expect(link.download).toMatch(/^nedra_backup_\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}\.nedrabackup$/);
+    expect(link.download).toMatch(
+      /^nedra_backup_\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}\.nedrabackup$/
+    );
     expect(link.click).toHaveBeenCalledTimes(1);
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:backup");
     createObjectURL.mockRestore();

@@ -2,13 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { replyWith } from "../test/adapter";
 import { stubBrowser } from "../test/globals";
-import {
-  LOGOUT_NOTICE,
-  clearSession,
-  getSessionToken,
-  isAuth,
-  setSessionToken,
-} from "../utils";
+import { LOGOUT_NOTICE, clearSession, getSessionToken, isAuth, setSessionToken } from "../utils";
 import apiClient, { SESSION_ENDED } from "./client";
 
 const TOKEN = "kM3x1y8Qe0bWv7c2Z9pL4tR6sN5aH1jD0fG3uY8iO2w";
@@ -45,8 +39,6 @@ describe("session helpers", () => {
     setSessionToken(undefined);
     expect(isAuth()).toBe(false);
   });
-
-
 });
 
 describe("request interceptor", () => {
@@ -57,7 +49,6 @@ describe("request interceptor", () => {
     expect(seen[0].headers["x-nedra-session"]).toBe(TOKEN);
     expect(seen[0].headers.Authorization).toBeUndefined();
   });
-
 
   it("sends no credential when locked", async () => {
     const seen = [];
