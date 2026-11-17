@@ -82,29 +82,19 @@ bool nedra_qa_click(double x, double y) {
         NSPoint local = NSMakePoint(x, webView.isFlipped ? y : NSHeight(webView.bounds) - y);
         if ([webView hitTest:local] == nil) return;
         NSPoint windowPoint = [webView convertPoint:local toView:nil];
-        NSPoint screenPoint = [window convertPointToScreen:windowPoint];
-        CGRect mainDisplay = CGDisplayBounds(CGMainDisplayID());
-        CGPoint quartzPoint = CGPointMake(
-            screenPoint.x,
-            CGRectGetMaxY(mainDisplay) - screenPoint.y
-        );
-        CGEventRef moved = CGEventCreateMouseEvent(NULL, kCGEventMouseMoved, quartzPoint, kCGMouseButtonLeft);
-        CGEventRef down = CGEventCreateMouseEvent(NULL, kCGEventLeftMouseDown, quartzPoint, kCGMouseButtonLeft);
-        CGEventRef up = CGEventCreateMouseEvent(NULL, kCGEventLeftMouseUp, quartzPoint, kCGMouseButtonLeft);
-        if (moved == NULL || down == NULL || up == NULL) {
-            if (moved != NULL) CFRelease(moved);
-            if (down != NULL) CFRelease(down);
-            if (up != NULL) CFRelease(up);
-            return;
-        }
         [window makeKeyAndOrderFront:nil];
-        pid_t pid = NSProcessInfo.processInfo.processIdentifier;
-        CGEventPostToPid(pid, moved);
-        CGEventPostToPid(pid, down);
-        CGEventPostToPid(pid, up);
-        CFRelease(moved);
-        CFRelease(down);
-        CFRelease(up);
+        NSTimeInterval timestamp = NSProcessInfo.processInfo.systemUptime;
+        NSEvent *down = [NSEvent mouseEventWithType:NSEventTypeLeftMouseDown
+            location:windowPoint modifierFlags:0 timestamp:timestamp
+            windowNumber:window.windowNumber context:nil eventNumber:0
+            clickCount:1 pressure:1.0];
+        NSEvent *up = [NSEvent mouseEventWithType:NSEventTypeLeftMouseUp
+            location:windowPoint modifierFlags:0 timestamp:timestamp + 0.01
+            windowNumber:window.windowNumber context:nil eventNumber:0
+            clickCount:1 pressure:0.0];
+        if (down == nil || up == nil) return;
+        [NSApp postEvent:down atStart:NO];
+        [NSApp postEvent:up atStart:NO];
         sent = true;
     };
     if (NSThread.isMainThread) click(); else dispatch_sync(dispatch_get_main_queue(), click);
