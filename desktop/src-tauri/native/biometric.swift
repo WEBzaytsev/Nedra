@@ -53,7 +53,7 @@ private func secret(
 ) throws -> Data {
     let shared = try key.sharedSecretFromKeyAgreement(with: peer)
     let derived = shared.hkdfDerivedSymmetricKey(
-        using: SHA256.self, salt: Data(), sharedInfo: label,
+        using: SHA256.self, salt: Data(), sharedInfo: secretLabel,
         outputByteCount: secretBytes)
     return derived.withUnsafeBytes { Data($0) }
 }
