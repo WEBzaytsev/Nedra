@@ -29,7 +29,7 @@ static NSView *nedra_qa_webview(NSView *view) {
 void nedra_test_sleep_notification(void) {
     [NSWorkspace.sharedWorkspace.notificationCenter postNotificationName:NSWorkspaceWillSleepNotification object:NSWorkspace.sharedWorkspace];
 }
-bool nedra_qa_tab(void) {
+static bool nedra_qa_key(CGKeyCode keyCode) {
     __block bool sent = false;
     void (^press)(void) = ^{
         NSWindow *window = nil;
@@ -46,8 +46,8 @@ bool nedra_qa_tab(void) {
         NSResponder *first = window.firstResponder;
         if ((![first isKindOfClass:NSView.class] || ![(NSView *)first isDescendantOf:webView])
             && ![window makeFirstResponder:webView]) return;
-        CGEventRef down = CGEventCreateKeyboardEvent(NULL, 48, true);
-        CGEventRef up = CGEventCreateKeyboardEvent(NULL, 48, false);
+        CGEventRef down = CGEventCreateKeyboardEvent(NULL, keyCode, true);
+        CGEventRef up = CGEventCreateKeyboardEvent(NULL, keyCode, false);
         if (down == NULL || up == NULL) {
             if (down != NULL) CFRelease(down);
             if (up != NULL) CFRelease(up);
@@ -64,6 +64,8 @@ bool nedra_qa_tab(void) {
     if (NSThread.isMainThread) press(); else dispatch_sync(dispatch_get_main_queue(), press);
     return sent;
 }
+bool nedra_qa_tab(void) { return nedra_qa_key(48); }
+bool nedra_qa_activate(void) { return nedra_qa_key(49); }
 bool nedra_qa_click(double x, double y) {
     __block bool sent = false;
     void (^click)(void) = ^{

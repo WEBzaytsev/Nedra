@@ -2,6 +2,7 @@
 #[cfg(target_os = "macos")]
 unsafe extern "C" {
     fn nedra_qa_click(x: f64, y: f64) -> bool;
+    fn nedra_qa_activate() -> bool;
     fn nedra_qa_tab() -> bool;
 }
 
@@ -16,6 +17,13 @@ fn activate_bootstrap_control(result: &serde_json::Value) -> Result<(), String> 
     }
     if result["stage"].as_str() != Some("bootstrap_acknowledgement") {
         return Ok(());
+    }
+    if result["focused"].as_bool() == Some(true) {
+        return if unsafe { nedra_qa_activate() } {
+            Ok(())
+        } else {
+            Err("Could not deliver the native QA activation event".into())
+        };
     }
     let center = &result["control_center"];
     let x = center["x"].as_f64().ok_or("QA control x is missing")?;
