@@ -1,0 +1,128 @@
+{
+  "format": "ciphermoth-test-vectors/1",
+  "name": "backup_v2",
+  "description": "Backup format 2 (docs/VAULT_FORMAT.md section 5). derived = Argon2id(password, salt, header parameters); frame_key = HKDF(derived, 'ciphermoth/backup/v2/frame-encryption'); commitment = HKDF(derived, 'ciphermoth/backup/v2/key-commitment'). Header (75 bytes) = 'CMBACKUP' || u16 version 2 || u8 kdf 1 || u32 memory KiB || u32 iterations || u32 lanes || salt(16) || u32 frames || commitment(32). Each frame = u32 length || nonce(12) || AES-256-GCM(frame_key, nonce, plaintext, header || u32 index || u8 last). Frame 0 contains settings and the entry count; each entry has its own JSON frame followed by its attachment frames.",
+  "file": "backup-v2.cmbackup",
+  "file_sha256": "56696ca791ff5d938378870cf440b0375a42a979782d8089b33ddd7f675ca47e",
+  "password": "Mölle-Stern-2026 🦋",
+  "salt_hex": "333435363738393a3b3c3d3e3f404142",
+  "derived_hex": "c6c6da302ea763fac939df53bcd927d0ec45f714d4ae6629661b87a43f6114b9",
+  "frame_key_hex": "b83f99afb1909443be6992d52a0c6f2d1916c5f735b0fae7020da8286cb7bec2",
+  "commitment_hex": "1af95da8cdb5bdfe96c284884c7ee402864072f16de9fa2794656990444745f3",
+  "header_hex": "434d4241434b5550000201000100000000000300000004333435363738393a3b3c3d3e3f404142000000041af95da8cdb5bdfe96c284884c7ee402864072f16de9fa2794656990444745f3",
+  "frames": [
+    {
+      "index": 0,
+      "last": false,
+      "nonce_hex": "707172737475767778797a7b",
+      "associated_data_hex": "434d4241434b5550000201000100000000000300000004333435363738393a3b3c3d3e3f404142000000041af95da8cdb5bdfe96c284884c7ee402864072f16de9fa2794656990444745f30000000000",
+      "plaintext_sha256": "853f745184e9e6629baf4e701e9b1e8a9f98468ed2ae467e30f5c59725f470fa"
+    },
+    {
+      "index": 1,
+      "last": false,
+      "nonce_hex": "7172737475767778797a7b7c",
+      "associated_data_hex": "434d4241434b5550000201000100000000000300000004333435363738393a3b3c3d3e3f404142000000041af95da8cdb5bdfe96c284884c7ee402864072f16de9fa2794656990444745f30000000100",
+      "plaintext_sha256": "508be5cd2eef21cc965f49860f9f1d192abc44104e24c2fd375fa376e736ab36"
+    },
+    {
+      "index": 2,
+      "last": false,
+      "nonce_hex": "72737475767778797a7b7c7d",
+      "associated_data_hex": "434d4241434b5550000201000100000000000300000004333435363738393a3b3c3d3e3f404142000000041af95da8cdb5bdfe96c284884c7ee402864072f16de9fa2794656990444745f30000000200",
+      "plaintext_sha256": "3e058c054674e6b0bc5a525f9ba16e47e60beeb2f435e1435bac8e2182c97159"
+    },
+    {
+      "index": 3,
+      "last": true,
+      "nonce_hex": "737475767778797a7b7c7d7e",
+      "associated_data_hex": "434d4241434b5550000201000100000000000300000004333435363738393a3b3c3d3e3f404142000000041af95da8cdb5bdfe96c284884c7ee402864072f16de9fa2794656990444745f30000000301",
+      "plaintext_sha256": "af0c86e4b31b439a7c97a3bf31eef4b6dccb685c6c3b9f80bfc1ee5b4c16999f"
+    }
+  ],
+  "manifest": {
+    "format": "ciphermoth-backup",
+    "version": 2,
+    "exported_at": "2026-10-15T12:00:00+00:00",
+    "app_version": "vectors",
+    "settings": {
+      "inactivity_ms": 300000,
+      "warn_before_ms": 30000,
+      "hidden_ms": 120000,
+      "debounce_ms": 500,
+      "clipboard_clear_ms": 15000,
+      "update_check_enabled": false
+    },
+    "entries_count": 2
+  },
+  "entries": [
+    {
+      "name": "GitHub",
+      "kind": "login",
+      "username": "moth@example.com",
+      "value": "gh-Secret-1",
+      "url": "https://github.com",
+      "totp_secret": "JBSWY3DPEHPK3PXP",
+      "description": "work account",
+      "tags": [
+        "dev",
+        "ops"
+      ],
+      "custom_fields": [
+        {
+          "label": "PIN",
+          "value": "1234",
+          "hidden": true
+        }
+      ],
+      "folder": "Work",
+      "favorite": true,
+      "history": [
+        {
+          "value": "old-Secret-0",
+          "changed_at": "2026-01-01T00:00:00+00:00"
+        }
+      ],
+      "created": "2026-01-01T00:00:00.000001+00:00",
+      "updated": "2026-02-01T00:00:00.000002+00:00",
+      "deleted": null,
+      "attachments": [
+        {
+          "filename": "Preț ünïcode.bin",
+          "content_type": "x/test",
+          "size": 1026,
+          "sha256": "3e058c054674e6b0bc5a525f9ba16e47e60beeb2f435e1435bac8e2182c97159",
+          "created": "2026-01-02T00:00:00.000003+00:00"
+        }
+      ]
+    },
+    {
+      "name": "GitHub",
+      "kind": "login",
+      "username": "moth@example.com",
+      "value": "older-Secret",
+      "url": "https://github.com",
+      "totp_secret": "JBSWY3DPEHPK3PXP",
+      "description": "work account",
+      "tags": [
+        "dev",
+        "ops"
+      ],
+      "custom_fields": [
+        {
+          "label": "PIN",
+          "value": "1234",
+          "hidden": true
+        }
+      ],
+      "folder": "Work",
+      "favorite": false,
+      "history": [],
+      "created": "2025-06-01T00:00:00+00:00",
+      "updated": "2025-07-01T00:00:00+00:00",
+      "deleted": "2025-12-24T18:00:00.123456+00:00",
+      "attachments": []
+    }
+  ],
+  "attachment_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f606162636465666768696a6b6c6d6e6f707172737475767778797a7b7c7d7e7f808182838485868788898a8b8c8d8e8f909192939495969798999a9b9c9d9e9fa0a1a2a3a4a5a6a7a8a9aaabacadaeafb0b1b2b3b4b5b6b7b8b9babbbcbdbebfc0c1c2c3c4c5c6c7c8c9cacbcccdcecfd0d1d2d3d4d5d6d7d8d9dadbdcdddedfe0e1e2e3e4e5e6e7e8e9eaebecedeeeff0f1f2f3f4f5f6f7f8f9fafbfcfdfeff00ff"
+}

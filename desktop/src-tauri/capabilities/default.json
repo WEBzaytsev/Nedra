@@ -1,0 +1,41 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "The only things the renderer may do: talk to the core through the Rust bridge and listen for core status events.",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "allow-core-request",
+    "allow-core-cancel",
+    "allow-core-status",
+    "allow-core-restart",
+    "allow-clipboard-write",
+    "allow-clipboard-clear",
+    "allow-choose-backup",
+    "allow-backup-export",
+    "allow-backup-import",
+    "allow-save-file",
+    "allow-open-external",
+    "allow-vault-lock",
+    "allow-menu-state",
+    "allow-biometric-available",
+    "allow-biometric-status",
+    "allow-biometric-login-options",
+    "allow-biometric-enroll",
+    "allow-biometric-login",
+    "allow-biometric-remove",
+    "allow-update-check",
+    "allow-update-install",
+    "allow-update-cancel",
+    "allow-security-key-register",
+    "allow-security-key-answer",
+    "allow-security-key-cancel",
+    "allow-extension-status",
+    "allow-extension-set-enabled",
+    "allow-extension-unpair",
+    "allow-extension-pairing-answer"
+  ]
+}

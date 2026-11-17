@@ -1,0 +1,165 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    name: Backend (ruff + ty)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        working-directory: backend
+        run: uv sync --group dev
+
+      - name: Lint
+        working-directory: backend
+        run: uv run ruff check . ../docker/smoke
+
+      - name: Format check
+        working-directory: backend
+        run: uv run ruff format --check . ../docker/smoke
+
+      - name: Type check
+        working-directory: backend
+        run: uv run ty check . ../docker/smoke
+
+  backend-tests:
+    name: Backend tests (pytest, ${{ matrix.platform.slug }})
+    runs-on: ${{ matrix.platform.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - runner: ubuntu-latest
+            slug: amd64
+          - runner: ubuntu-24.04-arm
+            slug: arm64
+    env:
+      UV_PYTHON_PREFERENCE: only-managed
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        working-directory: backend
+        run: uv sync --group dev
+
+      - name: Check the SQLite runtime
+        working-directory: backend
+        run: uv run python -c "import platform, sqlite3, storage; storage.require_supported_sqlite(); print(platform.machine(), 'SQLite', sqlite3.sqlite_version)"
+
+      - name: Test
+        working-directory: backend
+        run: uv run pytest
+
+  frontend:
+    name: Frontend (ESLint + Prettier + Vitest, ${{ matrix.platform.slug }})
+    runs-on: ${{ matrix.platform.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - runner: ubuntu-latest
+            slug: amd64
+          - runner: ubuntu-24.04-arm
+            slug: arm64
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Lint
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Format check
+        working-directory: frontend
+        run: npm run format:check
+
+      - name: Test
+        working-directory: frontend
+        run: npm test
+
+      - name: Test the image's runtime configuration
+        run: node --test docker/frontend/runtime-config.test.mjs
+
+  frontend-browser:
+    name: Frontend image (CSP in Chromium)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: docker/frontend/browser/package-lock.json
+
+      - name: Build the frontend image
+        run: docker build -f docker/frontend/Dockerfile --build-arg VITE_API_URL=__NEDRA_API_URL__ -t nedra-frontend:browser-test .
+
+      - name: Install the browser
+        working-directory: docker/frontend/browser
+        run: npm ci && npx playwright install --with-deps chromium
+
+      - name: Check the Content-Security-Policy
+        working-directory: docker/frontend/browser
+        run: npm test
+
+  images:
+    name: Images and Compose install (${{ matrix.platform.slug }})
+    runs-on: ${{ matrix.platform.runner }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - runner: ubuntu-latest
+            slug: amd64
+          - runner: ubuntu-24.04-arm
+            slug: arm64
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Build the production images
+        run: |
+          docker build -f docker/backend/Dockerfile -t ghcr.io/webzaytsev/nedra-backend:ci .
+          docker build -f docker/frontend/Dockerfile --build-arg VITE_API_URL=__NEDRA_API_URL__ -t ghcr.io/webzaytsev/nedra-frontend:ci .
+
+      - name: Check that released updaters refuse the images
+        run: |
+          for image in backend frontend; do
+            label="$(docker image inspect ghcr.io/webzaytsev/nedra-$image:ci --format '{{json .Config.Labels}}')"
+            echo "$image: $label"
+            echo "$label" | grep -q '"io.ciphermoth.min-updater-protocol":"3"'
+          done
+
+      - name: Install and exercise the Compose stack and install.sh
+        run: |
+          python3 docker/smoke/compose_smoke.py --tag ci --prefix nedra-smoke-ci \
+            --installer

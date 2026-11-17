@@ -1,0 +1,25 @@
+from fastapi import APIRouter
+
+from schemas import MetaResponse
+from settings import get_api_settings
+
+router = APIRouter(tags=["meta"])
+
+
+@router.get("", name="meta:get", response_model=MetaResponse)
+def get_meta() -> MetaResponse:
+    return MetaResponse(
+        version=get_api_settings().version,
+        features=[
+            "entry-names-with-slash",
+            "vault-sessions",
+            "multi-user",
+            "entry-grants",
+            "bulk-entry-actions",
+            "bulk-entry-move",
+            "mcp",
+            "security-factor-step-up",
+            "device-unlock",
+            "browser-extension",
+        ],
+    )

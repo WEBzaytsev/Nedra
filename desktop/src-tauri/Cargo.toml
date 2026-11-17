@@ -1,0 +1,57 @@
+[package]
+name = "nedra-desktop"
+version = "4.0.0"
+edition = "2021"
+publish = false
+
+[workspace]
+members = [".", "extension-link", "native-host"]
+
+[lib]
+name = "nedra_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+cc = "1"
+tauri-build = { version = "2.7.4", features = [] }
+
+[dependencies]
+uuid = { version = "1", features = ["v4"] }
+percent-encoding = "2"
+url = "2"
+arboard = { version = "3.6", default-features = false }
+rfd = "0.18"
+open = "5"
+tauri = { version = "2.12.5", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["sync", "time", "macros", "rt"] }
+tauri-plugin-updater = "=2.14.1"
+semver = "1"
+minisign-verify = "0.3"
+base64 = { version = "0.23", default-features = false, features = ["std"] }
+zeroize = "1"
+reqwest = { version = "0.13", default-features = false }
+nedra-extension-link = { path = "extension-link" }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_JobObjects", "Win32_System_Threading", "Win32_Security", "Win32_System_RemoteDesktop", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_System_DataExchange"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+zbus = "5.19"
+
+[features]
+default = []
+gui-test = []
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+# Wry catches Objective-C exceptions when navigation cancels pending IPC.
+# Abort mode disables that recovery and can crash the app during locking.
+panic = "unwind"
+strip = true

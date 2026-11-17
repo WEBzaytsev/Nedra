@@ -1,0 +1,3 @@
+﻿"Group","Title","Username","Password","URL","Notes","TOTP","Icon","Last Modified","Created"
+"Root/Email","Mail","moth","Kp-Pass-1","https://mail.test","","otpauth://totp/Mail:moth?secret=JBSWY3DPEHPK3PXP&period=30&digits=6&issuer=Mail","0","2026-01-01T00:00:00Z","2026-01-01T00:00:00Z"
+"Root","Router","admin","Kp-Pass-2 with spaces ","http://192.168.1.1","Garage ""B""","","0","2026-01-01T00:00:00Z","2026-01-01T00:00:00Z"

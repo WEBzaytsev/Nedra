@@ -1,0 +1,227 @@
+name: Desktop
+
+on:
+  pull_request:
+    paths: ["desktop/**", "backend/**", "frontend/**", ".github/workflows/desktop.yml"]
+  workflow_dispatch:
+    inputs:
+      release:
+        description: "Use the protected production signing key and retain verified packages"
+        type: boolean
+        default: false
+  workflow_call:
+    inputs:
+      release:
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.13.15"
+  OPENSSL_VERSION: "4.0.1"
+  WEBKIT_DISABLE_DMABUF_RENDERER: "1"
+  LIBGL_ALWAYS_SOFTWARE: "1"
+
+jobs:
+  desktop:
+    name: ${{ matrix.id }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    environment: ${{ inputs.release && 'desktop-release' || 'desktop-validation' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: macos-arm64
+            runner: macos-15
+            bundles: app,dmg
+          - id: macos-x64
+            runner: macos-15-intel
+            bundles: app,dmg
+            openssl: darwin64-x86_64-cc
+          - id: windows-x64
+            runner: windows-latest
+            bundles: nsis
+          - id: windows-arm64
+            runner: windows-11-arm
+            bundles: nsis
+            vcpkg_openssl: arm64-windows-static-md
+          - id: linux-x64
+            runner: ubuntu-22.04
+            bundles: deb,appimage
+          - id: linux-arm64
+            runner: ubuntu-22.04-arm
+            bundles: deb,appimage
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify trusted release source
+        if: inputs.release
+        run: |
+          test "$GITHUB_REPOSITORY" = "WEBzaytsev/Nedra"
+          case "$GITHUB_REF" in refs/tags/v*|refs/heads/main) ;; *) exit 1 ;; esac
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+          fi
+
+      - name: Record runner
+        run: |
+          mkdir -p desktop-results
+          {
+            echo "runner=${{ matrix.runner }}"
+            uname -a || true
+            if [ "$RUNNER_OS" = "macOS" ]; then sw_vers; sysctl -n machdep.cpu.brand_string hw.memsize hw.ncpu; fi
+            if [ "$RUNNER_OS" = "Linux" ]; then lsb_release -a 2>/dev/null; nproc; free -m; fi
+            if [ "$RUNNER_OS" = "Windows" ]; then systeminfo | head -30; fi
+          } > desktop-results/runner.txt 2>&1 || true
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86 # v5
+
+      - name: Install Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+
+      - name: Install Rust (if missing)
+        run: |
+          if ! command -v rustup >/dev/null 2>&1; then
+            if [ "$RUNNER_OS" = "Windows" ]; then
+              case "$PROCESSOR_ARCHITECTURE" in ARM64) triple=aarch64-pc-windows-msvc ;; *) triple=x86_64-pc-windows-msvc ;; esac
+              curl -fsSL -o rustup-init.exe "https://static.rust-lang.org/rustup/dist/$triple/rustup-init.exe"
+              ./rustup-init.exe -y --profile minimal
+              echo "$USERPROFILE/.cargo/bin" >> "$GITHUB_PATH"
+            else
+              curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal
+              echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+            fi
+          fi
+
+      - name: Linux packages
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev libgtk-3-dev \
+            libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev patchelf file \
+            xvfb xauth dbus-x11 lsof libfuse2 python3-pyatspi xdotool
+
+      - name: Static OpenSSL for cryptography (macOS without wheel)
+        if: matrix.openssl
+        run: |
+          start=$(date +%s)
+          OPENSSL_EXTRA_FLAGS="-mmacosx-version-min=11.0 no-module" \
+            desktop/core/build_openssl.sh "${{ matrix.openssl }}" "$RUNNER_TEMP/openssl" 2>/dev/null
+          echo "OPENSSL_DIR=$RUNNER_TEMP/openssl" >> "$GITHUB_ENV"
+          echo "OPENSSL_STATIC=1" >> "$GITHUB_ENV"
+          echo "MACOSX_DEPLOYMENT_TARGET=11.0" >> "$GITHUB_ENV"
+          echo "openssl_build_s=$(( $(date +%s) - start ))" >> desktop-results/source-builds.txt
+
+      - name: Static OpenSSL for cryptography (Windows without wheel)
+        if: matrix.vcpkg_openssl
+        shell: pwsh
+        run: |
+          $sw = [Diagnostics.Stopwatch]::StartNew()
+          if (-not (Test-Path C:\vcpkg\vcpkg.exe)) {
+            git clone --depth 1 https://github.com/microsoft/vcpkg C:\vcpkg
+            C:\vcpkg\bootstrap-vcpkg.bat -disableMetrics
+          }
+          C:\vcpkg\vcpkg.exe install "openssl:${{ matrix.vcpkg_openssl }}" --disable-metrics
+          "OPENSSL_DIR=C:\vcpkg\installed\${{ matrix.vcpkg_openssl }}" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "OPENSSL_STATIC=1" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "vcpkg_openssl_s=$([int]$sw.Elapsed.TotalSeconds)" | Out-File -FilePath desktop-results/source-builds.txt -Append
+          C:\vcpkg\vcpkg.exe list openssl | Out-File -FilePath desktop-results/source-builds.txt -Append
+
+      - name: Build and verify production core
+        timeout-minutes: 15
+        run: |
+          uv python install "$PYTHON_VERSION"
+          uv run --no-project --python "$PYTHON_VERSION" desktop/core/build_core.py --python "$PYTHON_VERSION" --report desktop-results/core-build.json
+          if [ "$RUNNER_OS" = "Windows" ]; then py=desktop/core/build/venv/Scripts/python.exe; core=desktop/core/dist/nedra-core/nedra-core.exe; else py=desktop/core/build/venv/bin/python; core=desktop/core/dist/nedra-core/nedra-core; fi
+          uv pip install --python "$py" -r desktop/core/requirements-test.txt
+          echo "Verify frozen vectors (120-second limit)"
+          "$py" -c 'import subprocess,sys; subprocess.run([sys.argv[1], "--check-vectors", "testdata/vectors"], stdout=open("desktop-results/vectors.json", "wb"), check=True, timeout=120)' "$core"
+
+      - name: Configure updater signing
+        env:
+          RELEASE_SIGNING: ${{ inputs.release }}
+          RELEASE_KEY: ${{ inputs.release && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
+        run: |
+          cd desktop && npm ci && cd ..
+          python desktop/release/configure_signing.py
+
+      - name: Build production application
+        run: |
+          cd frontend && npm ci && npm test && cd ..
+          cd desktop && npm run tauri build -- --bundles "${{ matrix.bundles }}" --ci
+          cd src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
+          cargo build --release --example verify_update
+          cd "$GITHUB_WORKSPACE"
+          python desktop/release/artifacts.py --out desktop-results/packages --version "$(node -p 'require("./desktop/package.json").version')"
+
+      - name: Install and test the actual production package
+        run: python desktop/harness/production.py --packages "$PWD/desktop-results/packages" --out "$PWD/desktop-results/production"
+
+      - name: Preserve production artifact before QA builds
+        run: |
+          python -c 'import shutil; shutil.rmtree("desktop/src-tauri/target/release/bundle")'
+
+
+      - name: Build separate native QA artifact
+        run: |
+          cd desktop
+          npm run tauri build -- --features gui-test --config tauri.qa.json --bundles "${{ matrix.bundles }}" --ci
+
+      - name: Install and exercise native webview
+        run: |
+          uv run --no-project --python "$PYTHON_VERSION" desktop/harness/ci_native.py --out "$PWD/desktop-results/native"
+
+      - name: Build disposable signed update versions
+        run: python desktop/release/build_update_fixtures.py "$PWD/desktop-results/update-fixtures"
+
+      - name: Verify real installed application updates
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then py=desktop/core/build/venv/Scripts/python.exe; else py=desktop/core/build/venv/bin/python; fi
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            xvfb-run -a -s '-screen 0 1280x1024x24' dbus-run-session -- "$py" desktop/harness/update.py --fixtures "$PWD/desktop-results/update-fixtures" --out "$PWD/desktop-results/update"
+          else
+            "$py" desktop/harness/update.py --fixtures "$PWD/desktop-results/update-fixtures" --out "$PWD/desktop-results/update"
+          fi
+
+      - name: Upload verified production packages
+        if: inputs.release
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: desktop-packages-${{ matrix.id }}
+          path: desktop-results/packages/*
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload evidence only
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: desktop-results-${{ matrix.id }}
+          path: |
+            desktop-results/core-build.json
+            desktop-results/vectors.json
+            desktop-results/production/core-tests.xml
+            desktop-results/production/results.json
+            desktop-results/production/vectors.json
+            desktop-results/runner.txt
+            desktop-results/source-builds.txt
+            desktop-results/native/results.json
+            desktop-results/native/webview.json
+            desktop-results/update/results.json
+          retention-days: 14

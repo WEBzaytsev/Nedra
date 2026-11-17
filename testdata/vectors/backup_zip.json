@@ -1,0 +1,48 @@
+{
+  "format": "ciphermoth-test-vectors/1",
+  "name": "backup_zip",
+  "description": "Backup format v1: a ZIP with one member, ciphermoth_backup.json, deflate-compressed and encrypted with WinZip AES-256 (AE-2, PBKDF2-HMAC-SHA1 with 1000 iterations and a 16-byte salt, as written by pyzipper) under the UTF-8 master password as submitted after whitespace stripping. The JSON is {exported_at, passwords: [{name, kind, username, value, url, totp_secret, description, tags, custom_fields, folder, favorite}]}; releases before v1.4.0 wrote only name, username, value, url, totp_secret, description, tags and favorite. History, trash, attachments, settings and timestamps are not included.",
+  "file": "backup-v1.zip",
+  "password": "Mölle-Stern-2026",
+  "member": "ciphermoth_backup.json",
+  "json": {
+    "exported_at": "2026-10-10T12:00:00+00:00",
+    "passwords": [
+      {
+        "name": "GitHub #work",
+        "kind": "login",
+        "username": "moth@example.com",
+        "value": "gh-Secret-1",
+        "url": "https://github.com",
+        "totp_secret": "JBSWY3DPEHPK3PXP",
+        "description": "work account",
+        "tags": [
+          "dev",
+          "ops"
+        ],
+        "custom_fields": [
+          {
+            "label": "Recovery",
+            "value": "abcd",
+            "hidden": true
+          }
+        ],
+        "folder": "Work",
+        "favorite": true
+      },
+      {
+        "name": "Wi-Fi ключ",
+        "kind": "note",
+        "username": null,
+        "value": "  line one\n\tline two\n\n",
+        "url": null,
+        "totp_secret": null,
+        "description": null,
+        "tags": [],
+        "custom_fields": [],
+        "folder": null,
+        "favorite": false
+      }
+    ]
+  }
+}

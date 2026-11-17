@@ -1,0 +1,143 @@
+{
+  "format": "ciphermoth-test-vectors/1",
+  "name": "totp",
+  "description": "RFC 6238 TOTP with HMAC-SHA1. The secret is the stored form: upper-case RFC 4648 base32 without padding or spaces (see normalize_totp_secret). Implementations must accept secrets whose length is not a multiple of 8 by padding before decoding. counter = floor(time / period) as an 8-byte big-endian integer; dynamic truncation per RFC 4226 section 5.3.",
+  "vectors": [
+    {
+      "source": "RFC 6238 appendix B (SHA-1)",
+      "secret": "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+      "time": 59,
+      "period": 30,
+      "digits": 8,
+      "code": "94287082"
+    },
+    {
+      "source": "RFC 6238 appendix B (SHA-1)",
+      "secret": "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+      "time": 1111111109,
+      "period": 30,
+      "digits": 8,
+      "code": "07081804"
+    },
+    {
+      "source": "RFC 6238 appendix B (SHA-1)",
+      "secret": "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+      "time": 1111111111,
+      "period": 30,
+      "digits": 8,
+      "code": "14050471"
+    },
+    {
+      "source": "RFC 6238 appendix B (SHA-1)",
+      "secret": "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+      "time": 1234567890,
+      "period": 30,
+      "digits": 8,
+      "code": "89005924"
+    },
+    {
+      "source": "RFC 6238 appendix B (SHA-1)",
+      "secret": "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+      "time": 2000000000,
+      "period": 30,
+      "digits": 8,
+      "code": "69279037"
+    },
+    {
+      "source": "RFC 6238 appendix B (SHA-1)",
+      "secret": "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+      "time": 20000000000,
+      "period": 30,
+      "digits": 8,
+      "code": "65353130"
+    },
+    {
+      "source": "RFC 6238 appendix B, last 6 digits",
+      "secret": "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+      "time": 59,
+      "period": 30,
+      "digits": 6,
+      "code": "287082"
+    },
+    {
+      "source": "RFC 6238 appendix B, last 6 digits",
+      "secret": "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+      "time": 1111111109,
+      "period": 30,
+      "digits": 6,
+      "code": "081804"
+    },
+    {
+      "source": "RFC 6238 appendix B, last 6 digits",
+      "secret": "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+      "time": 2000000000,
+      "period": 30,
+      "digits": 6,
+      "code": "279037"
+    },
+    {
+      "source": "CipherMoth frozen, computed with an independent RFC 6238 implementation",
+      "secret": "JBSWY3DPEHPK3PXP",
+      "time": 0,
+      "period": 30,
+      "digits": 6,
+      "code": "282760"
+    },
+    {
+      "source": "CipherMoth frozen, computed with an independent RFC 6238 implementation",
+      "secret": "JBSWY3DPEHPK3PXP",
+      "time": 29,
+      "period": 30,
+      "digits": 6,
+      "code": "282760"
+    },
+    {
+      "source": "CipherMoth frozen, computed with an independent RFC 6238 implementation",
+      "secret": "JBSWY3DPEHPK3PXP",
+      "time": 30,
+      "period": 30,
+      "digits": 6,
+      "code": "996554"
+    },
+    {
+      "source": "CipherMoth frozen, computed with an independent RFC 6238 implementation",
+      "secret": "JBSWY3DPEHPK3PXP",
+      "time": 1760000000,
+      "period": 30,
+      "digits": 6,
+      "code": "885822"
+    },
+    {
+      "source": "CipherMoth frozen, computed with an independent RFC 6238 implementation",
+      "secret": "KRUGKIDROVUWG2ZAMJZG653OEBTG66BAJJ",
+      "time": 1760000000,
+      "period": 30,
+      "digits": 6,
+      "code": "464327"
+    },
+    {
+      "source": "CipherMoth frozen, computed with an independent RFC 6238 implementation",
+      "secret": "MZXW6YTBOI",
+      "time": 1760000015,
+      "period": 30,
+      "digits": 6,
+      "code": "577341"
+    },
+    {
+      "source": "CipherMoth frozen, computed with an independent RFC 6238 implementation",
+      "secret": "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZA",
+      "time": 1760000045,
+      "period": 30,
+      "digits": 6,
+      "code": "107120"
+    },
+    {
+      "source": "CipherMoth frozen, 60 second period",
+      "secret": "JBSWY3DPEHPK3PXP",
+      "time": 1760000059,
+      "period": 60,
+      "digits": 6,
+      "code": "974280"
+    }
+  ]
+}

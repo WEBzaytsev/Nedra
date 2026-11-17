@@ -1,0 +1,1018 @@
+import base64
+import binascii
+import contextlib
+import hashlib
+import hmac
+import json
+import os
+import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Annotated, Any, NoReturn
+from urllib.parse import quote, urlparse
+
+import httpx
+import typer
+from rich.console import Console
+from rich.markup import escape
+from rich.table import Table
+
+from helpers import generate_totp
+from security_key_client import SecurityKeyError, answer
+
+app = typer.Typer(
+    name="nedra",
+    help="Manage your self-hosted nedra vault from the terminal.",
+    no_args_is_help=True,
+    rich_markup_mode="rich",
+)
+pw_app = typer.Typer(
+    help="List, reveal, add, edit and delete vault entries.",
+    no_args_is_help=True,
+    rich_markup_mode="rich",
+)
+app.add_typer(pw_app, name="password")
+browser_app = typer.Typer(
+    help="List and disconnect browser-extension sessions.",
+    no_args_is_help=True,
+    rich_markup_mode="rich",
+)
+app.add_typer(browser_app, name="browser")
+
+_out = Console()
+_err = Console(stderr=True)
+
+_LABEL_WIDTH = 13
+_KINDS = ("login", "note")
+_CONFLICTS = ("skip", "overwrite")
+_TRANSFER_TIMEOUT = 600
+_LOCAL_HOSTS = ("localhost", "127.0.0.1", "::1")
+_SESSION_HEADER = "x-nedra-session"
+_SESSIONS = "vault-sessions"
+_SLASH_NAMES = "entry-names-with-slash"
+_BULK = "bulk-entry-actions"
+_BULK_MOVE = "bulk-entry-move"
+_SECURITY_FACTOR_STEP_UP = "security-factor-step-up"
+_SERVER_TOO_OLD = (
+    "This server runs a Nedra release older than 1.5.0, which this CLI no "
+    "longer supports. Update the server, or use Nedra CLI 1.5.x."
+)
+_NO_UNLOCK_ROUTE = (
+    "No Nedra unlock route at {url!r}. Check that NEDRA_API_URL ends "
+    "in /api. A server older than 1.5.0 also answers like this: update it, or "
+    "use Nedra CLI 1.5.x."
+)
+
+
+def _api_url() -> str:
+    return os.environ.get(
+        "NEDRA_API_URL",
+        os.environ.get("CIPHERMOTH_API_URL", "http://localhost:8000/api"),
+    ).rstrip("/")
+
+
+def _die(msg: str) -> NoReturn:
+    _err.print(f"[red]✗[/red]  {escape(msg)}")
+    raise typer.Exit(1)
+
+
+def _ok(msg: str) -> None:
+    _out.print(f"[green]✓[/green]  {msg}")
+
+
+def _check(resp: httpx.Response) -> None:
+    if resp.is_success:
+        return
+
+    try:
+        payload = resp.json()
+        detail = payload.get("detail") or payload.get("error") or resp.text
+    except ValueError:
+        detail = resp.text
+
+    if resp.status_code == 429:
+        _die(
+            f"{detail} Every command unlocks the vault once, so a batch of them "
+            f"can hit this. Raise NEDRA_RATE_LIMIT on the backend to lift it."
+        )
+
+    _die(str(detail))
+
+
+def _warn_plaintext_transport() -> None:
+    parsed = urlparse(_api_url())
+    host = parsed.hostname or ""
+    if parsed.scheme == "https" or host in _LOCAL_HOSTS:
+        return
+
+    _err.print(
+        f"[yellow]![/yellow]  {escape(host)} is reached over plain HTTP, so your "
+        f"master password crosses the network unencrypted. Put the API behind HTTPS."
+    )
+
+
+def _features(client: httpx.Client) -> list[str] | None:
+    try:
+        resp = client.get("/meta")
+    except httpx.ConnectError:
+        _die(f"Cannot reach the API at {_api_url()!r}. Is the service running?")
+    except httpx.HTTPError:
+        return None
+    if not resp.is_success:
+        return None
+    try:
+        features = resp.json().get("features", [])
+    except (ValueError, AttributeError):
+        return None
+    if not isinstance(features, list):
+        return None
+    return [feature for feature in features if isinstance(feature, str)]
+
+
+class _Vault:
+    """
+    One unlocked vault for the length of a command: a vault session that is
+    locked again when the command ends.
+    """
+
+    def __init__(self, client: httpx.Client) -> None:
+        self.client = client
+        features = _features(client)
+        self.meta_known = features is not None
+        self.features = features or []
+        self.master = ""
+        self._auth: dict[str, str] = {}
+
+    def unlock(self) -> None:
+        self.master = typer.prompt("Master password", hide_input=True)
+        self._authenticate()
+
+    def _post_password(self, path: str) -> httpx.Response:
+        try:
+            return self.client.post(path, json={"master_password": self.master})
+        except httpx.ConnectError:
+            _die(f"Cannot reach the API at {_api_url()!r}. Is the service running?")
+
+    def _has_no_unlock_route(self, resp: httpx.Response) -> bool:
+        if _SESSIONS in self.features or resp.status_code not in (404, 405):
+            return False
+        try:
+            detail = resp.json().get("detail")
+        except (ValueError, AttributeError):
+            return False
+        return detail in ("Not Found", "Method Not Allowed")
+
+    def _authenticate(self) -> None:
+        resp = self._post_password("/master_password/unlock")
+        if self._has_no_unlock_route(resp):
+            if self.meta_known:
+                _die(_SERVER_TOO_OLD)
+            _die(_NO_UNLOCK_ROUTE.format(url=_api_url()))
+
+        _check(resp)
+        data = resp.json()
+        if data.get("security_key_required"):
+            try:
+                assertion = answer(data["security_key_challenge"])
+            except (KeyError, SecurityKeyError) as error:
+                _die(str(error))
+            resp = self.client.post(
+                "/master_password/unlock",
+                json={
+                    "master_password": self.master,
+                    "security_key_assertion": assertion,
+                },
+            )
+        _check(resp)
+        data = resp.json()
+        if not data.get("valid"):
+            _die("Invalid master password.")
+
+        self._auth = {_SESSION_HEADER: data["session_token"]}
+
+    def security_key_step_up(
+        self, action: str, fields: dict[str, object]
+    ) -> dict | None:
+        if _SECURITY_FACTOR_STEP_UP not in self.features:
+            return None
+        token = self._auth.get(_SESSION_HEADER)
+        if not token:
+            _die("Unlock the vault first.")
+        fields_json = json.dumps(
+            fields, ensure_ascii=False, separators=(",", ":"), sort_keys=True
+        )
+        context = (
+            base64.urlsafe_b64encode(
+                hmac.new(
+                    token.encode(),
+                    f"ciphermoth/security-step-up-context/v1\0{action}\0{fields_json}".encode(),
+                    hashlib.sha256,
+                ).digest()
+            )
+            .rstrip(b"=")
+            .decode()
+        )
+        response = self.send(
+            "POST",
+            "/security/step-up/options",
+            json={"action": action, "context": context},
+        )
+        _check(response)
+        options = response.json()
+        if not options.get("required"):
+            return None
+        try:
+            return answer(options["challenge"])
+        except (KeyError, SecurityKeyError) as error:
+            _die(str(error))
+
+    def headers(self, name: str | None = None) -> dict[str, str]:
+        headers = dict(self._auth)
+        if name is not None:
+            headers["x-nedra-entry"] = quote(name, safe="")
+        return headers
+
+    def send(
+        self, method: str, url: str, *, name: str | None = None, **kwargs: Any
+    ) -> httpx.Response:
+        resp = self.client.request(method, url, headers=self.headers(name), **kwargs)
+        if resp.status_code == 401 and self._auth:
+            self._authenticate()
+            resp = self.client.request(
+                method, url, headers=self.headers(name), **kwargs
+            )
+        return resp
+
+    @contextmanager
+    def stream(self, method: str, url: str, **kwargs: Any) -> Iterator[httpx.Response]:
+        for attempt in range(2):
+            with self.client.stream(
+                method, url, headers=self.headers(), **kwargs
+            ) as resp:
+                if resp.status_code == 401 and self._auth and attempt == 0:
+                    resp.read()
+                else:
+                    if not resp.is_success:
+                        resp.read()
+                    yield resp
+                    return
+            self._authenticate()
+
+    def entry_path(self, name: str, suffix: str = "") -> str:
+        if "/" in name and _SLASH_NAMES not in self.features:
+            _die(
+                "This server can't address entry names containing '/'. "
+                "Update Nedra, or rename the entry in the web UI."
+            )
+        encoded = quote(name, safe="")
+        if encoded in (".", ".."):
+            encoded = encoded.replace(".", "%2E")
+        return f"/passwords/{encoded}{suffix}"
+
+    def lock(self) -> None:
+        if self._auth:
+            with contextlib.suppress(httpx.HTTPError):
+                self.client.post("/master_password/lock", headers=self._auth)
+        self._auth = {}
+        self.master = ""
+
+
+@contextmanager
+def _vault(timeout: float = 30) -> Iterator[_Vault]:
+    _warn_plaintext_transport()
+    with httpx.Client(
+        base_url=_api_url(), timeout=timeout, follow_redirects=False
+    ) as client:
+        vault = _Vault(client)
+        try:
+            vault.unlock()
+            yield vault
+        finally:
+            vault.lock()
+
+
+def _entry(resp: httpx.Response, name: str) -> dict:
+    _check(resp)
+    item = resp.json()
+    if not isinstance(item, dict):
+        _die(
+            f"'{name}' can't be opened by name. Rename the entry in the web UI "
+            "to manage it from the CLI."
+        )
+    return item
+
+
+def _optional(label: str, current: str | None = None) -> str | None:
+    return (
+        typer.prompt(label, default=current or "", show_default=bool(current)) or None
+    )
+
+
+def _prompt_secret(label: str) -> str:
+    return typer.prompt(label, hide_input=True, confirmation_prompt=True)
+
+
+def _prompt_optional_secret(label: str) -> str | None:
+    value = typer.prompt(label, hide_input=True, default="", show_default=False)
+    if not value:
+        return None
+
+    if typer.prompt("Repeat for confirmation", hide_input=True) != value:
+        _die("The two entries did not match.")
+
+    return value
+
+
+def _totp_code(secret: str) -> str:
+    try:
+        return generate_totp(secret)
+    except (binascii.Error, ValueError):
+        return "unreadable 2FA secret"
+
+
+def _detail_rows(item: dict) -> list[tuple[str, str]]:
+    rows = [("Note" if item.get("kind") == "note" else "Value", item["password_value"])]
+
+    for label, key in (("Username", "username"), ("URL", "url")):
+        if item.get(key):
+            rows.append((label, item[key]))
+
+    if item.get("totp_secret"):
+        rows.append(("2FA code", _totp_code(item["totp_secret"])))
+
+    if item.get("folder"):
+        rows.append(("Folder", item["folder"]))
+
+    if item.get("tags"):
+        rows.append(("Tags", ", ".join(item["tags"])))
+
+    for field in item.get("custom_fields") or []:
+        shown = "••••••••" if field.get("hidden") else field.get("value", "")
+        rows.append((field["label"], shown))
+
+    if item.get("description"):
+        rows.append(("Description", item["description"]))
+
+    return rows
+
+
+def _print_details(item: dict) -> None:
+    rows = _detail_rows(item)
+    width = max([_LABEL_WIDTH, *(len(label) + 2 for label, _ in rows)])
+
+    _out.print(f"\n  [bold cyan]{escape(item['password_name'])}[/bold cyan]")
+
+    for label, value in rows:
+        head, *rest = str(value).split("\n")
+        padding = " " * (width - len(label))
+        _out.print(f"  [dim]{escape(label)}[/dim]{padding}{escape(head)}")
+        for line in rest:
+            _out.print(f"  {' ' * width}{escape(line)}")
+
+    _out.print()
+
+
+@browser_app.command("list", help="List browser-extension sessions for your account.")
+def browser_list() -> None:
+    with _vault() as vault:
+        resp = vault.send("GET", "/extension/sessions")
+    _check(resp)
+    sessions = resp.json()
+    if not sessions:
+        _out.print("[dim]No browser extension sessions.[/dim]")
+        return
+    table = Table(show_header=True, header_style="bold", box=None, padding=(0, 2, 0, 0))
+    table.add_column("ID", style="cyan")
+    table.add_column("Browser")
+    table.add_column("Connected")
+    table.add_column("Last used")
+    for session in sessions:
+        table.add_row(
+            escape(session["id"]),
+            escape(session["browser"]),
+            escape(session["created"]),
+            escape(session["last_used"]),
+        )
+    _out.print(table)
+
+
+@browser_app.command(
+    "disconnect",
+    context_settings={"ignore_unknown_options": True},
+    help="End one browser-extension session by its ID.",
+)
+def browser_disconnect(
+    session_id: Annotated[str, typer.Argument(help="Session ID from 'browser list'.")],
+    yes: Annotated[
+        bool, typer.Option("--yes", "-y", help="Do not ask to confirm.")
+    ] = False,
+) -> None:
+    if not yes:
+        typer.confirm("Disconnect this browser extension session?", abort=True)
+    with _vault() as vault:
+        resp = vault.send("DELETE", f"/extension/sessions/{quote(session_id, safe='')}")
+    _check(resp)
+    _ok("Browser extension session disconnected.")
+
+
+@pw_app.command("list", help="List every entry in the vault.")
+def pw_list() -> None:
+    with _vault() as vault:
+        resp = vault.send("GET", "/passwords")
+
+    _check(resp)
+
+    items: list[dict] = resp.json()
+    if not items:
+        _out.print("[dim]The vault is empty.[/dim]")
+        return
+
+    table = Table(show_header=True, header_style="bold", box=None, padding=(0, 2, 0, 0))
+    table.add_column("Name", style="cyan")
+    table.add_column("Description", style="dim")
+
+    for item in items:
+        table.add_row(
+            escape(item["password_name"]),
+            escape(item.get("description") or "-"),
+        )
+
+    _out.print(table)
+
+
+@pw_app.command("get", help="Reveal one entry, including its live 2FA code.")
+def pw_get(name: Annotated[str, typer.Argument(help="Entry name.")]) -> None:
+    with _vault() as vault:
+        resp = vault.send("GET", vault.entry_path(name), name=name)
+
+    _print_details(_entry(resp, name))
+
+
+@pw_app.command(
+    "create", help="Add a login or a secure note, prompting for each field."
+)
+def pw_create(
+    name: Annotated[str, typer.Argument(help="Name for the new entry.")],
+    kind: Annotated[
+        str, typer.Option("--kind", "-k", help="Entry type: login or note.")
+    ] = "login",
+) -> None:
+    if kind not in _KINDS:
+        _die("--kind must be 'login' or 'note'.")
+
+    is_note = kind == "note"
+
+    with _vault() as vault:
+        existing = vault.send("GET", vault.entry_path(name), name=name)
+        if existing.is_success and isinstance(existing.json(), dict):
+            _die(f"An entry named '{name}' already exists.")
+
+        value = _prompt_secret("Note body" if is_note else "Password value")
+        username = None if is_note else _optional("Username / email")
+        url = None if is_note else _optional("URL")
+        totp_secret = None if is_note else _optional("TOTP secret")
+        description = _optional("Description")
+        folder = _optional("Folder")
+        resp = vault.send(
+            "POST",
+            "/passwords/create",
+            name=name,
+            json={
+                "password_name": name,
+                "kind": kind,
+                "username": username,
+                "password_value": value,
+                "url": url,
+                "totp_secret": totp_secret,
+                "description": description,
+                "folder": folder,
+            },
+        )
+
+    _check(resp)
+
+    _ok(f"Created [cyan]{escape(name)}[/cyan]")
+
+
+@pw_app.command(
+    "update",
+    help="Edit an entry. Leave a prompt blank to keep the current value.",
+)
+def pw_update(name: Annotated[str, typer.Argument(help="Entry name.")]) -> None:
+    with _vault() as vault:
+        current = _entry(vault.send("GET", vault.entry_path(name), name=name), name)
+        is_note = current.get("kind") == "note"
+
+        secret_label = "New note" if is_note else "New password value"
+        new_value = (
+            _prompt_optional_secret(f"{secret_label} (blank to keep the current one)")
+            or current["password_value"]
+        )
+        new_username = (
+            None if is_note else _optional("Username / email", current.get("username"))
+        )
+        new_url = None if is_note else _optional("URL", current.get("url"))
+        new_totp = (
+            None if is_note else _optional("TOTP secret", current.get("totp_secret"))
+        )
+        new_description = _optional("Description", current.get("description"))
+        new_folder = _optional("Folder", current.get("folder"))
+
+        shared = {
+            "password_name": name,
+            "kind": current.get("kind", "login"),
+            "tags": current.get("tags", []),
+            "custom_fields": current.get("custom_fields", []),
+            "favorite": current.get("favorite", False),
+        }
+        resp = vault.send(
+            "PATCH",
+            "/passwords/update",
+            name=name,
+            json={
+                "password": {
+                    **shared,
+                    "username": current.get("username"),
+                    "password_value": current["password_value"],
+                    "url": current.get("url"),
+                    "totp_secret": current.get("totp_secret"),
+                    "description": current.get("description"),
+                    "folder": current.get("folder"),
+                },
+                "new_password": {
+                    **shared,
+                    "username": new_username,
+                    "password_value": new_value,
+                    "url": new_url,
+                    "totp_secret": new_totp,
+                    "description": new_description,
+                    "folder": new_folder,
+                },
+            },
+        )
+
+    _check(resp)
+
+    _ok(f"Updated [cyan]{escape(name)}[/cyan]")
+
+
+@pw_app.command(
+    "delete",
+    help=(
+        "Move one or more entries to the trash. "
+        "Several names move together or not at all."
+    ),
+)
+def pw_delete(
+    names: Annotated[list[str], typer.Argument(help="Entry names.")],
+    yes: Annotated[
+        bool, typer.Option("--yes", "-y", help="Skip confirmation.")
+    ] = False,
+) -> None:
+    names = list(dict.fromkeys(names))
+    if len(names) == 1:
+        _delete_one(names[0], yes)
+        return
+    with _vault() as vault:
+        if _BULK not in vault.features:
+            _die("Deleting several entries needs Nedra 3.3.0 or newer.")
+        entries = _entry_rows(vault, names)
+        if not yes:
+            _out.print("\n".join(f"  {escape(name)}" for name in names))
+            typer.confirm(f"Move these {len(names)} entries to trash?", abort=True)
+        resp = vault.send(
+            "POST",
+            "/vault/entries/trash",
+            json={
+                "entries": [
+                    {"password_name": entry["password_name"], "entry_id": entry["id"]}
+                    for entry in entries
+                ]
+            },
+        )
+    _check(resp)
+    _ok(f"Moved {len(names)} entries to trash")
+
+
+def _delete_one(name: str, yes: bool) -> None:
+    with _vault() as vault:
+        exists = vault.send("GET", vault.entry_path(name), name=name)
+        if exists.status_code == 404:
+            _check(exists)
+
+        if not yes:
+            typer.confirm(f"Move '{name}' to trash?", abort=True)
+
+        resp = vault.send("DELETE", vault.entry_path(name), name=name)
+
+    _check(resp)
+
+    _ok(f"Moved [cyan]{escape(name)}[/cyan] to trash")
+
+
+@pw_app.command(
+    "move",
+    help="Move one or more entries into an accessible folder, or out with --no-folder.",
+)
+def pw_move(
+    names: Annotated[list[str], typer.Argument(help="Entry names.")],
+    folder: Annotated[
+        str | None,
+        typer.Option("--folder", "-f", help="Existing destination folder name."),
+    ] = None,
+    no_folder: Annotated[
+        bool,
+        typer.Option("--no-folder", help="Take the entries out of their folder."),
+    ] = False,
+) -> None:
+    if (folder is None) == (not no_folder):
+        _die("Give either --folder NAME or --no-folder.")
+    names = list(dict.fromkeys(names))
+    with _vault() as vault:
+        if _BULK_MOVE not in vault.features:
+            _die("Moving entries needs Nedra 3.5.0 or newer.")
+        entries = _entry_rows(vault, names)
+        folder_id = None
+        if folder is not None:
+            targets = [
+                item
+                for item in vault.send("GET", "/folders").json()
+                if item.get("name", "").casefold() == folder.casefold()
+                and item.get("access") in ("owner", "write")
+            ]
+            if len(targets) != 1:
+                _die("Choose one existing writable folder by its exact name.")
+            folder_id = targets[0]["id"]
+        resp = vault.send(
+            "POST",
+            "/vault/entries/move",
+            json={
+                "entries": [{"entry_id": entry["id"]} for entry in entries],
+                "folder_id": folder_id,
+            },
+        )
+    _check(resp)
+    count = resp.json().get("count", 0)
+    destination = escape(folder) if folder is not None else "no folder"
+    _ok(
+        f"Moved {count} {'entry' if count == 1 else 'entries'} to "
+        f"[cyan]{destination}[/cyan]"
+    )
+
+
+def _entry_rows(vault: _Vault, names: list[str]) -> list[dict]:
+    rows = vault.send("GET", "/passwords")
+    _check(rows)
+    by_name = {row.get("password_name"): row for row in rows.json()}
+    missing = [name for name in names if name not in by_name]
+    if missing:
+        _die(f"No accessible entry named {missing[0]!r}.")
+    return [by_name[name] for name in names]
+
+
+@pw_app.command(
+    "history",
+    help="Reveal an entry's earlier passwords, newest first (the last 10 are kept).",
+)
+def pw_history(name: Annotated[str, typer.Argument(help="Entry name.")]) -> None:
+    with _vault() as vault:
+        item = _entry(vault.send("GET", vault.entry_path(name), name=name), name)
+    history = item.get("password_history") or []
+    if not history:
+        _out.print(f"[dim]No earlier passwords for {escape(name)}.[/dim]")
+        return
+    table = Table(show_header=True, header_style="bold", box=None, padding=(0, 2, 0, 0))
+    table.add_column("In use until", style="dim", no_wrap=True)
+    table.add_column("Password")
+    for entry in history:
+        table.add_row(
+            escape(_local_time(entry.get("changed_at"))),
+            escape(str(entry.get("value", ""))),
+        )
+    _out.print(f"\n  [bold cyan]{escape(name)}[/bold cyan]")
+    _out.print(table)
+
+
+def _local_time(value: object) -> str:
+    try:
+        moment = datetime.fromisoformat(str(value))
+    except ValueError:
+        return str(value)
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=UTC)
+    return moment.astimezone().strftime("%Y-%m-%d %H:%M")
+
+
+@pw_app.command("trash", help="List the entries waiting in the trash.")
+def pw_trash() -> None:
+    with _vault() as vault:
+        resp = vault.send("GET", "/passwords/trash")
+
+    _check(resp)
+
+    items: list[dict] = resp.json()
+    if not items:
+        _out.print("[dim]The trash is empty.[/dim]")
+        return
+
+    table = Table(show_header=True, header_style="bold", box=None, padding=(0, 2, 0, 0))
+    table.add_column("ID", style="dim")
+    table.add_column("Name", style="cyan")
+    table.add_column("Description", style="dim")
+    table.add_column("Deleted", style="dim")
+
+    for item in items:
+        table.add_row(
+            str(item.get("id", "-")),
+            escape(item["password_name"]),
+            escape(item.get("description") or "-"),
+            (item.get("deleted") or "-")[:19].replace("T", " "),
+        )
+
+    _out.print(table)
+
+
+@pw_app.command(
+    "restore",
+    help="Restore the newest trashed entry of this name, or select one with --id.",
+)
+def pw_restore(
+    name: Annotated[str, typer.Argument(help="Entry name.")],
+    entry_id: Annotated[
+        int | None, typer.Option("--id", min=1, help="Row ID from 'password trash'.")
+    ] = None,
+) -> None:
+    with _vault() as vault:
+        params = _trash_params(vault, name, entry_id)
+        resp = vault.send(
+            "POST", vault.entry_path(name, "/restore"), name=name, params=params
+        )
+
+    _check(resp)
+
+    _ok(f"Restored [cyan]{escape(name)}[/cyan]")
+
+
+@pw_app.command(
+    "purge",
+    help=(
+        "Permanently delete the newest trashed entry of this name, or select one "
+        "with --id. This cannot be undone."
+    ),
+)
+def pw_purge(
+    name: Annotated[str, typer.Argument(help="Entry name.")],
+    yes: Annotated[
+        bool, typer.Option("--yes", "-y", help="Skip confirmation.")
+    ] = False,
+    entry_id: Annotated[
+        int | None, typer.Option("--id", min=1, help="Row ID from 'password trash'.")
+    ] = None,
+) -> None:
+    if not yes:
+        selected = f" (row #{entry_id})" if entry_id is not None else " (newest)"
+        typer.confirm(f"Permanently delete '{name}'{selected} from trash?", abort=True)
+
+    with _vault() as vault:
+        params = _trash_params(vault, name, entry_id)
+        resp = vault.send(
+            "DELETE", vault.entry_path(name, "/purge"), name=name, params=params
+        )
+
+    _check(resp)
+
+    _ok(f"Permanently deleted [cyan]{escape(name)}[/cyan]")
+
+
+def _trash_params(vault: _Vault, name: str, entry_id: int | None) -> dict[str, int]:
+    if entry_id is None:
+        return {}
+    response = vault.send("GET", "/passwords/trash")
+    _check(response)
+    # Older servers ignore an unknown query parameter; refuse before sending a
+    # mutation unless this server supplies selectable row IDs in its Trash list.
+    if not any(
+        row.get("id") == entry_id and row.get("password_name") == name
+        for row in response.json()
+    ):
+        _die(
+            "No matching Trash row ID. Refresh 'password trash' and use this "
+            "release's server."
+        )
+    return {"entry_id": entry_id}
+
+
+@app.command(
+    "backup",
+    help=(
+        "Save a complete encrypted backup (.cmbackup): every entry, the trash, "
+        "history, attachments and settings, protected by your master password."
+    ),
+)
+def cmd_backup(
+    out_dir: Annotated[
+        Path, typer.Option("--out", "-o", help="Directory to save the backup file.")
+    ] = Path("."),
+) -> None:
+    staged: Path | None = None
+    try:
+        with _vault(timeout=_TRANSFER_TIMEOUT) as vault:
+            payload: dict[str, object] = {"master_password": vault.master}
+            assertion = vault.security_key_step_up("backup", payload)
+            if assertion is not None:
+                payload["security_key_assertion"] = assertion
+            with vault.stream("POST", "/passwords/backup", json=payload) as resp:
+                _check(resp)
+                out_dir.mkdir(parents=True, exist_ok=True)
+                stamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
+                with tempfile.NamedTemporaryFile(
+                    prefix=f"nedra_backup_{stamp}_",
+                    suffix=".cmbackup.partial",
+                    dir=out_dir,
+                    delete=False,
+                ) as output:
+                    staged = Path(output.name)
+                    for chunk in resp.iter_bytes(chunk_size=1024 * 1024):
+                        output.write(chunk)
+                    output.flush()
+                    os.fsync(output.fileno())
+                dest = staged.with_suffix("")
+                # Publish only a completed transfer; never replace an existing
+                # backup (or follow a pre-existing destination symlink).
+                os.link(staged, dest)
+    except (httpx.HTTPError, OSError):
+        _die("Backup could not be saved. Check the connection and destination space.")
+    finally:
+        if staged is not None:
+            staged.unlink(missing_ok=True)
+
+    _ok(f"Backup saved to [cyan]{escape(str(dest))}[/cyan]")
+
+
+@app.command(
+    "damaged",
+    help=(
+        "List entries and attachments the vault file holds but cannot read (damaged "
+        "or altered), and optionally remove them. Backups and master password "
+        "changes refuse to run while any remain."
+    ),
+)
+def cmd_damaged(
+    remove: Annotated[
+        bool, typer.Option("--remove", help="Remove every damaged row.")
+    ] = False,
+    yes: Annotated[
+        bool, typer.Option("--yes", "-y", help="Skip confirmation.")
+    ] = False,
+) -> None:
+    with _vault() as vault:
+        resp = vault.send("GET", "/vault/damaged")
+        _check(resp)
+        rows = [
+            (kind, row_id)
+            for kind in ("entries", "attachments")
+            for row_id in resp.json()[kind]
+        ]
+        if not rows:
+            _ok("Nothing is damaged.")
+            return
+        for kind, row_id in rows:
+            label = "entry" if kind == "entries" else "attachment"
+            _err.print(f"[yellow]![/yellow]  {label} #{row_id} cannot be read")
+        if not remove:
+            _out.print(
+                "Restore a snapshot (docs/UPDATING.md), or run "
+                "'nedra damaged --remove'. Removing an entry also removes its "
+                "attachments."
+            )
+            return
+        if not yes:
+            typer.confirm(f"Permanently remove {len(rows)} damaged row(s)?", abort=True)
+        for kind, row_id in rows:
+            _check(vault.send("DELETE", f"/vault/damaged/{kind}/{row_id}"))
+    _ok(f"Removed {len(rows)} damaged row(s)")
+
+
+def _report_import(payload: dict) -> None:
+    _ok(
+        f"Import complete - "
+        f"[cyan]{payload['imported']}[/cyan] added, "
+        f"[cyan]{payload['overwritten']}[/cyan] overwritten, "
+        f"[cyan]{payload['skipped']}[/cyan] skipped"
+    )
+    restored = [
+        f"{payload[key]} {label}"
+        for key, label in (
+            ("trashed", "in the trash"),
+            ("attachments", "attachment(s)"),
+        )
+        if payload.get(key)
+    ]
+    if payload.get("settings_restored"):
+        restored.append("settings")
+    if restored:
+        _ok("Also restored: " + ", ".join(restored))
+
+    for key, title in (
+        ("renamed", "were imported under a new name"),
+        ("ignored", "were not imported"),
+    ):
+        count = payload.get(key, 0)
+        if not count:
+            continue
+        _err.print(f"[yellow]![/yellow]  {count} record(s) {title}:")
+        rows = payload.get(f"{key}_rows", [])
+        for row in rows:
+            name = f" ({row['name']})" if row.get("name") else ""
+            _err.print(f"   {escape(row['where'] + name)}: {escape(row['reason'])}")
+        if count > len(rows):
+            _err.print(f"   and {count - len(rows)} more")
+
+
+def _validate_import_file(file: Path, on_conflict: str) -> None:
+    if not file.is_file():
+        _die(f"File not found: {file}")
+
+    if on_conflict not in _CONFLICTS:
+        _die("--on-conflict must be 'skip' or 'overwrite'.")
+
+
+@app.command(
+    "import",
+    help=(
+        "Restore a Nedra backup: a complete backup (.cmbackup) or a backup "
+        "ZIP from CipherMoth 2.0 or earlier."
+    ),
+)
+def cmd_import(
+    file: Annotated[
+        Path, typer.Argument(help="Path to the backup (.cmbackup or legacy .zip).")
+    ],
+    on_conflict: Annotated[
+        str,
+        typer.Option(
+            help=(
+                "How to handle existing entries: skip or overwrite. A complete "
+                "backup moves each entry it overwrites to the trash."
+            ),
+        ),
+    ] = "skip",
+) -> None:
+    _validate_import_file(file, on_conflict)
+
+    with _vault(timeout=_TRANSFER_TIMEOUT) as vault, file.open("rb") as upload:
+        backup_password = typer.prompt(
+            "Backup password (Enter if it is the current master password)",
+            hide_input=True,
+            default="",
+            show_default=False,
+        )
+        resp = vault.send(
+            "POST",
+            "/passwords/import",
+            data={
+                "master_password": backup_password or vault.master,
+                "on_conflict": on_conflict,
+            },
+            files={"file": (file.name, upload, "application/octet-stream")},
+        )
+
+    _check(resp)
+
+    _report_import(resp.json())
+
+
+@app.command(
+    "import-csv",
+    help="Import a CSV exported from Chrome, Bitwarden, KeePass or Proton Pass.",
+)
+def cmd_import_csv(
+    file: Annotated[
+        Path, typer.Argument(help="Path to a CSV exported from another manager.")
+    ],
+    on_conflict: Annotated[
+        str,
+        typer.Option(
+            help="How to handle existing entries: skip or overwrite.",
+        ),
+    ] = "skip",
+) -> None:
+    _validate_import_file(file, on_conflict)
+
+    with _vault(timeout=60) as vault, file.open("rb") as upload:
+        resp = vault.send(
+            "POST",
+            "/passwords/import/csv",
+            data={"on_conflict": on_conflict},
+            files={"file": (file.name, upload, "text/csv")},
+        )
+
+    _check(resp)
+
+    _report_import(resp.json())
+
+
+if __name__ == "__main__":
+    app()

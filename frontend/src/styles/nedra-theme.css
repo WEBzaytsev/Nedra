@@ -1,0 +1,69 @@
+@font-face {
+  font-family: "Martian Grotesk";
+  src: url("/fonts/MartianGrotesk-VF.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 100 1000;
+  font-stretch: 75% 200%;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Martian Mono";
+  src: url("/fonts/MartianMono-VF.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 100 800;
+  font-stretch: 75% 112.5%;
+  font-display: swap;
+}
+
+body.nedra-theme {
+  margin: 0;
+  --g-font-family-sans: "Martian Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --g-font-family-monospace: "Martian Mono", Menlo, Consolas, monospace;
+  --g-color-text-hint: var(--g-color-text-secondary);
+}
+
+/* A type selector also beats the stock root's single-class specificity. */
+body.nedra-theme,
+html[data-theme="light"] body {
+  --g-color-base-brand: #b5f602;
+  --g-color-base-brand-hover: #a3e602;
+  --g-color-base-selection: rgba(181, 246, 2, 0.18);
+  --g-color-base-selection-hover: rgba(181, 246, 2, 0.28);
+  --g-color-text-brand: #456000;
+  --g-color-text-brand-heavy: #334700;
+  --g-color-text-brand-contrast: #1b2407;
+  --g-color-text-secondary: #5f6368;
+  --g-color-text-misc: #59636e;
+  --g-color-text-misc-heavy: #4f5963;
+  --g-color-text-danger: #c40030;
+  --g-color-text-warning: #8a5a00;
+  --g-color-text-link: #456000;
+  --g-color-text-link-hover: #334700;
+  --g-color-text-link-visited: #52602f;
+  --g-color-text-link-visited-hover: #3c4821;
+  --g-color-line-brand: #5c7d00;
+  --g-color-line-focus: #5c7d00;
+}
+
+html[data-theme="dark"] body {
+  --g-color-base-brand: #b5f602;
+  --g-color-base-brand-hover: #a3e602;
+  --g-color-base-selection: rgba(181, 246, 2, 0.14);
+  --g-color-base-selection-hover: rgba(181, 246, 2, 0.22);
+  --g-color-text-brand: #b5f602;
+  --g-color-text-brand-heavy: #d3fa76;
+  --g-color-text-brand-contrast: #1b2407;
+  --g-color-text-secondary: #b8bac2;
+  --g-color-text-danger: #ff8299;
+  --g-color-text-danger-heavy: #ff9bae;
+  --g-color-text-warning: #ffbe5c;
+  --g-color-text-misc: #b7c5d1;
+  --g-color-text-misc-heavy: #b7c5d1;
+  --g-color-text-link: #b5f602;
+  --g-color-text-link-hover: #d3fa76;
+  --g-color-text-link-visited: #c4d69a;
+  --g-color-text-link-visited-hover: #dfeac8;
+  --g-color-line-brand: #b5f602;
+  --g-color-line-focus: #b5f602;
+}

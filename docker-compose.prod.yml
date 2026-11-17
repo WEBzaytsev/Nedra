@@ -1,0 +1,42 @@
+# Run Nedra from prebuilt images: the real, daily-use vault.
+# Everything lives in one SQLite file in the vault_data volume. A .env next to
+# this file is optional (see .env.prod.example).
+# Frozen so an in-place product update reuses the existing vault_data volume.
+name: ciphermoth
+
+services:
+  backend:
+    image: ghcr.io/webzaytsev/nedra-backend:${NEDRA_VERSION:-${CIPHERMOTH_VERSION:-latest}}
+    restart: unless-stopped
+    environment:
+      # The browser origin that serves the UI; CORS must allow it.
+      CORS_ORIGINS: '["${NEDRA_FRONTEND_ORIGIN:-${CIPHERMOTH_FRONTEND_ORIGIN:-http://localhost:3000}}"]'
+      # Exact hosts allowed to create WebAuthn credentials; never inferred from Host.
+      WEBAUTHN_RP_IDS: '${WEBAUTHN_RP_IDS:-["localhost"]}'
+      # Overrides the per-route rate limits (e.g. 200/hour) when set.
+      NEDRA_RATE_LIMIT: ${NEDRA_RATE_LIMIT:-${CIPHERMOTH_RATE_LIMIT:-}}
+      NEDRA_INACTIVITY_MS: ${NEDRA_INACTIVITY_MS:-${CIPHERMOTH_INACTIVITY_MS:-120000}}
+      NEDRA_HIDDEN_MS: ${NEDRA_HIDDEN_MS:-${CIPHERMOTH_HIDDEN_MS:-60000}}
+      NEDRA_WARN_BEFORE_MS: ${NEDRA_WARN_BEFORE_MS:-${CIPHERMOTH_WARN_BEFORE_MS:-60000}}
+      NEDRA_DEBOUNCE_MS: ${NEDRA_DEBOUNCE_MS:-${CIPHERMOTH_DEBOUNCE_MS:-1000}}
+      NEDRA_CLIPBOARD_CLEAR_MS: ${NEDRA_CLIPBOARD_CLEAR_MS:-${CIPHERMOTH_CLIPBOARD_CLEAR_MS:-30000}}
+      NEDRA_UPDATE_CHECK_ENABLED: ${NEDRA_UPDATE_CHECK_ENABLED:-${CIPHERMOTH_UPDATE_CHECK_ENABLED:-true}}
+    # Published on localhost only unless NEDRA_BIND_ADDRESS says otherwise.
+    ports:
+      - "${NEDRA_BIND_ADDRESS:-${CIPHERMOTH_BIND_ADDRESS:-127.0.0.1}}:${NEDRA_BACKEND_PORT:-${CIPHERMOTH_BACKEND_PORT:-8000}}:80"
+    volumes:
+      - vault_data:/data
+
+  frontend:
+    image: ghcr.io/webzaytsev/nedra-frontend:${NEDRA_VERSION:-${CIPHERMOTH_VERSION:-latest}}
+    restart: unless-stopped
+    environment:
+      # The URL the browser uses to reach the API. Injected at container start.
+      VITE_API_URL: ${NEDRA_API_URL:-${CIPHERMOTH_API_URL:-http://localhost:8000/api}}
+    ports:
+      - "${NEDRA_BIND_ADDRESS:-${CIPHERMOTH_BIND_ADDRESS:-127.0.0.1}}:${NEDRA_FRONTEND_PORT:-${CIPHERMOTH_FRONTEND_PORT:-3000}}:3000"
+    depends_on:
+      - backend
+
+volumes:
+  vault_data:

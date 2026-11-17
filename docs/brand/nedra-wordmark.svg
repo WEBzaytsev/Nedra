@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="280" height="48" viewBox="0 0 280 48" role="img" aria-label="Nedra">
+  <g fill="#151515">
+    <path d="M40 8H16L8 16V40H32L40 32V20H32V28L28 32H16V20L20 16H40V8Z" />
+    <path d="M24 20H28V28H20V24L24 20Z" />
+  </g>
+  <text x="56" y="35" fill="#151515" font-family="Martian Grotesk, Arial, sans-serif" font-size="36" font-weight="600">Nedra</text>
+</svg>

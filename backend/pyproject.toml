@@ -1,0 +1,76 @@
+[project]
+name = "nedra-server"
+version = "4.0.0"
+description = "Nedra Password Manager API"
+requires-python = ">=3.13,<3.15"
+dependencies = [
+    "fastapi>=0.162.5",
+    "cryptography>=50.0.2",
+    "aiosqlite>=0.22.1",
+    "sqlalchemy>=2.1.8",
+    "uvicorn[standard]>=0.54.0",
+    "python-dotenv>=1.2.4",
+    "pydantic-settings>=2.16.2",
+    "greenlet>=3.5.6",
+    "slowapi>=0.1.10",
+    "pyzipper>=0.4.0",
+    "python-multipart>=0.0.33",
+    "typer>=0.29.1",
+    "httpx>=0.28.0",
+    "mcp>=2.0.0,<3",
+    "fido2>=2.2.1",
+]
+
+[dependency-groups]
+dev = [
+    "hypothesis>=6.170.15",
+    "pytest>=9.2.0",
+    "pytest-asyncio>=1.5.0",
+    "ruff>=0.17.5",
+    "ty>=0.0.57",
+]
+
+[tool.uv]
+python-preference = "only-managed"
+
+[project.scripts]
+nedra = "cli:app"
+nedra-admin = "vault_admin:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]
+
+[tool.ruff]
+line-length = 88
+target-version = "py313"
+exclude = [".git", "__pycache__", ".mypy_cache", ".pytest_cache"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "UP"]
+ignore = ["B008"]  # FastAPI Depends() in function signatures is idiomatic
+
+[tool.ruff.lint.isort]
+split-on-trailing-comma = true
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.ty.environment]
+python-version = "3.13"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+addopts = "-m 'not stress'"
+faulthandler_timeout = 300
+markers = [
+    "stress: long-running fuzz, fault-injection and scale tests (make test-stress)",
+]

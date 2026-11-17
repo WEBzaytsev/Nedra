@@ -1,0 +1,10 @@
+{
+  "identifier": "com.nedra.desktop.qa",
+  "productName": "Nedra QA",
+  "build": {
+    "beforeBuildCommand": "node build-native-host.mjs --qa && npm --prefix ../frontend run build:desktop:qa"
+  },
+  "bundle": {
+    "createUpdaterArtifacts": false
+  }
+}

@@ -1,0 +1,227 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAMESPACE: webzaytsev
+
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: version
+        run: |
+          test "$GITHUB_REPOSITORY" = "WEBzaytsev/Nedra"
+          [[ "$GITHUB_REF" =~ ^refs/tags/v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+          version="${GITHUB_REF#refs/tags/v}"
+          python desktop/release/version.py --check "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  desktop:
+    needs: source
+    uses: ./.github/workflows/desktop.yml
+    with:
+      release: true
+    secrets: inherit
+    permissions:
+      contents: read
+
+  # Build each architecture on its own NATIVE runner (no QEMU). Emulated arm64
+  # Node/Vite builds took ~26 min and timed out; native arm64 builds in a couple
+  # of minutes. Each job pushes an untagged, digest-only image; the merge job
+  # stitches the per-arch digests into one multi-arch tag and signs it.
+  build:
+    needs: source
+    name: build ${{ matrix.image.name }} (${{ matrix.platform.slug }})
+    runs-on: ${{ matrix.platform.runner }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - name: nedra-backend
+            dockerfile: docker/backend/Dockerfile
+            args: ""
+          - name: nedra-frontend
+            dockerfile: docker/frontend/Dockerfile
+            # Baked placeholder; entrypoint.sh swaps in the real URL at runtime.
+            args: VITE_API_URL=__NEDRA_API_URL__
+        platform:
+          - arch: linux/amd64
+            runner: ubuntu-latest
+            slug: amd64
+          - arch: linux/arm64
+            runner: ubuntu-24.04-arm
+            slug: arm64
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: ${{ matrix.image.dockerfile }}
+          platforms: ${{ matrix.platform.arch }}
+          build-args: ${{ matrix.image.args }}
+          cache-from: type=gha,scope=${{ matrix.image.name }}-${{ matrix.platform.slug }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image.name }}-${{ matrix.platform.slug }}
+          provenance: mode=max
+          sbom: true
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ matrix.image.name }},push-by-digest=true,name-canonical=true,push=true
+
+      - name: Export digest
+        run: |
+          mkdir -p /tmp/digests
+          digest="${{ steps.build.outputs.digest }}"
+          touch "/tmp/digests/${digest#sha256:}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: digest-${{ matrix.image.name }}-${{ matrix.platform.slug }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # Combine the per-arch digests into one multi-arch tag, then cosign-sign the
+  # resulting manifest-list digest (the digest `cosign verify` checks).
+  merge:
+    name: merge & sign ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    needs: [build, desktop]
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - nedra-backend
+          - nedra-frontend
+    steps:
+      - name: Download digests
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          path: /tmp/digests
+          pattern: digest-${{ matrix.image }}-*
+          merge-multiple: true
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ matrix.image }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest
+            type=sha,format=short
+
+      - name: Create multi-arch manifest and push
+        working-directory: /tmp/digests
+        run: |
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf '${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ matrix.image }}@sha256:%s ' *)
+
+      - name: Resolve manifest-list digest
+        id: digest
+        run: |
+          image="${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ matrix.image }}"
+          digest="$(docker buildx imagetools inspect "${image}:${{ steps.meta.outputs.version }}" --format '{{ json .Manifest.Digest }}' | tr -d '\"')"
+          echo "digest=${digest}" >> "$GITHUB_OUTPUT"
+
+      - name: Sign image with cosign
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ matrix.image }}
+          DIGEST: ${{ steps.digest.outputs.digest }}
+        run: cosign sign --yes "${IMAGE}@${DIGEST}"
+
+  smoke:
+    needs: [source, merge]
+    uses: ./.github/workflows/release-smoke.yml
+    with:
+      version: ${{ needs.source.outputs.version }}
+    permissions:
+      contents: read
+
+  publish:
+    needs: [source, desktop, smoke]
+    runs-on: ubuntu-latest
+    environment: desktop-release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: desktop-packages-*
+          path: release-assets
+          merge-multiple: true
+      - name: Install verifier prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev
+      - name: Verify every signature and generate the manifest
+        env:
+          RELEASE_VERSION: ${{ needs.source.outputs.version }}
+        run: |
+          mkdir -p desktop/core/dist/nedra-core frontend/dist
+          echo '<!doctype html>' > frontend/dist/index.html
+          cd desktop/src-tauri
+          cargo build --example verify_update
+          cd ../..
+          python desktop/release/manifest.py --artifacts release-assets --version "$RELEASE_VERSION" --commit "$GITHUB_SHA" --verifier desktop/src-tauri/target/debug/examples/verify_update --public-key release-assets/updater.pub
+          cd release-assets && sha256sum -c SHA256SUMS
+      - name: Stage and publish the complete stable release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ needs.source.outputs.version }}
+        run: python desktop/release/publish.py "$RELEASE_VERSION" release-assets

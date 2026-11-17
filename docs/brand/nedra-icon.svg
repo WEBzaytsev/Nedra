@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48" role="img" aria-label="Nedra">
+  <rect width="48" height="48" fill="#151515" />
+  <g fill="#B5F602">
+    <path d="M40 8H16L8 16V40H32L40 32V20H32V28L28 32H16V20L20 16H40V8Z" />
+    <path d="M24 20H28V28H20V24L24 20Z" />
+  </g>
+</svg>

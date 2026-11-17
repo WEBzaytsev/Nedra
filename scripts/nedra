@@ -1,0 +1,45 @@
+#!/bin/sh
+# Nedra CLI shortcut: runs the `nedra` command inside the backend
+# container, so a Docker-only install never needs Python or a repo clone.
+#
+#   ./nedra password list
+#
+# Symlink it onto your PATH to use it from anywhere:
+#   sudo ln -s "$(pwd)/nedra" /usr/local/bin/nedra
+#
+# Override the compose file with NEDRA_COMPOSE_FILE.
+set -eu
+
+RED='\033[31m'
+NC='\033[0m'
+
+die() {
+  printf '%b\n' "${RED}✗ $*${NC}" >&2
+  exit 1
+}
+
+target="$0"
+while [ -L "$target" ]; do
+  link="$(readlink "$target")"
+  case "$link" in
+    /*) target="$link" ;;
+    *) target="$(dirname "$target")/$link" ;;
+  esac
+done
+here="$(cd "$(dirname "$target")" && pwd)"
+
+compose="${NEDRA_COMPOSE_FILE:-$here/docker-compose.prod.yml}"
+
+[ -f "$compose" ] ||
+  die "No compose file at $compose. Run this from your Nedra folder, or set NEDRA_COMPOSE_FILE."
+
+command -v docker >/dev/null 2>&1 ||
+  die "Docker isn't installed or isn't on your PATH."
+
+if ! docker compose -f "$compose" ps --status running --services 2>/dev/null |
+  grep -qx backend; then
+  die "Nedra isn't running. Start it with:
+    docker compose -f $compose up -d"
+fi
+
+exec docker compose -f "$compose" exec backend nedra "$@"

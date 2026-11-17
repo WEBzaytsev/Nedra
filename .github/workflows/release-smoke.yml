@@ -1,0 +1,62 @@
+name: Release smoke test
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Published version to test (X.Y.Z, no leading v)"
+        required: true
+
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+
+jobs:
+  published:
+    name: Published ${{ inputs.version }} (${{ matrix.platform.slug }})
+    runs-on: ${{ matrix.platform.runner }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - runner: ubuntu-latest
+            slug: amd64
+          - runner: ubuntu-24.04-arm
+            slug: arm64
+    env:
+      RELEASE_VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate the release version
+        run: '[[ "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]'
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+
+      - name: Pull the published images
+        run: |
+          for image in backend frontend; do
+            reference="ghcr.io/webzaytsev/nedra-$image:$RELEASE_VERSION"
+            docker pull "$reference"
+            digest="$(docker image inspect "$reference" --format '{{index .RepoDigests 0}}')"
+            cosign verify "$digest" \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+              --certificate-identity "https://github.com/${{ github.repository }}/.github/workflows/release.yml@refs/tags/v$RELEASE_VERSION"
+            docker image inspect "$reference" \
+              --format '{{.Architecture}} {{json .RepoDigests}} {{json .Config.Labels}}'
+          done
+
+      - name: Exercise the published images with Compose
+        run: |
+          python3 docker/smoke/compose_smoke.py --tag "$RELEASE_VERSION" --prefix nedra-smoke-release \
+            --expect-version "$RELEASE_VERSION" \
+            --installer
+
+      - name: Install with the published installer
+        run: sh docker/smoke/published_installer.sh "$RELEASE_VERSION"

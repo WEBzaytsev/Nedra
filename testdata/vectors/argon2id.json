@@ -1,0 +1,114 @@
+{
+  "format": "ciphermoth-test-vectors/1",
+  "name": "argon2id",
+  "description": "Vault key derivation. key = base64url(Argon2id(password_utf8, salt, m=65536 KiB, t=3, p=4, length=32, version 0x13, no secret, no associated data)), 44 characters with '=' padding. The result is used directly as a Fernet key. No Unicode normalization is applied.",
+  "parameters": {
+    "memory_cost_kib": 65536,
+    "iterations": 3,
+    "lanes": 4,
+    "length": 32,
+    "salt_length": 16,
+    "version": 19
+  },
+  "vectors": [
+    {
+      "password": "Moth-Test-Vault-2026!",
+      "password_utf8_hex": "4d6f74682d546573742d5661756c742d3230323621",
+      "salt_hex": "00000000000000000000000000000000",
+      "key": "hPnhuNwRyWHS9yen4ewb1MPCDJr_bYKWfMSMRqRhdGE=",
+      "note": "ASCII"
+    },
+    {
+      "password": "correct horse battery staple",
+      "password_utf8_hex": "636f727265637420686f727365206261747465727920737461706c65",
+      "salt_hex": "ffffffffffffffffffffffffffffffff",
+      "key": "DvPYM9hgcsWNoGxep6E2IEl5UtvjA8JsC1a0NCf_TUI=",
+      "note": "spaces inside"
+    },
+    {
+      "password": "Mölle-Stern-2026",
+      "password_utf8_hex": "4dc3b66c6c652d537465726e2d32303236",
+      "salt_hex": "a1b2c3d4e5f60718293a4b5c6d7e8f90",
+      "key": "icw-Uq4stFIsA3pXeMuP5PqX7_QGxeylKqym42Gmcsk=",
+      "note": "NFC"
+    },
+    {
+      "password": "Mölle-Stern-2026",
+      "password_utf8_hex": "4d6fcc886c6c652d537465726e2d32303236",
+      "salt_hex": "a1b2c3d4e5f60718293a4b5c6d7e8f90",
+      "key": "rnA1vrpt155fUms4jMeIb1Sc9BXW7gMB1hM4EiCUwok=",
+      "note": "NFD form of the previous vector: no Unicode normalization, different key"
+    },
+    {
+      "password": "ключ-вольта-2026",
+      "password_utf8_hex": "d0bad0bbd18ed1872dd0b2d0bed0bbd18cd182d0b02d32303236",
+      "salt_hex": "0f1e2d3c4b5a69788796a5b4c3d2e1f0",
+      "key": "4fYpeQFXuZWrgwiVcw9DzPpBumMimK5NmRUEQGHKwCk=",
+      "note": "Cyrillic"
+    },
+    {
+      "password": "パスワード2026!",
+      "password_utf8_hex": "e38391e382b9e383afe383bce383893230323621",
+      "salt_hex": "13579bdf02468ace13579bdf02468ace",
+      "key": "ONiBZkwasQW2JZ9ZlV5aR_BHL55yT7GFdq_kOovu5pw=",
+      "note": "Japanese"
+    },
+    {
+      "password": "🦋 moth 🦋 2026",
+      "password_utf8_hex": "f09fa68b206d6f746820f09fa68b2032303236",
+      "salt_hex": "deadbeefdeadbeefdeadbeefdeadbeef",
+      "key": "Vcy2Wrl_Fl5PP9Gb1baPHw34eIzkSX61g9lUq4VCiAI=",
+      "note": "emoji, 4-byte UTF-8"
+    },
+    {
+      "password": "סיסמה-2026-ok",
+      "password_utf8_hex": "d7a1d799d7a1d79ed7942d323032362d6f6b",
+      "salt_hex": "0123456789abcdeffedcba9876543210",
+      "key": "g5xUwO4pYim-DYEwUgDSg3Lk2R53Us4h2VABslCsN-w=",
+      "note": "right-to-left"
+    },
+    {
+      "password": "two  spaces\tand\ttabs 2026",
+      "password_utf8_hex": "74776f202073706163657309616e6409746162732032303236",
+      "salt_hex": "55555555555555555555555555555555",
+      "key": "jGRtQHD43QwenJ91QO9qO39iZA9-WZYRJkt3x4hKx0M=",
+      "note": "inner whitespace is kept"
+    },
+    {
+      "password": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx!",
+      "password_utf8_hex": "78787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787878787821",
+      "salt_hex": "77777777777777777777777777777777",
+      "key": "0g1P7AAv2iAAovDb8CkklfawOQvX9rGNVn7jb6sBKyo=",
+      "note": "1024 characters, the API maximum"
+    }
+  ],
+  "api_input": {
+    "description": "The API strips the master password with pydantic's str_strip_whitespace (Unicode White_Space) before hashing and derivation. Characters such as U+200B or U+001C are not stripped, unlike Python's str.strip(). kdf_input is what reaches Argon2id and bcrypt.",
+    "cases": [
+      {
+        "submitted": "  Moth-Test-Vault-2026!  ",
+        "kdf_input": "Moth-Test-Vault-2026!"
+      },
+      {
+        "submitted": "\tMoth-Test-Vault-2026!\n",
+        "kdf_input": "Moth-Test-Vault-2026!"
+      },
+      {
+        "submitted": " Moth-Test-Vault-2026!　",
+        "kdf_input": "Moth-Test-Vault-2026!"
+      },
+      {
+        "submitted": "​Moth-Test-Vault-2026!",
+        "kdf_input": "​Moth-Test-Vault-2026!"
+      },
+      {
+        "submitted": "\u001cMoth-Test-Vault-2026!",
+        "kdf_input": "\u001cMoth-Test-Vault-2026!"
+      },
+      {
+        "submitted": "Moth Test Vault 2026!",
+        "kdf_input": "Moth Test Vault 2026!"
+      }
+    ]
+  }
+}

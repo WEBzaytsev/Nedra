@@ -1,0 +1,52 @@
+# Local development stack: build from source with hot-reload (UI :3000, API :8000).
+# The real vault runs from prebuilt GHCR images via docker-compose.prod.yml.
+name: nedra-dev
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: docker/backend/Dockerfile.dev
+    command: uvicorn main:app --host 0.0.0.0 --port 80 --reload --reload-dir /app/src
+    ports:
+      - "127.0.0.1:8000:80"
+    environment:
+      CORS_ORIGINS: '["http://localhost:3000"]'
+      NEDRA_INACTIVITY_MS: ${NEDRA_INACTIVITY_MS:-120000}
+      NEDRA_HIDDEN_MS: ${NEDRA_HIDDEN_MS:-60000}
+      NEDRA_WARN_BEFORE_MS: ${NEDRA_WARN_BEFORE_MS:-60000}
+      NEDRA_DEBOUNCE_MS: ${NEDRA_DEBOUNCE_MS:-1000}
+      NEDRA_CLIPBOARD_CLEAR_MS: ${NEDRA_CLIPBOARD_CLEAR_MS:-30000}
+      NEDRA_UPDATE_CHECK_ENABLED: ${NEDRA_UPDATE_CHECK_ENABLED:-true}
+    volumes:
+      - ./backend:/app/src
+      - vault_data:/data
+    restart: unless-stopped
+    networks:
+      - nedra
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend/Dockerfile.dev
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      VITE_API_URL: http://localhost:8000/api
+      VITE_PORT: "3000"
+      VITE_USE_POLLING: "true"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    stdin_open: true
+    restart: unless-stopped
+    depends_on:
+      - backend
+    networks:
+      - nedra
+
+volumes:
+  vault_data:
+
+networks:
+  nedra:

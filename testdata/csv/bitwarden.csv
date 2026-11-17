@@ -1,0 +1,6 @@
+folder,favorite,type,name,notes,fields,reprompt,login_uri,login_username,login_password,login_totp
+Work,1,login,GitHub,"multi
+line note",,0,https://github.com,moth,Bw-Pass-1,otpauth://totp/GitHub:moth?secret=JBSWY3DPEHPK3PXP&issuer=GitHub
+,,note,Secure note,note body,,0,,,,
+Personal,,login,Mail ✉,,"Recovery: abc",0,https://mail.test,moth@example.com,Bw-Pass-2,steam://NOTBASE32!
+,,card,Visa ending 4242,,,0,,,,
