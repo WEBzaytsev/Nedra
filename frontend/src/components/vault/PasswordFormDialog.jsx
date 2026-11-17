@@ -277,14 +277,8 @@ const PasswordFormDialog = ({
   }, [editTarget, dirty]);
 
   const isNote = form.kind === "note";
-  const selectedFolder = folderOptions.find(
-    (folder) => folder.id === form.folder_id || (!form.folder_id && folder.name === form.folder)
-  );
-  const folderSelectValue = selectedFolder
-    ? String(selectedFolder.id)
-    : form.folder
-      ? `legacy:${form.folder}`
-      : "";
+  const selectedFolder = folderOptions.find((folder) => folder.id === form.folder_id);
+  const folderSelectValue = selectedFolder ? String(selectedFolder.id) : "";
   const folderSelectOptions = folderOptions.map((folder) => ({
     value: String(folder.id),
     content: folder.name,
@@ -624,7 +618,7 @@ const PasswordFormDialog = ({
                 const match = folderOptions.find((folder) => String(folder.id) === value);
                 setForm((previous) => ({
                   ...previous,
-                  folder: match?.name ?? (value.startsWith("legacy:") ? previous.folder : ""),
+                  folder: match?.name ?? "",
                   folder_id: match?.id ?? null,
                 }));
                 dismiss("entry-form-error");

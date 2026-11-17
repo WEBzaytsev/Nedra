@@ -22,17 +22,6 @@ from helpers import VaultKey
 from vault_sessions import Scope, VaultSessions
 
 SESSION_HEADER = "x-nedra-session"
-LEGACY_SESSION_HEADER = "x-ciphermoth-session"
-
-
-async def get_session_header(
-    canonical: Annotated[str | None, Header(alias=SESSION_HEADER)] = None,
-    legacy: Annotated[str | None, Header(alias=LEGACY_SESSION_HEADER)] = None,
-) -> str | None:
-    """Accept one transition header, but never choose between conflicting tokens."""
-    if canonical is not None and legacy is not None and canonical != legacy:
-        raise InvalidRequest("Conflicting Nedra session headers.")
-    return canonical if canonical is not None else legacy
 
 
 async def get_database(request: Request) -> Database:
@@ -134,11 +123,11 @@ MasterPasswordCRUDDep = Annotated[MasterPasswordCRUD, Depends(get_master_passwor
 SettingsCRUDDep = Annotated[SettingsCRUD, Depends(get_settings_crud)]
 
 VaultAccessDep = Annotated[VaultAccess, Depends(get_vault_access)]
-SessionTokenHeader = Annotated[str | None, Depends(get_session_header)]
+SessionTokenHeader = Annotated[str | None, Header(alias=SESSION_HEADER)]
 
 
 async def get_credential(
-    token: SessionTokenHeader, vault_sessions: VaultSessionsDep
+    vault_sessions: VaultSessionsDep, token: SessionTokenHeader = None
 ) -> SessionToken:
     """
     The session token a request carries in the ``x-nedra-session`` header.
@@ -173,7 +162,7 @@ async def get_auth_context_quietly(
 
 
 async def get_extension_credential(
-    token: SessionTokenHeader, vault_sessions: VaultSessionsDep
+    vault_sessions: VaultSessionsDep, token: SessionTokenHeader = None
 ) -> SessionToken:
     if token is None:
         raise SessionRequired("The vault is locked. Unlock it first.")
@@ -304,9 +293,6 @@ _PATH_CHANGED = (
 async def get_entry_name(
     password_name: Annotated[str, Path()],
     x_nedra_entry: Annotated[str | None, Header(alias="x-nedra-entry")] = None,
-    x_ciphermoth_entry: Annotated[
-        str | None, Header(alias="x-ciphermoth-entry")
-    ] = None,
 ) -> str:
     """
     The entry a request names. Current clients also send the intended name in
@@ -316,14 +302,7 @@ async def get_entry_name(
     is present and does not match, the request is refused.
     """
     name = entry_name(password_name)
-    if (
-        x_nedra_entry is not None
-        and x_ciphermoth_entry is not None
-        and x_nedra_entry != x_ciphermoth_entry
-    ):
-        raise InvalidRequest("Conflicting Nedra entry headers.")
-    intended = x_nedra_entry if x_nedra_entry is not None else x_ciphermoth_entry
-    if intended is not None and unquote(intended) != name:
+    if x_nedra_entry is not None and unquote(x_nedra_entry) != name:
         raise InvalidRequest(_PATH_CHANGED)
     return name
 

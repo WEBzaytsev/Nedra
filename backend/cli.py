@@ -56,8 +56,8 @@ _BULK = "bulk-entry-actions"
 _BULK_MOVE = "bulk-entry-move"
 _SECURITY_FACTOR_STEP_UP = "security-factor-step-up"
 _SERVER_TOO_OLD = (
-    "This server runs a Nedra release older than 1.5.0, which this CLI no "
-    "longer supports. Update the server, or use Nedra CLI 1.5.x."
+    "This server is incompatible with this Nedra CLI. Install the same Nedra "
+    "version on the server and the operator workstation."
 )
 _NO_UNLOCK_ROUTE = (
     "No Nedra unlock route at {url!r}. Check that NEDRA_API_URL ends "
@@ -67,10 +67,7 @@ _NO_UNLOCK_ROUTE = (
 
 
 def _api_url() -> str:
-    return os.environ.get(
-        "NEDRA_API_URL",
-        os.environ.get("CIPHERMOTH_API_URL", "http://localhost:8000/api"),
-    ).rstrip("/")
+    return os.environ.get("NEDRA_API_URL", "http://localhost:8000/api").rstrip("/")
 
 
 def _die(msg: str) -> NoReturn:
@@ -207,7 +204,7 @@ class _Vault:
             base64.urlsafe_b64encode(
                 hmac.new(
                     token.encode(),
-                    f"ciphermoth/security-step-up-context/v1\0{action}\0{fields_json}".encode(),
+                    f"nedra/security-step-up-context/v1\0{action}\0{fields_json}".encode(),
                     hashlib.sha256,
                 ).digest()
             )
@@ -807,7 +804,7 @@ def _trash_params(vault: _Vault, name: str, entry_id: int | None) -> dict[str, i
 @app.command(
     "backup",
     help=(
-        "Save a complete encrypted backup (.cmbackup): every entry, the trash, "
+        "Save a complete encrypted backup (.nedrabackup): every entry, the trash, "
         "history, attachments and settings, protected by your master password."
     ),
 )
@@ -829,7 +826,7 @@ def cmd_backup(
                 stamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
                 with tempfile.NamedTemporaryFile(
                     prefix=f"nedra_backup_{stamp}_",
-                    suffix=".cmbackup.partial",
+                    suffix=".nedrabackup.partial",
                     dir=out_dir,
                     delete=False,
                 ) as output:
@@ -941,15 +938,10 @@ def _validate_import_file(file: Path, on_conflict: str) -> None:
 
 @app.command(
     "import",
-    help=(
-        "Restore a Nedra backup: a complete backup (.cmbackup) or a backup "
-        "ZIP from CipherMoth 2.0 or earlier."
-    ),
+    help="Restore a complete Nedra backup (.nedrabackup).",
 )
 def cmd_import(
-    file: Annotated[
-        Path, typer.Argument(help="Path to the backup (.cmbackup or legacy .zip).")
-    ],
+    file: Annotated[Path, typer.Argument(help="Path to the backup (.nedrabackup).")],
     on_conflict: Annotated[
         str,
         typer.Option(

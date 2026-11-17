@@ -21,14 +21,13 @@ from tests.support import (
     db_execute,
     db_snapshot,
     entry,
-    legacy_backup_zip,
     name_index,
     unlock,
     wait_for_queued_requests,
     write_lock_held,
 )
 
-ALPHA = entry("alpha", "alpha-Value-1", username="moth")
+ALPHA = entry("alpha", "alpha-Value-1", username="user")
 SETTINGS = {
     "inactivity_ms": 300_000,
     "warn_before_ms": 30_000,
@@ -88,25 +87,10 @@ WRITES: dict[str, Write] = {
     "attachment-delete": lambda c, h: c.delete(
         "/passwords/alpha/attachments/1", headers=h
     ),
-    "import-zip": lambda c, h: c.post(
-        "/passwords/import",
-        data={"master_password": MASTER_PASSWORD, "on_conflict": "overwrite"},
-        files={
-            "file": (
-                "b.zip",
-                legacy_backup_zip(
-                    [{"name": "alpha", "value": "z"}, {"name": "zip", "value": "z"}],
-                    MASTER_PASSWORD,
-                ),
-                "application/zip",
-            )
-        },
-        headers=h,
-    ),
     "import-backup": lambda c, h: c.post(
         "/passwords/import",
         data={"master_password": MASTER_PASSWORD, "on_conflict": "overwrite"},
-        files={"file": ("b.cmbackup", COMPLETE_BACKUP, "application/octet-stream")},
+        files={"file": ("b.nedrabackup", COMPLETE_BACKUP, "application/octet-stream")},
         headers=h,
     ),
     "import-csv": lambda c, h: c.post(
@@ -400,4 +384,4 @@ async def test_backup_of_a_vault_with_an_undecryptable_entry_fails_without_side_
     assert resp.status_code == 500
     assert resp.json()["code"] == "vault_damaged"
     assert await db_snapshot() == before
-    assert io.BytesIO(resp.content).read(8) != b"CMBACKUP"
+    assert io.BytesIO(resp.content).read(8) != b"NEDRABKP"

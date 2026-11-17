@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from backup_format import MAX_BACKUP_BYTES, MAX_FRAMES
+from backup_format import MAX_BACKUP_BYTES, MAX_FRAMES, MAX_MANIFEST_BYTES
 from errors import InvalidRequest, VaultBusy
 from settings import get_storage_settings
 from storage import (
@@ -33,6 +33,7 @@ _BUSY_CODES = frozenset({5, 6})
 _BUSY_DETAIL = "The vault is busy with another change. Try again in a moment."
 _ENTRY_BACKUP_OVERHEAD = 32 * 1024
 _ATTACHMENT_BACKUP_OVERHEAD = 256
+_FOLDER_MANIFEST_OVERHEAD = 128
 _BACKUP_FIXED_OVERHEAD = 4096
 
 
@@ -55,6 +56,11 @@ async def _enforce_backup_capacity(session: AsyncSession) -> None:
             )
         )
     ).one()
+    folder_bytes, folder_count = (
+        await session.execute(
+            text("SELECT coalesce(sum(length(document)), 0), count(*) FROM folders")
+        )
+    ).one()
     if 1 + int(entry_count) + int(attachment_count) > MAX_FRAMES:
         raise InvalidRequest(
             "This change would exceed the vault's complete-backup frame limit. "
@@ -65,11 +71,23 @@ async def _enforce_backup_capacity(session: AsyncSession) -> None:
         + int(entry_count) * _ENTRY_BACKUP_OVERHEAD
         + int(attachment_bytes)
         + int(attachment_count) * _ATTACHMENT_BACKUP_OVERHEAD
+        + int(folder_bytes)
+        + int(folder_count) * _FOLDER_MANIFEST_OVERHEAD
         + _BACKUP_FIXED_OVERHEAD
     )
     if estimated > MAX_BACKUP_BYTES:
         raise InvalidRequest(
             "This change would exceed the vault's 1 GiB complete-backup capacity. "
+            "Nothing was saved."
+        )
+    manifest_estimated = (
+        int(folder_bytes)
+        + int(folder_count) * _FOLDER_MANIFEST_OVERHEAD
+        + _BACKUP_FIXED_OVERHEAD
+    )
+    if manifest_estimated > MAX_MANIFEST_BYTES:
+        raise InvalidRequest(
+            "This change would exceed the vault's complete-backup manifest capacity. "
             "Nothing was saved."
         )
 

@@ -1,5 +1,3 @@
-import base64
-import io
 import os
 import tempfile
 from collections.abc import AsyncIterator
@@ -21,7 +19,6 @@ from tests.support import (
     create_vault,
     db_execute,
     entry,
-    legacy_backup_zip,
 )
 
 MIB = 1024 * 1024
@@ -126,7 +123,7 @@ async def test_oversized_chunked_request_is_refused(
     client: httpx.AsyncClient, disk_spills: list[str]
 ) -> None:
     headers = await _vault_with_entry(client)
-    boundary = "moth-boundary"
+    boundary = "user-boundary"
     body = (
         (
             f"--{boundary}\r\n"
@@ -216,28 +213,6 @@ async def test_csv_import_over_cap_is_rejected(
     assert len(await db_execute("SELECT id FROM entries")) == 1
 
 
-async def test_backup_import_above_old_threshold_stays_in_memory(
-    client: httpx.AsyncClient, disk_spills: list[str]
-) -> None:
-    headers = await _vault_with_entry(client)
-    big_value = base64.b64encode(os.urandom(int(1.5 * MIB))).decode()
-    archive = legacy_backup_zip(
-        [{"name": "restored", "value": big_value}], MASTER_PASSWORD
-    )
-    assert len(archive) > OLD_SPOOL_THRESHOLD
-
-    resp = await client.post(
-        "/passwords/import",
-        data={"master_password": MASTER_PASSWORD, "on_conflict": "skip"},
-        files={"file": ("backup.zip", io.BytesIO(archive), "application/zip")},
-        headers=headers,
-    )
-    assert resp.status_code == 200, resp.text
-    assert disk_spills == []
-    resp = await client.get("/passwords/restored", headers=headers)
-    assert resp.json()["password_value"] == big_value
-
-
 def test_route_limits() -> None:
     assert body_limit_for("POST", "/api/passwords/box/attachments") == (
         ATTACHMENT_MAX_BODY_BYTES
@@ -290,31 +265,6 @@ async def test_largest_csv_v145_accepted_still_imports(
     assert disk_spills == []
 
 
-async def test_largest_backup_zip_v145_accepted_still_imports(
-    client: httpx.AsyncClient, disk_spills: list[str]
-) -> None:
-    headers = await _vault_with_entry(client)
-    size = int(9.5 * MIB)
-    archive = b""
-    for _ in range(6):
-        value = base64.b64encode(os.urandom(size)).decode()
-        archive = legacy_backup_zip([{"name": "big", "value": value}], MASTER_PASSWORD)
-        if 9.5 * MIB < len(archive) <= IMPORT_CAP:
-            break
-        size = int(size * (9.8 * MIB) / len(archive))
-    assert 9.5 * MIB < len(archive) <= IMPORT_CAP
-
-    resp = await client.post(
-        "/passwords/import",
-        data={"master_password": MASTER_PASSWORD, "on_conflict": "skip"},
-        files={"file": ("backup.zip", archive, "application/zip")},
-        headers=headers,
-    )
-    assert resp.status_code == 200, resp.text
-    assert resp.json()["imported"] == 1
-    assert disk_spills == []
-
-
 async def test_oversized_csv_and_malformed_large_backup_are_rejected(
     client: httpx.AsyncClient,
 ) -> None:
@@ -333,7 +283,7 @@ async def test_oversized_csv_and_malformed_large_backup_are_rejected(
         headers=headers,
     )
     assert resp.status_code == 400, resp.text
-    assert "valid Nedra backup" in resp.json()["detail"]
+    assert resp.json()["detail"] == "The file is not a Nedra backup."
 
 
 async def test_imports_over_the_route_limit_are_refused(

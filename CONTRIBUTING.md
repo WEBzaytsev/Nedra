@@ -80,7 +80,7 @@ What the suite protects, and where:
 | Failed or interrupted writes change nothing, also when the server is killed right before a commit with megabytes of uncommitted pages in the WAL | `test_failures.py`, `test_process_kill.py` (with `tests/paused_server.py`) |
 | The CLI and `scripts/nedra` keep their contracts | `test_cli.py` |
 
-Tests authenticate the way clients do: `auth(token)` sends a session token from `create_vault()` or `unlock()`. `stored_vault_key()` derives the key from the database when a test needs the key itself (to check ciphertext, or to prove the API never returns or accepts it), and `retired_key_header(key)` builds the v1.4.x header that must always be refused.
+Tests authenticate the way clients do: `auth(token)` sends a session token from `create_vault()` or `unlock()`. `stored_vault_key()` derives the key from the database only when a test needs the key itself to check ciphertext or other storage invariants.
 
 `backend/tests/integrity.py` reads a vault and decrypts every field strictly, reporting what the application's lenient read path would hide. Use it whenever a change touches storage or encryption: `read_vault` before and after, then `assert_same_vault`. To hold SQLite's write lock from a test (a second process mid-write), use `write_lock_held()`; `wait_for_queued_requests(n)` waits until n requests are queued behind it.
 
@@ -92,7 +92,7 @@ The vault is one SQLite file (`vault.db` in `NEDRA_DATA_DIR`, `/data` in the ima
 
 How writes stay correct without row locks: a `GET` request runs in a read transaction and sees one consistent snapshot; every other request starts with `BEGIN IMMEDIATE`, so it holds SQLite's single write lock from its first statement (including the session key check) until it commits. Writers are therefore serialized, and a master password change can never interleave with another write. Keep two rules: **a `GET` route must never write**, and anything slow (key derivation) runs before the write lock is taken, as `/unlock`, `/create` and the master password change do. Session tokens are checked in memory before any database access, so a request without a live session never waits for or holds the write lock. A request that cannot get the lock within the busy timeout gets `503` with `"code": "busy"`.
 
-The file records its schema in `PRAGMA user_version` (`storage.SCHEMA_VERSION`, currently 9). Nedra refuses an unknown or newer schema without changing it. Supported older schemas are upgraded only through explicit `nedra-admin migrate-*` commands while the backend is stopped. Every migration validates its exact source schema, creates and checks a rollback snapshot, applies the schema and `user_version` changes in one transaction, and has tests for both success and interruption. Any new schema must extend that ordered chain and its rollback documentation.
+The file records its schema in `PRAGMA user_version` (`storage.SCHEMA_VERSION`, currently 10). Nedra accepts only that exact schema and refuses every other schema without changing it. A release that changes this boundary requires a separately reviewed offline conversion before the new runtime starts; the runtime and administration CLI contain no schema migration path.
 
 ## Configuration
 

@@ -18,7 +18,7 @@ export const saveFile = async (blob, filename) =>
   });
 
 const RETURN_TO = "nedraReturnTo";
-const LEGACY_RETURN_TO = "ciphermothReturnTo";
+
 const protectedPath = (value) =>
   typeof value === "string" && /^\/(?:passwords|users|entries\/new)\/?(?:[?#]|$)/.test(value);
 
@@ -28,9 +28,8 @@ export const rememberReturnTo = () => {
 };
 
 export const enterVault = (returnTo) => {
-  const remembered = sessionStorage.getItem(RETURN_TO) ?? sessionStorage.getItem(LEGACY_RETURN_TO);
+  const remembered = sessionStorage.getItem(RETURN_TO);
   sessionStorage.removeItem(RETURN_TO);
-  sessionStorage.removeItem(LEGACY_RETURN_TO);
   const candidate = returnTo ?? remembered;
   const path = protectedPath(candidate) ? candidate : "/passwords";
   if (!IS_DESKTOP) return window.location.replace(path);

@@ -3,16 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { IS_DESKTOP } from "./index";
 
 const bindingKey = (username) => `nedraBiometricDevice:${username.toLowerCase()}`;
-const legacyBindingKey = (username) => `ciphermothBiometricDevice:${username.toLowerCase()}`;
-
-const storedBinding = (username) => {
-  const key = bindingKey(username);
-  const legacy = legacyBindingKey(username);
-  const value = localStorage.getItem(key) ?? localStorage.getItem(legacy);
-  if (value && !localStorage.getItem(key)) localStorage.setItem(key, value);
-  localStorage.removeItem(legacy);
-  return value;
-};
+const storedBinding = (username) => localStorage.getItem(bindingKey(username));
 
 export const biometricAvailable = () =>
   IS_DESKTOP ? invoke("biometric_available").catch(() => false) : Promise.resolve(false);

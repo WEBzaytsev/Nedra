@@ -9,7 +9,7 @@ import MasterPassword from "./masterPassword";
 
 const KEY = "QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVphYmNkZWY=";
 const TOKEN = "kM3x1y8Qe0bWv7c2Z9pL4tR6sN5aH1jD0fG3uY8iO2w";
-const USER = { id: 7, username: "moth-admin", role: "admin", active: true };
+const USER = { id: 7, username: "user-admin", role: "admin", active: true };
 const originalAdapter = apiClient.defaults.adapter;
 
 let browser;
@@ -34,7 +34,7 @@ const build = (table) => {
   };
 };
 
-const authenticate = (actions, endpoint = "/auth/login", password = "Moth-Test-Vault-2026!") =>
+const authenticate = (actions, endpoint = "/auth/login", password = "Nedra-Test-Vault-2026!") =>
   actions.authenticate({ endpoint, username: USER.username, password });
 
 describe("authenticate", () => {
@@ -59,7 +59,7 @@ describe("authenticate", () => {
     expect(current().loading).toBe(false);
     expect(JSON.parse(seen[0].data)).toEqual({
       username: USER.username,
-      password: "Moth-Test-Vault-2026!",
+      password: "Nedra-Test-Vault-2026!",
     });
   });
 

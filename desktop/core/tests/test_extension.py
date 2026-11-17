@@ -35,7 +35,7 @@ def test_a_paired_browser_gets_an_extension_session_only_while_unlocked(core):
     status, body = extension(core, "extension_open", browser="Chrome", client=CLIENT)
     assert (status, body["code"]) == (401, "locked")
     token = create(core)
-    entry(core, token, url="https://github.com", username="moth")
+    entry(core, token, url="https://github.com", username="user")
     assert extension(core, "extension_status") == (200, {"unlocked": True})
     status, body = extension(core, "extension_open", browser="Chrome", client=CLIENT)
     assert status == 200 and len(body["session_token"]) == 43
@@ -43,7 +43,7 @@ def test_a_paired_browser_gets_an_extension_session_only_while_unlocked(core):
     found = api(
         core, "POST", "/extension/matches", {"origin": "https://github.com"}, ext
     )
-    assert found[0] == 200 and found[1]["logins"][0]["username"] == "moth"
+    assert found[0] == 200 and found[1]["logins"][0]["username"] == "user"
     # It is an extension session: the vault itself refuses it.
     assert api(core, "GET", "/passwords", token=ext)[0] == 403
     # Reading the status is not activity and never needs the token.

@@ -2709,7 +2709,7 @@ for (const [width, language, theme] of [
       await axe(page);
       const download = page.waitForEvent("download");
       await apply.click();
-      assert.match((await download).suggestedFilename(), /\.cmbackup$/);
+      assert.match((await download).suggestedFilename(), /\.nedrabackup$/);
       await page.waitForURL("**/passwords");
       assert.equal(requests, 3);
       if (width < 600) {
@@ -3213,7 +3213,7 @@ test("phone uncommon states keep management-only access, encrypted import recove
     await capture("users-empty");
     await page.goto(`${origin}/passwords?tool=import`);
     await page.locator('input[type="file"]').setInputFiles({
-      name: "Synthetic.cmbackup",
+      name: "Synthetic.nedrabackup",
       mimeType: "application/octet-stream",
       buffer: Buffer.from("synthetic UI fixture only"),
     });
@@ -4221,7 +4221,7 @@ if (process.env.NEDRA_LAYOUT_MATRIX) {
           await dismiss();
           await go("import");
           await page.locator('input[type="file"]').setInputFiles({
-            name: "Synthetic.cmbackup",
+            name: "Synthetic.nedrabackup",
             mimeType: "application/octet-stream",
             buffer: Buffer.from("synthetic UI fixture only"),
           });

@@ -26,9 +26,9 @@ export const BADGE_MS = 2_000;
 // Frozen page/extension protocol: an old extension must keep working when the
 // web application updates first, and an updated extension must work with the
 // previous web application until the next page load.
-export const BRIDGE_SCRIPT_ID = "ciphermoth-vault-bridge";
-export const SESSION_MESSAGE = "ciphermoth:extension-session";
-export const CONNECTED_MESSAGE = "ciphermoth:extension-connected";
+export const BRIDGE_SCRIPT_ID = "nedra-vault-bridge";
+export const SESSION_MESSAGE = "nedra:extension-session";
+export const CONNECTED_MESSAGE = "nedra:extension-connected";
 export const TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 export const HANDOFF_REDEEM_PATTERN = /^[A-Za-z0-9_-]{22,43}$/;
 

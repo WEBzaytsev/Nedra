@@ -45,7 +45,7 @@ async def _rich_vault(client: httpx.AsyncClient) -> str:
     login = entry(
         "GitHub",
         "first-Value-1",
-        username="moth@example.com",
+        username="user@example.com",
         url="https://github.com",
         totp_secret="JBSWY3DPEHPK3PXP",
         description="work",
@@ -344,7 +344,7 @@ async def test_a_complete_backup_restores_every_entry_losslessly(
     resp = await client.post(
         "/passwords/import",
         data={"master_password": MASTER_PASSWORD},
-        files={"file": ("b.cmbackup", archive, "application/octet-stream")},
+        files={"file": ("b.nedrabackup", archive, "application/octet-stream")},
         headers=auth(token),
     )
     assert resp.status_code == 200, resp.text

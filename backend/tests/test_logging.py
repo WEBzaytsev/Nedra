@@ -5,15 +5,13 @@ import pytest
 
 from crud.password import PasswordCRUD
 from tests.support import (
-    MASTER_PASSWORD,
     auth,
     create_vault,
     entry,
-    retired_key_header,
     stored_vault_key,
 )
 
-SECRET_NAME = "bank-of-moth-private"
+SECRET_NAME = "bank-of-user-private"
 SECRET_QUERY = "query-secret-7f3a"
 SECRET_MESSAGE = "row value hunter2-plaintext"
 
@@ -93,33 +91,6 @@ async def test_database_errors_do_not_leak_statement_parameters(
     logged = server_logs(capture_all)
     assert SECRET_NAME not in logged
     assert "api.endpoints.password.create_password" in logged
-
-
-async def test_rejected_keys_are_not_logged(
-    client: httpx.AsyncClient, capture_all: pytest.LogCaptureFixture
-) -> None:
-    token = await create_vault(client)
-    key = await stored_vault_key()
-    forged = key[:-6] + "AAAAA="
-    capture_all.clear()
-
-    for value in (key, forged):
-        for headers in (
-            retired_key_header(value),
-            auth(token) + retired_key_header(value),
-        ):
-            resp = await client.get("/passwords", headers=headers)
-            assert resp.status_code == 403
-    resp = await client.post(
-        "/master_password/check", json={"master_password": MASTER_PASSWORD}
-    )
-    assert resp.status_code == 410
-
-    logged = server_logs(capture_all)
-    assert forged not in logged
-    assert key not in logged
-    assert token not in logged
-    assert MASTER_PASSWORD not in logged
 
 
 async def test_session_tokens_and_keys_are_never_logged(

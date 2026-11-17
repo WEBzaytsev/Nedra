@@ -2,9 +2,7 @@ import { IS_DESKTOP } from "./platform";
 let desktopSession = null;
 const SESSION = "nedraSession";
 const USER = "nedraUser";
-const LEGACY_SESSION = "ciphermothSession";
-const LEGACY_USER = "ciphermothUser";
-const LEGACY_KEY = "keyDerivation";
+
 export const LOGOUT_NOTICE = "logout_notice";
 
 export const setSessionToken = (token) => {
@@ -15,10 +13,7 @@ export const setSessionToken = (token) => {
 
 export const getSessionToken = () => {
   if (IS_DESKTOP) return desktopSession;
-  const token = sessionStorage.getItem(SESSION) ?? sessionStorage.getItem(LEGACY_SESSION);
-  if (token && !sessionStorage.getItem(SESSION)) sessionStorage.setItem(SESSION, token);
-  sessionStorage.removeItem(LEGACY_SESSION);
-  return token;
+  return sessionStorage.getItem(SESSION);
 };
 export const isAuth = () => !!getSessionToken();
 export const setCurrentUser = (user) => {
@@ -27,22 +22,15 @@ export const setCurrentUser = (user) => {
 };
 export const getCurrentUser = () => {
   try {
-    const value = sessionStorage.getItem(USER) ?? sessionStorage.getItem(LEGACY_USER);
-    if (value && !sessionStorage.getItem(USER)) sessionStorage.setItem(USER, value);
-    sessionStorage.removeItem(LEGACY_USER);
+    const value = sessionStorage.getItem(USER);
     return JSON.parse(value);
   } catch {
     return null;
   }
 };
 
-export const forgetLegacyKey = () => sessionStorage.removeItem(LEGACY_KEY);
-
 export const clearSession = () => {
   desktopSession = null;
   sessionStorage.removeItem(SESSION);
   sessionStorage.removeItem(USER);
-  sessionStorage.removeItem(LEGACY_SESSION);
-  sessionStorage.removeItem(LEGACY_USER);
-  forgetLegacyKey();
 };

@@ -9,18 +9,16 @@ from tests.support import (
     create_vault,
     db_execute,
     entry,
-    legacy_backup_zip,
     reset_vault,
-    stored_vault_key,
     unlock,
 )
 
 FULL_LOGIN = entry(
     "GitHub #work",
     "gh-Secret-1",
-    username="moth@example.com",
+    username="user@example.com",
     url="https://github.com",
-    totp_secret="otpauth://totp/GitHub:moth?secret=jbsw y3dp ehpk 3pxp&issuer=GitHub",
+    totp_secret="otpauth://totp/GitHub:user?secret=jbsw y3dp ehpk 3pxp&issuer=GitHub",
     description="work account",
     tags=["dev", " dev ", "ops"],
     custom_fields=[
@@ -74,11 +72,6 @@ async def test_vault_lifecycle_and_unlock(client: httpx.AsyncClient) -> None:
     assert len(tokens) == 3
     for token in tokens:
         assert (await client.get("/passwords", headers=auth(token))).status_code == 200
-    resp = await client.post(
-        "/master_password/check", json={"master_password": MASTER_PASSWORD}
-    )
-    assert resp.status_code == 410
-    assert await stored_vault_key() not in resp.text
     resp = await client.post(
         "/master_password/unlock", json={"master_password": WRONG_MASTER_PASSWORD}
     )
@@ -290,8 +283,8 @@ async def test_backup_export_and_restore_into_a_fresh_vault(
     )
     assert resp.status_code == 200
     archive = resp.content
-    assert archive.startswith(b"CMBACKUP")
-    for secret in (b"GitHub #work", "Wi-Fi ключ".encode(), b"ciphermoth-backup"):
+    assert archive.startswith(b"NEDRABKP")
+    for secret in (b"GitHub #work", "Wi-Fi ключ".encode(), b"nedra-backup"):
         assert secret not in archive
     exported = await client.get("/passwords", headers=headers)
 
@@ -301,14 +294,14 @@ async def test_backup_export_and_restore_into_a_fresh_vault(
     resp = await client.post(
         "/passwords/import",
         data={"master_password": WRONG_MASTER_PASSWORD},
-        files={"file": ("b.cmbackup", archive, "application/octet-stream")},
+        files={"file": ("b.nedrabackup", archive, "application/octet-stream")},
         headers=auth(new_key),
     )
     assert resp.status_code == 403
     resp = await client.post(
         "/passwords/import",
         data={"master_password": MASTER_PASSWORD},
-        files={"file": ("b.cmbackup", archive, "application/octet-stream")},
+        files={"file": ("b.nedrabackup", archive, "application/octet-stream")},
         headers=auth(new_key),
     )
     assert resp.json()["imported"] == 2
@@ -318,18 +311,6 @@ async def test_backup_export_and_restore_into_a_fresh_vault(
     assert [{f: p[f] for f in fields} for p in restored.json()] == [
         {f: p[f] for f in fields} for p in exported.json()
     ]
-
-    legacy = legacy_backup_zip(
-        [{"name": "legacy", "value": "v1-backup", "description": "old format"}],
-        MASTER_PASSWORD,
-    )
-    resp = await client.post(
-        "/passwords/import",
-        data={"master_password": MASTER_PASSWORD},
-        files={"file": ("old.zip", legacy, "application/zip")},
-        headers=auth(new_key),
-    )
-    assert resp.json()["imported"] == 1
 
 
 async def test_settings_round_trip_and_validation(client: httpx.AsyncClient) -> None:

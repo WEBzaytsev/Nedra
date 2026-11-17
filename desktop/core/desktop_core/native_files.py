@@ -26,11 +26,11 @@ async def _call(app, header, body):
     token = header.get("session", "")
     headers = [("x-nedra-session", token)]
     if operation == "backup_export":
-        if path.suffix != ".cmbackup" or path.exists():
+        if path.suffix != ".nedrabackup" or path.exists():
             return (
                 400,
                 [],
-                b'{"detail":"Choose a new .cmbackup filename. '
+                b'{"detail":"Choose a new .nedrabackup filename. '
                 b'Existing files are never replaced."}',
             )
         fd, partial = tempfile.mkstemp(
@@ -82,7 +82,7 @@ async def _call(app, header, body):
             ).encode()
         prefix += (
             f'--{boundary}\r\nContent-Disposition: form-data; name="file"; '
-            'filename="vault.cmbackup"\r\n'
+            'filename="vault.nedrabackup"\r\n'
             "Content-Type: application/octet-stream\r\n\r\n"
         ).encode()
         suffix = f"\r\n--{boundary}--\r\n".encode()

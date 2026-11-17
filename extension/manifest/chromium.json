@@ -1,7 +1,14 @@
 {
-  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtjPJ4rSs3zBqI0StI3ZbmcKvZBzymbdxFPd+0JIx35plZbuFwz+QKv7zl5rQzSo0A4Wkdgv412fcRU9rNB5LuyRGWDsfLMswDc8zX+z1zkWQ9FW4KLx9gPuPOqRIoVJCRu4XL3zJQfzRryRxu3VKb10H0La5ASDkfQUMyliad3SXyUC4zahgKv2Zkp0ODTLox86N4j1OV9bsSvwaZF/U2zc+nYvjx6Fi5vSYC2lq1gm00qjAdGb9URKW8wd+dTHWpBH/q3VsFlpD7I5aGOGsG2FmbcB164KTlzVYaM7bGqmXlxkmFUo+Tmv54Bor7NpUNbAHisxYM756CgZVsQm4sQIDAQAB",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAznCd/HmENXinkHdF3i/dki4ZKAbxAxbjLhYZI6ch5uAe9CSbWLvi0wmo7Z2fD1QrZ3tPV/e9Uu/A3zN0aXC5QOElAgm3ovq1ECgV/HnL8v4O7E+rd7LG8HPoCo1vV1tWyxEIbm3s2TCBqFZp3K7Ppf5wby+/HCMRKlG6JbvBPf8y9NY8978pDwaDU/euPxQ7QtiPqHcHEYCrmatn2rmnRC4o89oQleRssc/BEikUG1jjSlnUviRo2oe+S/QQw3766jgNwQf8rwGez2C5MFox3CoKhwlsru/FboCtBhyFbSEbnBL74omVT2/rkp4p57A8ocDDdb212DsUZQV6eIUZlwIDAQAB",
   "minimum_chrome_version": "120",
-  "background": { "service_worker": "background.js" },
-  "permissions": ["offscreen"],
-  "externally_connectable": { "ids": [], "matches": [] }
+  "background": {
+    "service_worker": "background.js"
+  },
+  "permissions": [
+    "offscreen"
+  ],
+  "externally_connectable": {
+    "ids": [],
+    "matches": []
+  }
 }

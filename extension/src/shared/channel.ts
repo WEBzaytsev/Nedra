@@ -12,7 +12,7 @@
 
 // Frozen authenticated protocol label. Renaming it would invalidate every
 // existing desktop pairing; it is not a public product name.
-export const LABEL = "ciphermoth/extension/v1";
+export const LABEL = "nedra/extension/v1";
 export const TO_APP = 0x01;
 export const TO_EXTENSION = 0x02;
 

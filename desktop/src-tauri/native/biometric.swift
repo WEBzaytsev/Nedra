@@ -13,9 +13,6 @@ private let publicKeyBytes = 65
 private let secretBytes = 32
 private let materialVersion: UInt8 = 1
 private let secretLabel = Data("nedra/v1/secure-enclave-secret".utf8)
-// Existing registrations authenticate this exact label. It is used only when
-// reading the unversioned material emitted before Nedra 4.
-private let legacySecretLabel = Data("ciphermoth/v1/secure-enclave-secret".utf8)
 
 @_cdecl("nedra_biometric_available")
 public func nedraBiometricAvailable() -> Int32 {
@@ -52,8 +49,7 @@ private func authorized(reason: String) -> (LAContext?, Int32) {
 
 private func secret(
     key: SecureEnclave.P256.KeyAgreement.PrivateKey,
-    peer: P256.KeyAgreement.PublicKey,
-    label: Data = secretLabel
+    peer: P256.KeyAgreement.PublicKey
 ) throws -> Data {
     let shared = try key.sharedSecretFromKeyAgreement(with: peer)
     let derived = shared.hkdfDerivedSymmetricKey(
@@ -110,16 +106,15 @@ public func nedraBiometricDerive(
     let (context, outcome) = authorized(reason: "unlock your Nedra vault")
     guard let context else { return outcome }
     do {
-        let versioned = stored.first == materialVersion
-        let payload = versioned ? stored.dropFirst() : stored[stored.startIndex...]
+        guard stored.first == materialVersion else { return invalidKey }
+        let payload = stored.dropFirst()
         guard payload.count > publicKeyBytes else { return invalidKey }
         let peer = try P256.KeyAgreement.PublicKey(
             x963Representation: payload.prefix(publicKeyBytes))
         let key = try SecureEnclave.P256.KeyAgreement.PrivateKey(
             dataRepresentation: payload.dropFirst(publicKeyBytes),
             authenticationContext: context)
-        let label = versioned ? secretLabel : legacySecretLabel
-        guard copy(try secret(key: key, peer: peer, label: label), to: secretOut, capacity: secretBytes)
+        guard copy(try secret(key: key, peer: peer), to: secretOut, capacity: secretBytes)
         else { return failed }
         return ok
     } catch {

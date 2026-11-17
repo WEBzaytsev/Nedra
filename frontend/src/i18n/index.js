@@ -6,7 +6,7 @@ import en from "./en.js";
 import ru from "./ru.js";
 
 export const LANGUAGE_STORAGE_KEY = "nedra-language";
-const LEGACY_LANGUAGE_STORAGE_KEY = "ciphermoth-language";
+
 export const SUPPORTED_LANGUAGES = ["en", "ru"];
 export const translationResources = {
   en: { translation: en },
@@ -20,13 +20,6 @@ const normalizeLanguage = (language) => {
   return SUPPORTED_LANGUAGES.includes(base) ? base : "en";
 };
 
-if (typeof localStorage !== "undefined" && !localStorage.getItem(LANGUAGE_STORAGE_KEY)) {
-  const legacy = localStorage.getItem(LEGACY_LANGUAGE_STORAGE_KEY);
-  if (legacy) {
-    localStorage.setItem(LANGUAGE_STORAGE_KEY, legacy);
-    localStorage.removeItem(LEGACY_LANGUAGE_STORAGE_KEY);
-  }
-}
 
 const applyLanguage = (language) => {
   const normalized = normalizeLanguage(language);

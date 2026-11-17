@@ -1,17 +1,14 @@
 import base64
-import io
 import json
-import random
 
 import httpx
 import pytest
-import pyzipper
 
 from main import app
 from tests.support import auth, db_execute, entry
 
-ADMIN_PASSWORD = "Moth-Admin-Password-2026!"
-MEMBER_PASSWORD = "Moth-Member-Password-2026!"
+ADMIN_PASSWORD = "Nedra-Admin-Password-2026!"
+MEMBER_PASSWORD = "Nedra-Member-Password-2026!"
 MIB = 1024 * 1024
 
 
@@ -97,61 +94,6 @@ def test_entry_draft_keys_are_separated_from_vault_keys_and_other_accounts() -> 
     assert key.entry_draft_key(1) != VaultKey(bytes(reversed(raw))).entry_draft_key(1)
 
 
-def legacy_migration_archive(attachments: list[bytes]) -> bytes:
-    stamp = "2026-10-20T12:00:00Z"
-    payload = json.dumps(
-        {
-            "migration_version": 1,
-            "exported_at": stamp,
-            "passwords": [
-                {
-                    "legacy_id": 41,
-                    "owner_username": "owner",
-                    "access": "owner",
-                    "created": stamp,
-                    "updated": stamp,
-                    "deleted": None,
-                    "name": "attachment migration",
-                    "kind": "login",
-                    "username": "legacy-user",
-                    "value": "legacy-value",
-                    "url": None,
-                    "totp_secret": None,
-                    "description": None,
-                    "tags": [],
-                    "custom_fields": [],
-                    "folder": None,
-                    "favorite": False,
-                    "password_history": [],
-                    "shares": [],
-                    "attachments": [
-                        {
-                            "filename": f"legacy-{index}.bin",
-                            "content_type": "application/octet-stream",
-                            "created": stamp,
-                            "data": base64.urlsafe_b64encode(content)
-                            .decode()
-                            .rstrip("="),
-                        }
-                        for index, content in enumerate(attachments)
-                    ],
-                }
-            ],
-        }
-    ).encode()
-    archive = io.BytesIO()
-    with pyzipper.AESZipFile(
-        archive,
-        "w",
-        compression=pyzipper.ZIP_DEFLATED,
-        encryption=pyzipper.WZ_AES,
-    ) as backup:
-        backup.setpassword(ADMIN_PASSWORD.encode())
-        backup.setencryption(pyzipper.WZ_AES, nbits=256)
-        backup.writestr("ciphermoth_backup.json", payload)
-    return archive.getvalue()
-
-
 @pytest.mark.asyncio
 async def test_required_password_change_gates_vault_until_completed(
     client: httpx.AsyncClient,
@@ -210,69 +152,6 @@ async def test_required_password_change_gates_vault_until_completed(
     assert required.json()["must_change_password"] is True
     assert (await client.get("/auth/me", headers=changed_headers)).status_code == 200
     assert (await client.get("/passwords", headers=changed_headers)).status_code == 403
-
-
-@pytest.mark.asyncio
-async def test_legacy_migration_accepts_exporter_archive_over_ten_mib(
-    client: httpx.AsyncClient,
-) -> None:
-    _owner, owner_headers = await bootstrap(client)
-    rng = random.Random(0)
-    archive = legacy_migration_archive([rng.randbytes(4 * MIB) for _ in range(3)])
-    assert len(archive) > 10 * MIB
-
-    imported = await client.post(
-        "/passwords/import",
-        files={"file": ("migration.zip", archive, "application/zip")},
-        data={"master_password": ADMIN_PASSWORD, "on_conflict": "skip"},
-        headers=owner_headers,
-    )
-
-    assert imported.status_code == 200, imported.text
-    assert imported.json()["attachments"] == 3
-
-
-@pytest.mark.asyncio
-async def test_legacy_migration_preserves_attachment_over_five_mib(
-    client: httpx.AsyncClient,
-) -> None:
-    _owner, owner_headers = await bootstrap(client)
-    content = random.Random(1).randbytes(6 * MIB)
-    archive = legacy_migration_archive([content])
-
-    imported = await client.post(
-        "/passwords/import",
-        files={"file": ("migration.zip", archive, "application/zip")},
-        data={"master_password": ADMIN_PASSWORD, "on_conflict": "skip"},
-        headers=owner_headers,
-    )
-    assert imported.status_code == 200, imported.text
-
-    [attachment] = (
-        await client.get(
-            "/passwords/attachment migration/attachments", headers=owner_headers
-        )
-    ).json()
-    downloaded = await client.get(
-        f"/passwords/attachment migration/attachments/{attachment['id']}",
-        headers=owner_headers,
-    )
-    assert downloaded.content == content
-
-    backup = await client.post(
-        "/passwords/backup",
-        json={"master_password": ADMIN_PASSWORD},
-        headers=owner_headers,
-    )
-    assert backup.status_code == 200, backup.text
-    restored = await client.post(
-        "/passwords/import",
-        files={"file": ("vault.cmbackup", backup.content, "application/octet-stream")},
-        data={"master_password": ADMIN_PASSWORD, "on_conflict": "skip"},
-        headers=owner_headers,
-    )
-    assert restored.status_code == 200, restored.text
-    assert restored.json()["skipped"] == 1
 
 
 async def mcp_post(
@@ -904,172 +783,6 @@ async def test_mcp_service_uses_the_same_explicit_acl(
 
 
 @pytest.mark.asyncio
-async def test_legacy_migration_backup_restores_history_trash_attachments_and_grants(
-    client: httpx.AsyncClient,
-) -> None:
-    _owner, owner_headers = await bootstrap(client)
-    service_response = await client.post(
-        "/users",
-        json={
-            "username": "assistant",
-            "role": "service",
-            "current_password": ADMIN_PASSWORD,
-        },
-        headers=owner_headers,
-    )
-    assert service_response.status_code == 200, service_response.text
-    service = service_response.json()
-    other_response = await client.post(
-        "/users",
-        json={
-            "username": "other",
-            "role": "member",
-            "temporary_password": MEMBER_PASSWORD,
-        },
-        headers=owner_headers,
-    )
-    assert other_response.status_code == 200, other_response.text
-    _, other_headers = await login(client, "other", MEMBER_PASSWORD)
-    collision = await client.post(
-        "/passwords/create",
-        json=entry("migrated", "belongs-to-other"),
-        headers=other_headers,
-    )
-    assert collision.status_code == 200, collision.text
-
-    attachment = b"migration attachment"
-    stamp = "2026-10-20T12:00:00Z"
-    row = {
-        "legacy_id": 41,
-        "owner_username": "owner",
-        "access": "owner",
-        "created": stamp,
-        "updated": stamp,
-        "deleted": None,
-        "name": "migrated",
-        "kind": "login",
-        "username": "legacy-user",
-        "value": "legacy-value",
-        "url": "https://example.test",
-        "totp_secret": None,
-        "description": "from PostgreSQL",
-        "tags": ["legacy"],
-        "custom_fields": [{"label": "PIN", "value": "1234", "hidden": True}],
-        "folder": "Migration",
-        "favorite": True,
-        "password_history": [{"value": "older-value", "changed_at": stamp}],
-        "shares": [{"username": "assistant", "role": "service", "permission": "write"}],
-        "attachments": [
-            {
-                "filename": "proof.txt",
-                "content_type": "text/plain",
-                "created": stamp,
-                "data": base64.urlsafe_b64encode(attachment).decode().rstrip("="),
-            }
-        ],
-    }
-    trashed = {
-        **row,
-        "legacy_id": 42,
-        "name": "migrated-trash",
-        "deleted": "2026-10-21T12:00:00Z",
-        "shares": [],
-        "attachments": [],
-    }
-    payload = json.dumps(
-        {"migration_version": 1, "exported_at": stamp, "passwords": [row, trashed]}
-    ).encode()
-    archive = io.BytesIO()
-    with pyzipper.AESZipFile(
-        archive,
-        "w",
-        compression=pyzipper.ZIP_DEFLATED,
-        encryption=pyzipper.WZ_AES,
-    ) as backup:
-        backup.setpassword(ADMIN_PASSWORD.encode())
-        backup.setencryption(pyzipper.WZ_AES, nbits=256)
-        backup.writestr("ciphermoth_backup.json", payload)
-
-    wrong_archive = io.BytesIO()
-    wrong_payload = json.dumps(
-        {
-            "migration_version": 1,
-            "exported_at": stamp,
-            "passwords": [{**row, "owner_username": "other"}],
-        }
-    ).encode()
-    with pyzipper.AESZipFile(
-        wrong_archive,
-        "w",
-        compression=pyzipper.ZIP_DEFLATED,
-        encryption=pyzipper.WZ_AES,
-    ) as backup:
-        backup.setpassword(ADMIN_PASSWORD.encode())
-        backup.setencryption(pyzipper.WZ_AES, nbits=256)
-        backup.writestr("ciphermoth_backup.json", wrong_payload)
-    wrong_owner = await client.post(
-        "/passwords/import",
-        files={"file": ("migration.zip", wrong_archive.getvalue(), "application/zip")},
-        data={"master_password": ADMIN_PASSWORD, "on_conflict": "skip"},
-        headers=owner_headers,
-    )
-    assert wrong_owner.status_code == 403, wrong_owner.text
-    assert (await client.get("/passwords", headers=owner_headers)).json() == []
-
-    imported = await client.post(
-        "/passwords/import",
-        files={"file": ("migration.zip", archive.getvalue(), "application/zip")},
-        data={"master_password": ADMIN_PASSWORD, "on_conflict": "skip"},
-        headers=owner_headers,
-    )
-    assert imported.status_code == 200, imported.text
-    assert imported.json() == {
-        "imported": 1,
-        "skipped": 0,
-        "overwritten": 0,
-        "total": 2,
-        "ignored": 0,
-        "ignored_rows": [],
-        "renamed": 1,
-        "renamed_rows": [
-            {
-                "where": "entry 1",
-                "name": "migrated",
-                "reason": (
-                    "imported as 'migrated (2)' because that active name is already "
-                    "in use"
-                ),
-            }
-        ],
-        "trashed": 1,
-        "attachments": 1,
-        "grants_restored": 1,
-        "settings_restored": False,
-    }
-
-    [active] = (await client.get("/passwords", headers=owner_headers)).json()
-    assert active["password_name"] == "migrated (2)"
-    assert active["password_history"] == [
-        {"value": "older-value", "changed_at": "2026-10-20T12:00:00Z"}
-    ]
-    assert active["attachment_count"] == 1
-    [share] = (
-        await client.get(f"/passwords/{active['id']}/shares", headers=owner_headers)
-    ).json()
-    assert share["user_id"] == service["id"]
-    assert share["permission"] == "write"
-    [trash] = (await client.get("/passwords/trash", headers=owner_headers)).json()
-    assert trash["password_name"] == "migrated-trash"
-    [described] = (
-        await client.get("/passwords/migrated (2)/attachments", headers=owner_headers)
-    ).json()
-    downloaded = await client.get(
-        f"/passwords/migrated (2)/attachments/{described['id']}", headers=owner_headers
-    )
-    assert downloaded.content == attachment
-
-
-@pytest.mark.asyncio
 async def test_backup_import_cannot_overwrite_another_owners_entry(
     client: httpx.AsyncClient,
 ) -> None:
@@ -1100,7 +813,9 @@ async def test_backup_import_cannot_overwrite_another_owners_entry(
     _, member_headers = await login(client, "member", MEMBER_PASSWORD)
     imported = await client.post(
         "/passwords/import",
-        files={"file": ("backup.cmbackup", backup.content, "application/octet-stream")},
+        files={
+            "file": ("backup.nedrabackup", backup.content, "application/octet-stream")
+        },
         data={"master_password": ADMIN_PASSWORD, "on_conflict": "overwrite"},
         headers=member_headers,
     )
@@ -1206,7 +921,9 @@ async def test_member_backup_import_cannot_restore_global_settings(
     _, member_headers = await login(client, "member", MEMBER_PASSWORD)
     imported = await client.post(
         "/passwords/import",
-        files={"file": ("backup.cmbackup", backup.content, "application/octet-stream")},
+        files={
+            "file": ("backup.nedrabackup", backup.content, "application/octet-stream")
+        },
         data={"master_password": ADMIN_PASSWORD, "on_conflict": "skip"},
         headers=member_headers,
     )

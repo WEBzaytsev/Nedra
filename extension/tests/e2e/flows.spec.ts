@@ -111,7 +111,7 @@ test("fill: React-style events, no submit, popup reports nothing to the page", a
   await expect
     .poll(() => fieldValues(page))
     .toEqual([
-      { id: "user", value: "moth@example.com" },
+      { id: "user", value: "user@example.com" },
       { id: "pass", value: GITHUB_PASSWORD },
     ]);
   expect(await page.evaluate(() => (window as never as { __events: string[][] }).__events)).toEqual(
@@ -165,7 +165,7 @@ test("open shadow roots are filled", async () => {
       page.evaluate(() => (window as never as { shadowValues: () => unknown }).shadowValues())
     )
     .toEqual([
-      { id: "user", value: "moth@example.com" },
+      { id: "user", value: "user@example.com" },
       { id: "pass", value: GITHUB_PASSWORD },
     ]);
 });
@@ -185,7 +185,7 @@ test("copy username and password, and a live 2FA code", async () => {
   const clipboard = () => page.evaluate(() => navigator.clipboard.readText());
   await popup.getByRole("button", { name: "Copy username for GitHub", exact: true }).click();
   await expect(popup.getByRole("status")).toContainText("Username copied. Clears in 3 s.");
-  await expect.poll(clipboard).toBe("moth@example.com");
+  await expect.poll(clipboard).toBe("user@example.com");
   await popup
     .getByRole("button", { name: "Copy password for GitHub", exact: true })
     .first()
@@ -211,7 +211,7 @@ test("multi-step login: username first, then password", async () => {
   await expect(popup.getByRole("status")).toContainText(
     "Username filled. Fill again on the next step."
   );
-  expect(await first.inputValue("#identifier")).toBe("moth");
+  expect(await first.inputValue("#identifier")).toBe("user");
   await popup.close();
   const second = await site("https://multi.test/step2.html");
   popup = await openPopup(browser, second);

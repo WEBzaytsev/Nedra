@@ -31,8 +31,8 @@ from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
 HOST_NAME = "com.nedra.desktop.qa"
-CHROMIUM_ID = "emeejhcdcdnlhejcpeohdafdnkmbaddn"
-LABEL = "ciphermoth/extension/v1"
+CHROMIUM_ID = "alkkfkojagimdnneandmpodagadmmmii"
+LABEL = "nedra/extension/v1"
 TO_APP, TO_EXTENSION = 1, 2
 LOGIN = {
     "name": "Extension QA login",
@@ -335,7 +335,7 @@ def check_on(root: Path, report: dict, report_path: Path, app_executable: Path) 
     ]
     # Frozen for existing Firefox installs and native-host registration continuity.
     assert manifests["Firefox"]["allowed_extensions"] == [
-        "ciphermoth@mr-grj.github.io"
+        "nedra@zaitsv.dev"
     ]
     host = manifests["Chrome"]["path"]
     assert manifests["Firefox"]["path"] == host

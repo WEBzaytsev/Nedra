@@ -348,7 +348,7 @@ def main():
         assert gone(old_pid) and gone(old_core), "Orphan after update"
         host.send("unlock")
         host.send("verify", fingerprint=baseline, backup=True)
-        (root / "transport.cmbackup").rename(root / "before-update.cmbackup")
+        (root / "transport.nedrabackup").rename(root / "before-update.nedrabackup")
         host.send("backup")
         host.send("check", available=False)
         checks.extend(

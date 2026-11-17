@@ -45,13 +45,13 @@ test("protocol-relative API URLs allow that host on the page's own scheme", () =
   assert.deepEqual(parseApiUrl("//Vault.Example.com:8443/api").sources, [
     "vault.example.com:8443",
   ]);
-  assert.deepEqual(parseApiUrl("//moth:secret@vault.example.com/api").sources, [
+  assert.deepEqual(parseApiUrl("//user:secret@vault.example.com/api").sources, [
     "vault.example.com",
   ]);
 });
 
 test("values v1.4.7 accepted keep working, with a warning", () => {
-  const credentials = parseApiUrl("https://moth:secret@vault.example.com/api");
+  const credentials = parseApiUrl("https://user:secret@vault.example.com/api");
   assert.deepEqual(credentials.sources, ["https://vault.example.com"]);
   assert.match(credentials.warnings[0], /user name or password/);
   assert.match(parseApiUrl("https://vault.example.com/api?x=1").warnings[0], /query/);
@@ -89,7 +89,7 @@ test("unsafe or unusable API URLs are refused", () => {
 
 test("the GitHub repository must be owner/name", () => {
   assert.equal(parseGithubRepo(undefined), "WEBzaytsev/Nedra");
-  assert.equal(parseGithubRepo("someone/fork.of-moth"), "someone/fork.of-moth");
+  assert.equal(parseGithubRepo("someone/fork.of-user"), "someone/fork.of-user");
   for (const repo of ["mr-grj", "a/b/c", "a/b releases", "*/*", "a/b;x"]) {
     assert.throws(() => parseGithubRepo(repo), ConfigError, repo);
   }

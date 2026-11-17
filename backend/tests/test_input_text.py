@@ -69,18 +69,18 @@ async def test_unpaired_surrogates_are_a_validation_error(
 async def test_paired_surrogate_escapes_are_ordinary_text(
     client: httpx.AsyncClient, vault: Headers
 ) -> None:
-    body = b'{"password_name": "moth \\ud83e\\udd8b", "password_value": "v"}'
+    body = b'{"password_name": "user \\ud83e\\udd8b", "password_value": "v"}'
     resp = await client.post("/passwords/create", content=body, headers=[*vault, JSON])
     assert resp.status_code == 200, resp.text
     listing = await client.get("/passwords", headers=vault)
-    assert "moth \U0001f98b" in [p["password_name"] for p in listing.json()]
+    assert "user \U0001f98b" in [p["password_name"] for p in listing.json()]
 
 
 @pytest.mark.parametrize(
     ("path", "body"),
     [
-        ("/master_password/unlock", b'{"master_password": "Moth-\\ud800-Vault-2026"}'),
-        ("/master_password/create", b'{"master_password": "Moth-\\ud800-Vault-2026"}'),
+        ("/master_password/unlock", b'{"master_password": "Nedra-\\ud800-Vault-2026"}'),
+        ("/master_password/create", b'{"master_password": "Nedra-\\ud800-Vault-2026"}'),
     ],
 )
 async def test_master_password_routes_reject_unpaired_surrogates(

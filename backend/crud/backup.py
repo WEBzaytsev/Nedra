@@ -1,10 +1,8 @@
 import asyncio
-import base64
-import binascii
 import hashlib
 import json
 import tempfile
-from collections.abc import Callable, Iterable
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import IO, Annotated, Literal
 
@@ -39,7 +37,6 @@ from crud.password import (
     Imported,
     PasswordCRUD,
     document_from,
-    normalize_custom_fields,
 )
 from crud.records import (
     AttachmentMetadata,
@@ -64,33 +61,24 @@ from helpers import (
     VaultKey,
     backup_key_for,
     new_backup_key,
-    read_legacy_backup,
 )
 from models import (
     AttachmentModel,
-    EntryAccessModel,
     EntryModel,
     FolderModel,
-    UserModel,
 )
 from schemas import (
-    ImportRowReport,
     OnConflict,
     PasswordImportResult,
     RestoredPassword,
     SettingsUpdate,
-    SharePermission,
-    UserRole,
 )
 from settings import get_api_settings
 from validators import require_unicode_text
 from vault_sessions import VaultSessions
 
-MAX_LEGACY_JSON_BYTES = 64 * 1024 * 1024
-MAX_LEGACY_FILE_BYTES = MAX_LEGACY_JSON_BYTES + 1024 * 1024
-MAX_MIGRATED_TOTAL_ATTACHMENT_BYTES = 50 * 1024 * 1024
+MAX_TOTAL_ATTACHMENT_BYTES = 50 * 1024 * 1024
 _SPOOL_BYTES = 16 * 1024 * 1024
-_LEGACY_MAGIC = b"PK\x03\x04"
 
 _WRONG_PASSWORD = (
     "Incorrect backup password. Use the account password that created the backup."
@@ -217,60 +205,6 @@ class BackupEntry(_Strict):
         return value
 
 
-class LegacyMigrationShare(_Strict):
-    username: str
-    role: UserRole
-    permission: SharePermission
-
-
-class LegacyMigrationAttachment(_Strict):
-    filename: str
-    content_type: str | None
-    data: str = Field(max_length=4 * ((MAX_ATTACHMENT_FRAME_BYTES + 2) // 3))
-    created: datetime
-
-    @field_validator("created")
-    @classmethod
-    def _created_in_utc(cls, value: datetime) -> datetime:
-        return _utc(value)
-
-
-class LegacyMigrationEntry(_Strict):
-    legacy_id: int = Field(gt=0)
-    owner_username: str
-    access: Literal["owner"]
-    created: datetime
-    updated: datetime
-    deleted: datetime | None
-    name: str
-    kind: Literal["login", "note"]
-    username: str | None
-    value: str
-    url: str | None
-    totp_secret: str | None
-    description: str | None
-    tags: list[str]
-    custom_fields: list[BackupField]
-    folder: str | None
-    favorite: bool
-    password_history: list[BackupHistoryItem]
-    shares: list[LegacyMigrationShare]
-    attachments: list[LegacyMigrationAttachment] = Field(
-        max_length=MAX_ATTACHMENTS_PER_ENTRY
-    )
-
-    @field_validator("created", "updated", "deleted")
-    @classmethod
-    def _dates_in_utc(cls, value: datetime | None) -> datetime | None:
-        return None if value is None else _utc(value)
-
-    @field_validator("tags")
-    @classmethod
-    def _migration_tags_are_unicode(cls, value: list[str]) -> list[str]:
-        require_unicode_text(value)
-        return value
-
-
 class BackupSettings(_Strict):
     inactivity_ms: int
     warn_before_ms: int
@@ -281,8 +215,8 @@ class BackupSettings(_Strict):
 
 
 class BackupManifest(_Strict):
-    format: Literal["ciphermoth-backup"]
-    version: Literal[2, 3]
+    format: Literal["nedra-backup"]
+    version: Literal[3]
     exported_at: datetime
 
     @field_validator("exported_at")
@@ -383,7 +317,7 @@ class BackupCRUD(PasswordCRUD):
         verify_current: bool = True,
     ) -> IO[bytes]:
         """
-        A complete backup of the vault (backup format 2) in a temporary file
+        A complete backup of the vault (backup format 3) in a temporary file
         that holds only ciphertext. Both KDFs (checking the master password and
         deriving the backup key from a new salt) run before the read snapshot.
         Generation never writes to the vault or claims the client saved a file.
@@ -448,7 +382,7 @@ class BackupCRUD(PasswordCRUD):
         if frames_count > MAX_FRAMES:
             raise InvalidRequest("The vault has too many records for one backup.")
         manifest = {
-            "format": "ciphermoth-backup",
+            "format": "nedra-backup",
             "version": 3,
             "exported_at": _stamp(datetime.now(UTC).replace(tzinfo=None)),
             "app_version": get_api_settings().version,
@@ -533,21 +467,10 @@ class BackupCRUD(PasswordCRUD):
         session_token: str | None = None,
     ) -> PasswordImportResult:
         """
-        Restore a backup file into the vault: a complete backup (format 2) or a
-        backup ZIP from CipherMoth 2.0 or earlier. Everything is checked before
-        the import's single write transaction commits, so a wrong password, a
+        Restore a complete authenticated backup (format 3). Everything is checked
+        before the import's single write transaction commits, so a wrong password, a
         damaged, truncated or inconsistent file changes nothing.
         """
-        start = upload.read(len(_LEGACY_MAGIC))
-        upload.seek(0)
-        if start == _LEGACY_MAGIC:
-            return await self._import_legacy(
-                upload,
-                password,
-                key,
-                on_conflict,
-                session_token=session_token,
-            )
         try:
             reader = BackupReader(upload)
         except BackupFormatError as error:
@@ -605,10 +528,10 @@ class BackupCRUD(PasswordCRUD):
             raise InvalidRequest(
                 f"Nothing was imported. {ignored[0].where}: {ignored[0].reason}."
             )
-        if sum(a.size for a in entry.attachments) > MAX_MIGRATED_TOTAL_ATTACHMENT_BYTES:
+        if sum(a.size for a in entry.attachments) > MAX_TOTAL_ATTACHMENT_BYTES:
             raise InvalidRequest(
                 f"Nothing was imported. entry {index}: its attachments exceed "
-                "the 50 MB migration limit."
+                f"the 50 MB import limit."
             )
         _, password = restored[0]
         return password, [
@@ -694,7 +617,7 @@ class BackupCRUD(PasswordCRUD):
                         "Nothing was imported. An entry has an invalid folder link."
                     )
                 folder_id = target_folder[0]
-            elif manifest.version == 3 and entry.folder is not None:
+            elif entry.folder is not None:
                 raise InvalidRequest(
                     "Nothing was imported. An entry is missing its folder identity."
                 )
@@ -811,9 +734,6 @@ class BackupCRUD(PasswordCRUD):
                 counts["overwritten"] += 1
             else:
                 counts["imported"] += 1
-        if folder_id is None:
-            folder = await self._folder_named(document.folder, key)
-            folder_id = folder.id if folder is not None else None
         model = EntryModel(
             owner_id=self.owner_id,
             folder_id=folder_id,
@@ -830,332 +750,3 @@ class BackupCRUD(PasswordCRUD):
         else:
             trashed[index, deleted] = model.id
         return model
-
-    async def _import_legacy(
-        self,
-        upload: IO[bytes],
-        password: str,
-        key: VaultKey,
-        on_conflict: OnConflict,
-        *,
-        session_token: str | None = None,
-    ) -> PasswordImportResult:
-        data = upload.read(MAX_LEGACY_FILE_BYTES + 1)
-        if len(data) > MAX_LEGACY_FILE_BYTES:
-            raise InvalidRequest("The backup ZIP exceeds the legacy migration limit.")
-        await self.session.commit()
-        try:
-            raw = read_legacy_backup(data, password, MAX_LEGACY_JSON_BYTES)
-        except DecryptionFailed:
-            raise Forbidden(_WRONG_PASSWORD) from None
-        except BackupFormatError as error:
-            raise InvalidRequest(
-                f"{error} Ensure it is a valid Nedra backup."
-            ) from None
-        await self._recheck_session(session_token)
-        try:
-            payload = json.loads(raw)
-            entries = payload["passwords"]
-            if not isinstance(entries, list):
-                raise ValueError
-        except (json.JSONDecodeError, KeyError, TypeError, ValueError) as e:
-            raise InvalidRequest("Invalid backup file format.") from e
-
-        if payload.get("migration_version") == 1:
-            await self.master_password.verify_vault_key(key)
-            return await self._import_legacy_migration(entries, key, on_conflict)
-
-        passwords, ignored = self.validate_import(
-            self._legacy_rows(entries),
-            label_for=lambda field: SOURCE_KEYS.get(field, field),
-            schema=RestoredPassword,
-        )
-        await self.master_password.verify_vault_key(key)
-        return await self._store_import(passwords, ignored, key, on_conflict)
-
-    @staticmethod
-    def _migration_attachment_data(attachment: LegacyMigrationAttachment) -> bytes:
-        try:
-            encoded = attachment.data.encode("ascii")
-            content = base64.b64decode(
-                encoded + b"=" * (-len(encoded) % 4), altchars=b"-_", validate=True
-            )
-        except (UnicodeEncodeError, ValueError, binascii.Error):
-            raise InvalidRequest(
-                "Nothing was imported. Invalid attachment data."
-            ) from None
-        if not content or len(content) > MAX_ATTACHMENT_FRAME_BYTES:
-            raise InvalidRequest(
-                "Nothing was imported. An attachment exceeds the migration limit."
-            )
-        return content
-
-    async def _import_legacy_migration(
-        self,
-        entries: list[object],
-        key: VaultKey,
-        on_conflict: OnConflict,
-    ) -> PasswordImportResult:
-        if len(entries) > MAX_FRAMES - 1:
-            raise InvalidRequest(
-                "Nothing was imported. The backup has too many entries."
-            )
-        parsed: list[LegacyMigrationEntry] = []
-        problems: list[str] = []
-        for index, item in enumerate(entries, start=1):
-            try:
-                parsed.append(
-                    LegacyMigrationEntry.model_validate_json(
-                        json.dumps(item, ensure_ascii=False), strict=True
-                    )
-                )
-            except (TypeError, ValidationError) as error:
-                if isinstance(error, ValidationError):
-                    detail = error.errors()[0]["msg"]
-                else:
-                    detail = "invalid entry"
-                problems.append(f"entry {index}: {detail}")
-        if problems:
-            raise InvalidRequest(
-                "Nothing was imported. " + "; ".join(problems[:5]) + "."
-            )
-        legacy_ids = [entry.legacy_id for entry in parsed]
-        if len(legacy_ids) != len(set(legacy_ids)):
-            raise InvalidRequest("Nothing was imported. Duplicate legacy entry IDs.")
-
-        owner_username = (
-            await self.session.scalar(
-                select(UserModel.username).where(UserModel.id == self.owner_id)
-            )
-            if self.owner_id is not None
-            else None
-        )
-        source_owners = {entry.owner_username for entry in parsed}
-        if owner_username is None or source_owners != {owner_username}:
-            raise Forbidden(
-                "Nothing was imported. Sign in as the archive's exact legacy owner."
-            )
-
-        target_names = {share.username for entry in parsed for share in entry.shares}
-        targets = {
-            user.username: user
-            for user in await self.session.scalars(
-                select(UserModel).where(
-                    UserModel.username.in_(target_names),
-                    UserModel.active.is_(True),
-                )
-            )
-        }
-        missing = sorted(target_names - targets.keys())
-        if missing:
-            raise InvalidRequest(
-                "Nothing was imported. Create and activate these share targets first: "
-                + ", ".join(missing)
-                + "."
-            )
-        for entry in parsed:
-            seen: set[str] = set()
-            for share in entry.shares:
-                target = targets[share.username]
-                if share.username in seen or target.id == self.owner_id:
-                    raise InvalidRequest(
-                        "Nothing was imported. Entry "
-                        f"{entry.legacy_id} has duplicate or "
-                        "self-directed access grants."
-                    )
-                if target.role != share.role:
-                    raise InvalidRequest(
-                        "Nothing was imported. The role for share target "
-                        f"{share.username} "
-                        "does not match the backup."
-                    )
-                seen.add(share.username)
-
-        active = {
-            bytes(name_index): int(entry_id)
-            for entry_id, name_index in (
-                await self.session.execute(
-                    select(EntryModel.id, EntryModel.name_index).where(
-                        EntryModel.deleted.is_(None)
-                    )
-                )
-            ).all()
-        }
-        trashed = {
-            (bytes(name_index), deleted): int(entry_id)
-            for entry_id, name_index, deleted in (
-                await self.session.execute(
-                    select(
-                        EntryModel.id, EntryModel.name_index, EntryModel.deleted
-                    ).where(EntryModel.deleted.is_not(None))
-                )
-            ).all()
-            if deleted is not None
-        }
-        counts = {"imported": 0, "skipped": 0, "overwritten": 0, "trashed": 0}
-        attachment_count = 0
-        grant_count = 0
-        moved_at = datetime.now(UTC).replace(tzinfo=None)
-        taken = set(active)
-        seen_active: set[bytes] = set()
-        owners = {
-            int(entry_id): int(owner_id)
-            for entry_id, owner_id in (
-                await self.session.execute(
-                    select(EntryModel.id, EntryModel.owner_id).where(
-                        EntryModel.id.in_(active.values())
-                    )
-                )
-            ).all()
-            if owner_id is not None
-        }
-        renamed: list[ImportRowReport] = []
-
-        for index, source in enumerate(parsed, start=1):
-            contents = [
-                self._migration_attachment_data(item) for item in source.attachments
-            ]
-            if sum(map(len, contents)) > MAX_MIGRATED_TOTAL_ATTACHMENT_BYTES:
-                raise InvalidRequest(
-                    f"Nothing was imported. entry {index}: its attachments exceed "
-                    "the 50 MB migration limit."
-                )
-            backup_entry = BackupEntry(
-                name=source.name,
-                kind=source.kind,
-                username=source.username,
-                value=source.value,
-                url=source.url,
-                totp_secret=source.totp_secret,
-                description=source.description,
-                tags=source.tags,
-                custom_fields=source.custom_fields,
-                folder=source.folder,
-                favorite=source.favorite,
-                history=source.password_history,
-                created=source.created,
-                updated=source.updated,
-                deleted=source.deleted,
-                attachments=[
-                    BackupAttachment(
-                        filename=item.filename,
-                        content_type=item.content_type,
-                        size=len(content),
-                        sha256=hashlib.sha256(content).hexdigest(),
-                        created=item.created,
-                    )
-                    for item, content in zip(source.attachments, contents, strict=True)
-                ],
-            )
-            if source.deleted is None:
-                name_index = key.name_index(backup_entry.name)
-                existing_id = active.get(name_index)
-                foreign_name = (
-                    existing_id is not None
-                    and self.owner_id is not None
-                    and owners.get(existing_id) != self.owner_id
-                )
-                if foreign_name or name_index in seen_active:
-                    unique = self._unique_name(backup_entry.name, taken, key)
-                    renamed.append(
-                        ImportRowReport(
-                            where=f"entry {index}",
-                            name=backup_entry.name[:100],
-                            reason=(
-                                f"imported as '{unique[:120]}' because that active "
-                                "name is already in use"
-                            ),
-                        )
-                    )
-                    backup_entry = backup_entry.model_copy(update={"name": unique})
-                    name_index = key.name_index(unique)
-                seen_active.add(name_index)
-                taken.add(name_index)
-            password, history = self._check_entry(backup_entry, index)
-            target = await self._restore_target(
-                document_from(password, history),
-                backup_entry,
-                active,
-                trashed,
-                key,
-                on_conflict,
-                moved_at,
-                counts,
-            )
-            if target is None:
-                continue
-            for item, content in zip(source.attachments, contents, strict=True):
-                attachment = AttachmentModel(entry_id=target.id, created=item.created)
-                seal_attachment(
-                    key,
-                    attachment,
-                    target.uid,
-                    AttachmentMetadata(
-                        filename=item.filename,
-                        content_type=item.content_type,
-                    ),
-                    content,
-                )
-                self.session.add(attachment)
-                attachment_count += 1
-            for share in source.shares:
-                self.session.add(
-                    EntryAccessModel(
-                        entry_id=target.id,
-                        user_id=targets[share.username].id,
-                        permission=share.permission,
-                        granted_by=self.owner_id,
-                    )
-                )
-                grant_count += 1
-            await self.session.flush()
-
-        result = self.result(
-            {name: counts[name] for name in ("imported", "skipped", "overwritten")},
-            [],
-            renamed,
-        )
-        return result.model_copy(
-            update={
-                "total": len(parsed),
-                "trashed": counts["trashed"],
-                "attachments": attachment_count,
-                "grants_restored": grant_count,
-            }
-        )
-
-    @classmethod
-    def _legacy_rows(
-        cls, entries: Iterable[object]
-    ) -> Iterable[tuple[str, dict[str, object] | Ignored]]:
-        for index, item in enumerate(entries, start=1):
-            yield f"entry {index}", cls._legacy_fields(item)
-
-    @staticmethod
-    def _legacy_tags(raw: object) -> object:
-        if not isinstance(raw, list):
-            return raw or []
-        return [str(tag) for tag in raw if tag is not None]
-
-    @classmethod
-    def _legacy_fields(cls, item: object) -> dict[str, object] | Ignored:
-        if not isinstance(item, dict):
-            return Ignored(None, "not an entry")
-        name, value = item.get("name"), item.get("value")
-        if not name or (isinstance(name, str) and not name.strip()):
-            return Ignored(None, "no name")
-        if not value:
-            return Ignored(name, "no password or note text")
-        return {
-            "password_name": name,
-            "password_value": value,
-            "kind": "note" if item.get("kind") == "note" else "login",
-            "username": item.get("username"),
-            "url": item.get("url"),
-            "totp_secret": item.get("totp_secret"),
-            "description": item.get("description"),
-            "tags": cls._legacy_tags(item.get("tags")),
-            "custom_fields": normalize_custom_fields(item.get("custom_fields")),
-            "folder": item.get("folder"),
-            "favorite": bool(item.get("favorite", False)),
-        }

@@ -144,7 +144,7 @@ pub async fn qa_backup(
     }
     let root =
         std::path::PathBuf::from(std::env::var("NEDRA_QA_ROOT").map_err(|_| "QA root missing")?);
-    let path = root.join("transport.cmbackup");
+    let path = root.join("transport.nedrabackup");
     // Fixed synthetic destination authorized by the test host. This exercises
     // the real native transfer, separately from optional OS-picker automation.
     let result = crate::native::file_request(

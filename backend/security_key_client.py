@@ -41,10 +41,7 @@ from fido2.webauthn import (
 )
 
 # The desktop app has no web origin; use the vault's configured, trusted RP.
-DESKTOP_RP_ID = os.environ.get(
-    "NEDRA_SECURITY_KEY_RP_ID",
-    os.environ.get("CIPHERMOTH_SECURITY_KEY_RP_ID", "localhost"),
-)
+DESKTOP_RP_ID = os.environ.get("NEDRA_SECURITY_KEY_RP_ID", "localhost")
 _WAIT_FOR_KEY_SECONDS = 60
 _POLL_SECONDS = 0.25
 

@@ -238,7 +238,7 @@ async def test_killing_the_server_before_a_backup_restore_commits_writes_nothing
         lambda http, headers: http.post(
             "/passwords/import",
             data={"master_password": MASTER_PASSWORD, "on_conflict": "overwrite"},
-            files={"file": ("b.cmbackup", archive, "application/octet-stream")},
+            files={"file": ("b.nedrabackup", archive, "application/octet-stream")},
             headers=headers,
         ),
     )

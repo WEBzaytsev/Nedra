@@ -57,8 +57,8 @@ nedra password delete <name> [--yes]    Move an entry to the trash
 nedra password trash                    List entries currently in the trash
 nedra password restore <name> [--id]    Restore a trashed entry back to the vault
 nedra password purge <name> [--id] [--yes] Permanently delete a trashed entry
-nedra backup [--out <dir>]              Save a complete encrypted backup (.cmbackup)
-nedra import <file> [--on-conflict]     Restore a .cmbackup, or a backup ZIP from 2.0 or earlier (skip|overwrite)
+nedra backup [--out <dir>]              Save a complete encrypted backup (.nedrabackup)
+nedra import <file> [--on-conflict]     Restore a complete .nedrabackup (skip|overwrite)
 nedra import-csv <file> [--on-conflict] Import a CSV from another manager (skip|overwrite)
 nedra damaged [--remove] [--yes]        List (or remove) entries and attachments the vault cannot read
 ```
@@ -125,10 +125,10 @@ gmail     Work email
 # Create an encrypted backup
 $ nedra backup --out ~/backups
 Master password:
-✓  Backup saved to ~/backups/nedra_backup_20260314_120000_<unique>.cmbackup
+✓  Backup saved to ~/backups/nedra_backup_20260314_120000_<unique>.nedrabackup
 
 # Restore with overwrite (an overwritten entry moves to the trash)
-$ nedra import nedra_backup_20260314_120000.cmbackup --on-conflict overwrite
+$ nedra import nedra_backup_20260314_120000.nedrabackup --on-conflict overwrite
 Master password:
 Backup password (Enter if it is the current master password):
 ✓  Import complete - 3 added, 1 overwritten, 0 skipped
@@ -141,12 +141,12 @@ Backup password (Enter if it is the current master password):
 
 ```shell
 nedra backup -o /tmp
-docker compose -f docker-compose.prod.yml cp backend:/tmp/nedra_backup_20260314_120000.cmbackup .
+docker compose -f docker-compose.prod.yml cp backend:/tmp/nedra_backup_20260314_120000.nedrabackup .
 ```
 
 The **Backup** button in the web UI downloads the same file straight to your machine, which is usually easier.
 
-Backup format 2 stores entry metadata and attachments in authenticated frames. A complete backup is limited to 1 GiB and 1,000,001 frames; each entry frame is limited to 64 MiB and each attachment to 5 MiB. The vault refuses changes that would exceed the complete-backup limits, so supported operations cannot silently create data that this version cannot back up. See [the vault format specification](VAULT_FORMAT.md) for details.
+Backup format 3 stores entry metadata and attachments in authenticated frames. A complete backup is limited to 1 GiB and 1,000,001 frames; each entry frame is limited to 64 MiB and each attachment to 5 MiB. The vault refuses changes that would exceed the complete-backup limits, so supported operations cannot silently create data that this version cannot back up. See [the vault format specification](VAULT_FORMAT.md) for details.
 
 ## Vault snapshots (`nedra-admin`)
 
@@ -157,7 +157,7 @@ docker compose -f docker-compose.prod.yml exec backend nedra-admin snapshot   # 
 docker compose -f docker-compose.prod.yml exec backend nedra-admin check      # integrity check of the vault (or of a snapshot path)
 ```
 
-`restore` replaces the vault with a snapshot and runs only while Nedra is stopped. `set-aside` moves a vault this release cannot open (one from CipherMoth 2.0) into the snapshot folder so the next start creates a new one. A snapshot is a raw copy of this installation's vault file under the master password of the moment it was taken; a backup (`.cmbackup`) is the complete, portable copy you can restore anywhere. See [UPDATING.md](UPDATING.md#snapshots).
+`restore` replaces the vault with a snapshot and runs only while Nedra is stopped. `set-aside` moves a vault this release cannot open (one from Nedra 2.0) into the snapshot folder so the next start creates a new one. A snapshot is a raw copy of this installation's vault file under the master password of the moment it was taken; a backup (`.nedrabackup`) is the complete, portable copy you can restore anywhere. See [UPDATING.md](UPDATING.md#snapshots).
 
 ## What the CLI does with your secrets
 
@@ -166,7 +166,7 @@ It follows the same zero-trust rules as the web UI, and it's small enough to rea
 - **Nothing is stored.** There is no token cache and no config file. Each command prompts for the master password, opens a vault session on the server for that one command, and locks it again when the command ends, even if it fails. The CLI never sees the vault key. That's also why every command asks again. It needs a Nedra server from v1.5.0 on; against an older one (recognized by its missing unlock route) it stops with a message instead of asking that server for the key. Clients older than v1.5.0 are refused by servers from v1.6.0 on with a message to update.
 - **Secrets are never arguments.** Passwords and note bodies are typed at a hidden prompt, so they don't reach your shell history, `ps`, or `docker inspect`. Only entry names are arguments, so `nedra password get github` does reveal in your history that a `github` entry exists.
 - **Redirects are never followed**, so the session token and the master password can't be replayed to another host.
-- **Backups are written `0600`**, readable only by you, on top of being encrypted (AES-256-GCM under Argon2id with the backup's own salt and your master password). Downloads stream into a uniquely named `.partial` file; only a completed, flushed transfer is published as `.cmbackup`, without replacing an existing file. Interrupted transfers are removed on normal error or cancellation; after a process kill, a `.partial` file is incomplete and must not be used as a backup. Imports also stream from disk, so the CLI does not load a whole large backup into memory. The backup password `import` asks for is the master password the vault had when the backup was made; press Enter if it is the current one. It is prompted, never an argument.
+- **Backups are written `0600`**, readable only by you, on top of being encrypted (AES-256-GCM under Argon2id with the backup's own salt and your master password). Downloads stream into a uniquely named `.partial` file; only a completed, flushed transfer is published as `.nedrabackup`, without replacing an existing file. Interrupted transfers are removed on normal error or cancellation; after a process kill, a `.partial` file is incomplete and must not be used as a backup. Imports also stream from disk, so the CLI does not load a whole large backup into memory. The backup password `import` asks for is the master password the vault had when the backup was made; press Enter if it is the current one. It is prompted, never an argument.
 - **You get warned about plaintext transport.** If `NEDRA_API_URL` points at a remote host over plain `http://`, the CLI says so before prompting, because your master password would cross the network unencrypted. Put the API behind HTTPS, or reach it over a VPN or SSH tunnel.
 
 A note on entry names: any name works, including ones containing `/` (the CLI checks that the server routes them correctly and refuses them on older servers rather than risk acting on a different entry). New entries can't be named `.`, `..` or `trash`, because those can't be addressed in a web address; existing ones still work from the CLI, except that `get` and `update` can't open an entry named `trash`. Rename it in the web UI.

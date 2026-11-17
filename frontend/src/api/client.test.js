@@ -5,7 +5,6 @@ import { stubBrowser } from "../test/globals";
 import {
   LOGOUT_NOTICE,
   clearSession,
-  forgetLegacyKey,
   getSessionToken,
   isAuth,
   setSessionToken,
@@ -13,7 +12,6 @@ import {
 import apiClient, { SESSION_ENDED } from "./client";
 
 const TOKEN = "kM3x1y8Qe0bWv7c2Z9pL4tR6sN5aH1jD0fG3uY8iO2w";
-const LEGACY_KEY = "QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVphYmNkZWY=";
 
 let browser;
 
@@ -48,15 +46,7 @@ describe("session helpers", () => {
     expect(isAuth()).toBe(false);
   });
 
-  it("forgets a vault key left behind by an older release", () => {
-    browser.storage.setItem("keyDerivation", LEGACY_KEY);
-    forgetLegacyKey();
-    expect(browser.storage.entries()).toEqual({});
-    browser.storage.setItem("keyDerivation", LEGACY_KEY);
-    expect(isAuth()).toBe(false);
-    clearSession();
-    expect(browser.storage.entries()).toEqual({});
-  });
+
 });
 
 describe("request interceptor", () => {
@@ -66,15 +56,8 @@ describe("request interceptor", () => {
     await apiClient.get("/passwords", { adapter: replyWith(200, [], seen) });
     expect(seen[0].headers["x-nedra-session"]).toBe(TOKEN);
     expect(seen[0].headers.Authorization).toBeUndefined();
-    expect(seen[0].headers["x-nedra-key-derivation"]).toBeUndefined();
   });
 
-  it("never sends a vault key left in storage", async () => {
-    browser.storage.setItem("keyDerivation", LEGACY_KEY);
-    const seen = [];
-    await apiClient.get("/meta", { adapter: replyWith(200, {}, seen) });
-    expect(JSON.stringify(seen[0].headers)).not.toContain(LEGACY_KEY);
-  });
 
   it("sends no credential when locked", async () => {
     const seen = [];

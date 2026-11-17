@@ -1,5 +1,5 @@
 {
-  "format": "ciphermoth-test-vectors/1",
+  "format": "nedra-test-vectors/1",
   "name": "argon2id",
   "description": "Vault key derivation. key = base64url(Argon2id(password_utf8, salt, m=65536 KiB, t=3, p=4, length=32, version 0x13, no secret, no associated data)), 44 characters with '=' padding. The result is used directly as a Fernet key. No Unicode normalization is applied.",
   "parameters": {
@@ -12,10 +12,10 @@
   },
   "vectors": [
     {
-      "password": "Moth-Test-Vault-2026!",
-      "password_utf8_hex": "4d6f74682d546573742d5661756c742d3230323621",
+      "password": "Nedra-Test-Vault-2026!",
+      "password_utf8_hex": "4e656472612d546573742d5661756c742d3230323621",
       "salt_hex": "00000000000000000000000000000000",
-      "key": "hPnhuNwRyWHS9yen4ewb1MPCDJr_bYKWfMSMRqRhdGE=",
+      "key": "4ShOmjC8mYhKKzPAMD5MK2m7T2JX3ZyeY4VlOrEUF_k=",
       "note": "ASCII"
     },
     {
@@ -54,10 +54,10 @@
       "note": "Japanese"
     },
     {
-      "password": "🦋 moth 🦋 2026",
-      "password_utf8_hex": "f09fa68b206d6f746820f09fa68b2032303236",
+      "password": "🦋 user 🦋 2026",
+      "password_utf8_hex": "f09fa68b207573657220f09fa68b2032303236",
       "salt_hex": "deadbeefdeadbeefdeadbeefdeadbeef",
-      "key": "Vcy2Wrl_Fl5PP9Gb1baPHw34eIzkSX61g9lUq4VCiAI=",
+      "key": "S5PLQTwgmDhGLOjg9_Vc78Mo1z030pzc2REr8qy_PGk=",
       "note": "emoji, 4-byte UTF-8"
     },
     {
@@ -86,28 +86,28 @@
     "description": "The API strips the master password with pydantic's str_strip_whitespace (Unicode White_Space) before hashing and derivation. Characters such as U+200B or U+001C are not stripped, unlike Python's str.strip(). kdf_input is what reaches Argon2id and bcrypt.",
     "cases": [
       {
-        "submitted": "  Moth-Test-Vault-2026!  ",
-        "kdf_input": "Moth-Test-Vault-2026!"
+        "submitted": "  Nedra-Test-Vault-2026!  ",
+        "kdf_input": "Nedra-Test-Vault-2026!"
       },
       {
-        "submitted": "\tMoth-Test-Vault-2026!\n",
-        "kdf_input": "Moth-Test-Vault-2026!"
+        "submitted": "\tNedra-Test-Vault-2026!\n",
+        "kdf_input": "Nedra-Test-Vault-2026!"
       },
       {
-        "submitted": " Moth-Test-Vault-2026!　",
-        "kdf_input": "Moth-Test-Vault-2026!"
+        "submitted": " Nedra-Test-Vault-2026!　",
+        "kdf_input": "Nedra-Test-Vault-2026!"
       },
       {
-        "submitted": "​Moth-Test-Vault-2026!",
-        "kdf_input": "​Moth-Test-Vault-2026!"
+        "submitted": "​Nedra-Test-Vault-2026!",
+        "kdf_input": "​Nedra-Test-Vault-2026!"
       },
       {
-        "submitted": "\u001cMoth-Test-Vault-2026!",
-        "kdf_input": "\u001cMoth-Test-Vault-2026!"
+        "submitted": "\u001cNedra-Test-Vault-2026!",
+        "kdf_input": "\u001cNedra-Test-Vault-2026!"
       },
       {
-        "submitted": "Moth Test Vault 2026!",
-        "kdf_input": "Moth Test Vault 2026!"
+        "submitted": "Nedra Test Vault 2026!",
+        "kdf_input": "Nedra Test Vault 2026!"
       }
     ]
   }

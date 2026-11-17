@@ -1,5 +1,4 @@
 import asyncio
-import base64
 import os
 import secrets
 
@@ -7,7 +6,6 @@ import httpx
 import pytest
 
 from crud.master_password import MasterPasswordCRUD
-from settings import SETTINGS_DEFAULTS
 from tests.support import (
     MASTER_PASSWORD,
     NEW_MASTER_PASSWORD,
@@ -18,8 +16,6 @@ from tests.support import (
     entry,
     plant_entry,
     read_current_vault,
-    retired_key_header,
-    stored_vault_key,
     unlock,
 )
 
@@ -29,19 +25,12 @@ ROTATE = {
 }
 
 
-def _random_key() -> bytes:
-    return base64.urlsafe_b64encode(os.urandom(32))
-
-
 async def test_method_and_path_variants_stay_protected(
     client: httpx.AsyncClient,
 ) -> None:
     token = await create_vault(client)
     await client.post("/passwords/create", json=entry("alpha"), headers=auth(token))
-    for forged, refused in (
-        (auth(secrets.token_urlsafe(32)), 401),
-        (retired_key_header(await stored_vault_key()), 403),
-    ):
+    for forged, refused in ((auth(secrets.token_urlsafe(32)), 401),):
         for path in ("/passwords", "/passwords/alpha", "/settings"):
             resp = await client.head(path, headers=forged)
             assert resp.status_code in (refused, 405)
@@ -51,54 +40,6 @@ async def test_method_and_path_variants_stay_protected(
         resp = await client.options("/passwords/alpha", headers=forged)
         assert resp.status_code in (refused, 405)
         assert "s3cret" not in resp.text
-
-
-async def test_duplicate_or_misspelled_key_headers_do_not_help(
-    client: httpx.AsyncClient,
-) -> None:
-    await create_vault(client)
-    key = await stored_vault_key()
-    forged = _random_key()
-    name = b"x-nedra-key-derivation"
-    variants = [
-        key.encode() + b"\x00",
-        key.encode() + b"!!",
-        key[:20].encode() + b"." + key[20:].encode(),
-        key.rstrip("=").encode(),
-        b" " + forged,
-    ]
-    alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
-    last = alphabet.index(key[42])
-    for low_bits in range(1, 4):
-        variants.append((key[:42] + alphabet[last ^ low_bits] + "=").encode())
-    standard_alphabet = key.replace("-", "+").replace("_", "/")
-    if standard_alphabet != key:
-        variants.append(standard_alphabet.encode())
-    attempts = [
-        [(name, forged), (name, b"")],
-        [(b"x_nedra_key_derivation", key.encode())],
-        [(b"X-Nedra-Key-Derivation", forged)],
-        [(b"X-Nedra-Key-Derivation", key.encode())],
-        [(name, key.encode())],
-        *([(name, value)] for value in variants),
-    ]
-    for headers in attempts:
-        resp = await client.patch(
-            "/settings",
-            json={
-                "inactivity_ms": 60_000,
-                "warn_before_ms": 10_000,
-                "hidden_ms": 60_000,
-                "debounce_ms": 100,
-                "clipboard_clear_ms": 5_000,
-                "update_check_enabled": False,
-            },
-            headers=headers,
-        )
-        assert resp.status_code in (401, 403), headers
-    assert await db_execute("SELECT inactivity_ms FROM settings") == [
-        (SETTINGS_DEFAULTS["inactivity_ms"],)
-    ]
 
 
 async def test_concurrent_rotations_with_the_same_key_apply_once(
@@ -245,7 +186,6 @@ async def test_forged_credentials_never_wait_on_vault_locks(
     client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     token = await create_vault(client)
-    real_key = await stored_vault_key()
     gate = asyncio.Event()
     original = MasterPasswordCRUD.update_master_password
 
@@ -260,11 +200,7 @@ async def test_forged_credentials_never_wait_on_vault_locks(
     )
     await asyncio.sleep(1.5)
     try:
-        for forged, refused in (
-            (auth(secrets.token_urlsafe(32)), 401),
-            (retired_key_header(real_key), 403),
-            (retired_key_header(_random_key()), 403),
-        ):
+        for forged, refused in ((auth(secrets.token_urlsafe(32)), 401),):
             resp = await asyncio.wait_for(
                 client.get("/passwords", headers=forged), timeout=3
             )

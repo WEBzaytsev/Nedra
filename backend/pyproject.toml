@@ -1,6 +1,6 @@
 [project]
 name = "nedra-server"
-version = "4.0.0"
+version = "5.0.0"
 description = "Nedra Password Manager API"
 requires-python = ">=3.13,<3.15"
 dependencies = [
@@ -13,7 +13,6 @@ dependencies = [
     "pydantic-settings>=2.16.2",
     "greenlet>=3.5.6",
     "slowapi>=0.1.10",
-    "pyzipper>=0.4.0",
     "python-multipart>=0.0.33",
     "typer>=0.29.1",
     "httpx>=0.28.0",

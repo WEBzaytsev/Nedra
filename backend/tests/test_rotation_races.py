@@ -33,7 +33,7 @@ ROTATE = {
     "master_password": MASTER_PASSWORD,
     "new_master_password": NEW_MASTER_PASSWORD,
 }
-OTHER_PASSWORD = "Moth-Other-Rotation-2028#"
+OTHER_PASSWORD = "Nedra-Other-Rotation-2028#"
 GATE_SECONDS = 10
 
 
@@ -295,7 +295,7 @@ async def test_an_import_overtaken_by_a_rotation_writes_nothing(
             data={"master_password": MASTER_PASSWORD, "on_conflict": "skip"},
             files={
                 "file": (
-                    "b.cmbackup",
+                    "b.nedrabackup",
                     backup_file([backup_entry("late", "late-Value-1")]),
                     "application/octet-stream",
                 )
@@ -356,7 +356,7 @@ async def test_a_backup_overtaken_by_a_rotation_is_refused(
     assert rotated.status_code == 200, rotated.text
     assert resp.status_code == 401, resp.text
     assert resp.json()["code"] == "invalid_session"
-    assert not resp.content.startswith(b"CMBACKUP")
+    assert not resp.content.startswith(b"NEDRABKP")
     assert await _decrypts(NEW_MASTER_PASSWORD)
 
 

@@ -10,7 +10,7 @@ import { chromium } from "playwright";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 const uv = process.env.UV ?? "uv";
-const password = "Moth-Test-Vault-2026!";
+const password = "Nedra-Test-Vault-2026!";
 const memberPassword = "Member-Test-Vault-2026!";
 
 const port = async () =>
@@ -228,7 +228,7 @@ try {
     const stepUp = async (token, action, fields) => {
         const context = createHmac("sha256", token)
             .update(
-                `ciphermoth/security-step-up-context/v1\0${action}\0${JSON.stringify(fields)}`,
+                `nedra/security-step-up-context/v1\0${action}\0${JSON.stringify(fields)}`,
             )
             .digest("base64url");
         const options = await ok("/security/step-up/options", {
@@ -517,7 +517,7 @@ try {
     assert.equal(factorBackup.status, 200, factorBackup.text);
     assert.equal(
         new TextDecoder().decode(factorBackup.bytes.subarray(0, 8)),
-        "CMBACKUP",
+        "NEDRABKP",
     );
     for (const path of [
         "/passwords/factor-backup",
@@ -533,7 +533,7 @@ try {
     const restoreForm = new FormData();
     restoreForm.set("master_password", "Changed-Password-2026!");
     restoreForm.set("on_conflict", "skip");
-    restoreForm.set("file", new Blob([factorBackup.bytes]), "factor.cmbackup");
+    restoreForm.set("file", new Blob([factorBackup.bytes]), "factor.nedrabackup");
     const restoredBackup = await fetch(`${api}/passwords/import`, {
         method: "POST",
         headers: { "x-nedra-session": factorSession },

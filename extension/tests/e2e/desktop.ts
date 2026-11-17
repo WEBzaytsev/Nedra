@@ -18,7 +18,7 @@ const exe = process.platform === "win32" ? ".exe" : "";
 export const HOST_BIN = join(TARGET, "debug", `native-host${exe}`);
 export const STUB_BIN = join(TARGET, "debug", "examples", `app_stub${exe}`);
 export const HOST_NAME = "com.nedra.desktop.qa";
-export const CHROMIUM_ID = "emeejhcdcdnlhejcpeohdafdnkmbaddn";
+export const CHROMIUM_ID = "alkkfkojagimdnneandmpodagadmmmii";
 
 export const buildDesktopBinaries = (): void => {
   const options = {

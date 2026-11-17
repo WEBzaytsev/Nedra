@@ -21,7 +21,7 @@ Nedra combines an encrypted vault, managed users, groups, explicit read/write sh
 - Chromium and Firefox extension for explicit search, fill, copy, and TOTP actions;
 - native macOS, Windows, and Linux applications built with Tauri;
 - MCP service accounts with independent operation permissions and the same entry ACLs;
-- authenticated portable backups, installation snapshots, and checked schema migrations;
+- authenticated portable backups, installation snapshots, and strict schema validation;
 - signed desktop updates and signed multi-architecture container images with SBOM and provenance.
 
 ## Quick start
@@ -65,7 +65,7 @@ The cryptographic and storage contracts are documented in [docs/VAULT_FORMAT.md]
 ## Repository
 
 ```text
-backend/             FastAPI vault, CLI, MCP, migrations, and tests
+backend/             FastAPI vault, CLI, MCP, storage, and tests
 desktop/             Tauri application, private core, packaging, and updater
 extension/           Chromium and Firefox extension
 frontend/            React and Gravity UI web interface

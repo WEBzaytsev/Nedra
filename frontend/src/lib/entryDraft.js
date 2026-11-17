@@ -1,7 +1,6 @@
 import { gcm } from "@noble/ciphers/aes.js";
 
 const PREFIX = "nedra-entry-draft:v1:";
-const LEGACY_PREFIX = "ciphermoth-entry-draft:v1:";
 const MAX_DRAFT_BYTES = 1024 * 1024;
 const NONCE_BYTES = 12;
 const encode = (bytes) => btoa(Array.from(bytes, (byte) => String.fromCharCode(byte)).join(""));
@@ -12,7 +11,6 @@ export const createEntryDraftStore = ({ user_id, key: encodedKey }) => {
   const key = decode(encodedKey);
   if (key.length !== 32) throw new Error("Invalid draft key");
   const storageKey = `${PREFIX}${user_id}`;
-  const legacyStorageKey = `${LEGACY_PREFIX}${user_id}`;
   const encoder = new TextEncoder();
 
   const decodeDraft = (stored, keyName) => {
@@ -38,7 +36,6 @@ export const createEntryDraftStore = ({ user_id, key: encodedKey }) => {
       sealed.set(iv);
       sealed.set(ciphertext, NONCE_BYTES);
       sessionStorage.setItem(storageKey, encode(sealed));
-      sessionStorage.removeItem(legacyStorageKey);
     } finally {
       plaintext.fill(0);
     }
@@ -46,12 +43,9 @@ export const createEntryDraftStore = ({ user_id, key: encodedKey }) => {
 
   return {
     read() {
-      const canonical = sessionStorage.getItem(storageKey);
-      const stored = canonical ?? sessionStorage.getItem(legacyStorageKey);
+      const stored = sessionStorage.getItem(storageKey);
       if (!stored) return null;
-      const draft = decodeDraft(stored, canonical ? storageKey : legacyStorageKey);
-      if (!canonical) writeDraft(draft);
-      return draft;
+      return decodeDraft(stored, storageKey);
     },
     write(form) {
       // Native lock can destroy the renderer without a JS callback. Persist in
@@ -60,7 +54,6 @@ export const createEntryDraftStore = ({ user_id, key: encodedKey }) => {
     },
     clear() {
       sessionStorage.removeItem(storageKey);
-      sessionStorage.removeItem(legacyStorageKey);
     },
   };
 };

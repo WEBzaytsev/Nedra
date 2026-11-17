@@ -9,9 +9,7 @@ import "./i18n";
 
 import App from "./App";
 import { store } from "./store";
-import { forgetLegacyKey } from "./utils";
 
-forgetLegacyKey();
 dateSettings.setDefaultTimeZone("system");
 
 const root = ReactDOM.createRoot(document.getElementById("root"));

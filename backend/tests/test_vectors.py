@@ -7,7 +7,6 @@ from pathlib import Path
 
 import httpx
 import pytest
-import pyzipper
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 import helpers
@@ -21,7 +20,7 @@ VECTORS = Path(__file__).resolve().parents[2] / "testdata" / "vectors"
 def load(name: str) -> dict:
     data = json.loads((VECTORS / name).read_text(encoding="utf-8"))
     # Frozen authenticated fixtures keep their original format identifier.
-    assert data["format"] == "ciphermoth-test-vectors/1"
+    assert data["format"] == "nedra-test-vectors/1"
     return data
 
 
@@ -54,7 +53,7 @@ def test_master_password_reaching_the_kdf(case: dict) -> None:
     assert submitted.master_password == case["kdf_input"]
 
 
-VAULT = load("vault-v2.json")
+VAULT = load("vault-v3.json")
 
 
 def _vault_material(vector: dict) -> helpers.KeyMaterial:
@@ -167,7 +166,7 @@ def test_new_records_follow_the_specification() -> None:
     document = b'{"name": "x"}'
     sealed = key.seal_entry(uid, document)
     assert sealed[0] == 2 and len(sealed) == 1 + 12 + 64 + 16
-    associated = b"\x02ciphermoth/v2" + b"".join(
+    associated = b"\x02nedra/v3" + b"".join(
         struct.pack(">I", len(p)) + p for p in (b"entry", uid)
     )
     plain = record_key.decrypt(sealed[1:13], sealed[13:], associated)
@@ -190,79 +189,35 @@ def test_totp(vector: dict, monkeypatch: pytest.MonkeyPatch) -> None:
     assert code == vector["code"]
 
 
-BACKUP = load("backup_zip.json")
-
-
-def test_frozen_backup_zip_opens_with_its_password() -> None:
-    archive = (VECTORS / BACKUP["file"]).read_bytes()
-    with pyzipper.AESZipFile(io.BytesIO(archive)) as zf:
-        assert zf.namelist() == [BACKUP["member"]]
-        zf.setpassword(BACKUP["password"].encode())
-        assert json.loads(zf.read(BACKUP["member"])) == BACKUP["json"]
-    with (
-        pytest.raises(RuntimeError),
-        pyzipper.AESZipFile(io.BytesIO(archive)) as zf,
-    ):
-        zf.setpassword(b"wrong password")
-        zf.read(BACKUP["member"])
-
-
-async def test_frozen_backup_zip_restores_into_a_new_vault(
-    client: httpx.AsyncClient,
-) -> None:
-    key = await create_vault(client, BACKUP["password"])
-    resp = await client.post(
-        "/passwords/import",
-        data={"master_password": BACKUP["password"]},
-        files={"file": ("b.zip", (VECTORS / BACKUP["file"]).read_bytes(), "x/y")},
-        headers=auth(key),
-    )
-    assert resp.status_code == 200, resp.text
-    restored = {
-        p["password_name"]: p
-        for p in (await client.get("/passwords", headers=auth(key))).json()
-    }
-    for item in BACKUP["json"]["passwords"]:
-        got = restored[item["name"]]
-        assert got["password_value"] == item["value"]
-        for field in ("kind", "username", "url", "totp_secret", "description"):
-            assert got[field] == item[field]
-        assert got["tags"] == item["tags"]
-        assert got["custom_fields"] == item["custom_fields"]
-        assert got["folder"] == item["folder"]
-        assert got["favorite"] == item["favorite"]
-
-
 def test_the_reference_construction_still_reproduces_the_frozen_files() -> None:
     documents, binaries = generate_vectors.outputs()
     for name, content in documents.items():
-        if name == "backup_zip.json":
-            continue
         assert json.loads(json.dumps(content, ensure_ascii=False)) == load(name)
     assert (
-        binaries["backup-v2.cmbackup"] == (VECTORS / "backup-v2.cmbackup").read_bytes()
+        binaries["backup-v3.nedrabackup"]
+        == (VECTORS / "backup-v3.nedrabackup").read_bytes()
     )
 
 
-BACKUP_V2 = load("backup-v2.json")
+BACKUP_V3 = load("backup-v3.json")
 
 
 def test_the_frozen_backup_reads_with_the_frame_reader() -> None:
     from backup_format import BackupReader
 
-    data = (VECTORS / BACKUP_V2["file"]).read_bytes()
-    assert hashlib.sha256(data).hexdigest() == BACKUP_V2["file_sha256"]
+    data = (VECTORS / BACKUP_V3["file"]).read_bytes()
+    assert hashlib.sha256(data).hexdigest() == BACKUP_V3["file_sha256"]
     reader = BackupReader(io.BytesIO(data))
-    key = helpers.BackupKey(bytes.fromhex(BACKUP_V2["derived_hex"]))
+    key = helpers.BackupKey(bytes.fromhex(BACKUP_V3["derived_hex"]))
     assert key.matches(reader.header)
-    assert json.loads(reader.read(key, 1 << 20)) == BACKUP_V2["manifest"]
-    first, second = BACKUP_V2["entries"]
+    assert json.loads(reader.read(key, 1 << 20)) == BACKUP_V3["manifest"]
+    first, second = BACKUP_V3["entries"]
     assert json.loads(reader.read(key, 1 << 20)) == first
-    assert reader.read(key, 1 << 20).hex() == BACKUP_V2["attachment_hex"]
+    assert reader.read(key, 1 << 20).hex() == BACKUP_V3["attachment_hex"]
     assert json.loads(reader.read(key, 1 << 20)) == second
     reader.finish()
-    derived = helpers.argon2id(BACKUP_V2["password"], reader.header.salt)
-    assert derived.hex() == BACKUP_V2["derived_hex"]
+    derived = helpers.argon2id(BACKUP_V3["password"], reader.header.salt)
+    assert derived.hex() == BACKUP_V3["derived_hex"]
 
 
 async def test_the_frozen_backup_restores_completely_into_a_new_vault(
@@ -271,9 +226,9 @@ async def test_the_frozen_backup_restores_completely_into_a_new_vault(
     token = await create_vault(client)
     resp = await client.post(
         "/passwords/import",
-        data={"master_password": BACKUP_V2["password"]},
+        data={"master_password": BACKUP_V3["password"]},
         files={
-            "file": ("b.cmbackup", (VECTORS / BACKUP_V2["file"]).read_bytes(), "x/y")
+            "file": ("b.nedrabackup", (VECTORS / BACKUP_V3["file"]).read_bytes(), "x/y")
         },
         headers=auth(token),
     )
@@ -283,7 +238,7 @@ async def test_the_frozen_backup_restores_completely_into_a_new_vault(
     assert resp.json()["attachments"] == 1
     assert resp.json()["settings_restored"] is True
     [active] = (await client.get("/passwords", headers=auth(token))).json()
-    expected = BACKUP_V2["entries"][0]
+    expected = BACKUP_V3["entries"][0]
     assert active["password_value"] == expected["value"]
     assert active["password_history"][0]["value"] == expected["history"][0]["value"]
     assert active["updated"] == expected["updated"].removesuffix("+00:00")
@@ -293,8 +248,8 @@ async def test_the_frozen_backup_restores_completely_into_a_new_vault(
     download = await client.get(
         f"/passwords/GitHub/attachments/{attachment['id']}", headers=auth(token)
     )
-    assert download.content.hex() == BACKUP_V2["attachment_hex"]
+    assert download.content.hex() == BACKUP_V3["attachment_hex"]
     [trashed] = (await client.get("/passwords/trash", headers=auth(token))).json()
     assert trashed["deleted"] == "2025-12-24T18:00:00.123456"
     settings = (await client.get("/settings", headers=auth(token))).json()
-    assert settings == BACKUP_V2["manifest"]["settings"]
+    assert settings == BACKUP_V3["manifest"]["settings"]

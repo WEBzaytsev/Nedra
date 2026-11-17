@@ -39,22 +39,21 @@ afterEach(() => {
 });
 
 describe("imports", () => {
-  it("sends a backup ZIP with the master password and conflict mode", async () => {
+  it("sends a complete backup with the master password and conflict mode", async () => {
     const actions = build({ "POST /passwords/import": [200, RESULT] });
-    const file = new File([new Uint8Array([80, 75, 3, 4])], "backup.zip");
+    const file = new File([new TextEncoder().encode("NEDRABKP")], "backup.nedrabackup");
     await expect(
-      actions.importPasswords({ file, masterPassword: "Moth-Test-Vault-2026!", onConflict: "skip" })
+      actions.importPasswords({ file, masterPassword: "Nedra-Test-Vault-2026!", onConflict: "skip" })
     ).resolves.toEqual(RESULT);
 
     const [request, refresh] = seen;
     expect(request.data).toBeInstanceOf(FormData);
     const sent = fields(request.data);
     expect(Object.keys(sent).sort()).toEqual(["file", "master_password", "on_conflict"]);
-    expect(sent.master_password).toBe("Moth-Test-Vault-2026!");
+    expect(sent.master_password).toBe("Nedra-Test-Vault-2026!");
     expect(sent.on_conflict).toBe("skip");
-    expect(sent.file.name).toBe("backup.zip");
+    expect(sent.file.name).toBe("backup.nedrabackup");
     expect(request.headers["x-nedra-session"]).toBe(TOKEN);
-    expect(request.headers["x-nedra-key-derivation"]).toBeUndefined();
     expect(`${refresh.method} ${refresh.url}`).toBe("get /passwords");
   });
 
@@ -81,7 +80,7 @@ describe("imports", () => {
 
   it("falls back to a generic message on an unexpected failure", async () => {
     const actions = build({ "POST /passwords/import": [500, "<html>"] });
-    const file = new File(["x"], "backup.zip");
+    const file = new File(["x"], "backup.nedrabackup");
     await expect(
       actions.importPasswords({ file, masterPassword: "x", onConflict: "skip" })
     ).rejects.toThrow("Could not import entries. Check the file and try again.");
@@ -89,7 +88,7 @@ describe("imports", () => {
 });
 
 describe("backup", () => {
-  it("downloads the backup as a .cmbackup file", async () => {
+  it("downloads the backup as a .nedrabackup file", async () => {
     const actions = build({ "POST /passwords/backup": [200, new Blob(["zip"])] });
     const link = { click: vi.fn() };
     vi.stubGlobal("document", { createElement: vi.fn(() => link) });
@@ -97,13 +96,13 @@ describe("backup", () => {
     const revokeObjectURL = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
 
     const controller = new AbortController();
-    await actions.backup({ masterPassword: "Moth-Test-Vault-2026!", signal: controller.signal });
+    await actions.backup({ masterPassword: "Nedra-Test-Vault-2026!", signal: controller.signal });
 
     const [request] = seen;
     expect(request.responseType).toBe("blob");
     expect(request.signal).toBe(controller.signal);
-    expect(JSON.parse(request.data)).toEqual({ master_password: "Moth-Test-Vault-2026!" });
-    expect(link.download).toMatch(/^nedra_backup_\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}\.cmbackup$/);
+    expect(JSON.parse(request.data)).toEqual({ master_password: "Nedra-Test-Vault-2026!" });
+    expect(link.download).toMatch(/^nedra_backup_\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}\.nedrabackup$/);
     expect(link.click).toHaveBeenCalledTimes(1);
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:backup");
     createObjectURL.mockRestore();
@@ -118,13 +117,13 @@ describe("backup", () => {
     vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:backup");
     vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
 
-    await actions.backup({ masterPassword: "Moth-Test-Vault-2026!" });
+    await actions.backup({ masterPassword: "Nedra-Test-Vault-2026!" });
 
     expect(securityKeyStepUp).toHaveBeenCalledWith("backup", {
-      master_password: "Moth-Test-Vault-2026!",
+      master_password: "Nedra-Test-Vault-2026!",
     });
     expect(JSON.parse(seen[0].data)).toEqual({
-      master_password: "Moth-Test-Vault-2026!",
+      master_password: "Nedra-Test-Vault-2026!",
       security_key_assertion: assertion,
     });
   });

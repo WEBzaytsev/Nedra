@@ -241,7 +241,7 @@ const ImportDialog = ({ open, onClose, onImport, onImportCsv }) => {
               <Col size={{ xs: 12, m: 7 }} minWidth="0">
                 <Flex direction="column" gap="spacing-4">
                   {(!IS_DESKTOP || isCsv) && (
-                    <input {...fileInputProps} accept={isCsv ? ".csv" : ".cmbackup,.zip"} />
+                    <input {...fileInputProps} accept={isCsv ? ".csv" : ".nedrabackup,.zip"} />
                   )}
                   <Button
                     type="button"

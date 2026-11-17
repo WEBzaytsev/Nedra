@@ -392,7 +392,7 @@ const Passwords = {
         { responseType: "blob", signal }
       );
       const stamp = new Date().toISOString().slice(0, 19).replace(/:/g, "-");
-      triggerDownload(response.data, `nedra_backup_${stamp}.cmbackup`);
+      triggerDownload(response.data, `nedra_backup_${stamp}.nedrabackup`);
     } catch (err) {
       throw new Error(
         await errorDetail(err, IS_DESKTOP ? err.message : i18n.t("errors.backupFailed"))

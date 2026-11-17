@@ -34,18 +34,18 @@ def _hkdf_sha256(ikm: bytes, label: str) -> bytes:
 
 def test_frozen_derivations_against_independent_hmac_construction() -> None:
     vectors = json.loads(
-        (Path(__file__).parents[2] / "testdata/vectors/vault-v2.json").read_text()
+        (Path(__file__).parents[2] / "testdata/vectors/vault-v3.json").read_text()
     )
     for vector in vectors["vaults"]:
         raw = bytes.fromhex(vector["vault_key_hex"])
         derived = bytes.fromhex(vector["derived_hex"])
         for field, key, label in (
-            ("password_check_hex", derived, "ciphermoth/v2/password-commitment"),
-            ("key_check_hex", raw, "ciphermoth/v2/key-check"),
-            ("record_key_hex", raw, "ciphermoth/v2/record-encryption"),
+            ("password_check_hex", derived, "nedra/v3/password-commitment"),
+            ("key_check_hex", raw, "nedra/v3/key-check"),
+            ("record_key_hex", raw, "nedra/v3/record-encryption"),
         ):
             assert _hkdf_sha256(key, label).hex() == vector[field]
-        index_key = _hkdf_sha256(raw, "ciphermoth/v2/name-index")
+        index_key = _hkdf_sha256(raw, "nedra/v3/name-index")
         vault = helpers.VaultKey(raw)
         for name in (" ", "same", "Same", "é", "e\u0301", "日本/🦋"):
             assert (
@@ -151,6 +151,21 @@ async def test_backup_frame_capacity_is_enforced_before_a_vault_write_commits(
     )
     assert response.status_code == 400
     assert "frame limit" in response.json()["detail"]
+    assert await db_snapshot() == before
+
+
+async def test_backup_manifest_capacity_is_enforced_before_a_folder_commits(
+    client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import crud.engine
+
+    headers = auth(await create_vault(client))
+    before = await db_snapshot()
+    monkeypatch.setattr(crud.engine, "MAX_MANIFEST_BYTES", 4096)
+    monkeypatch.setattr(crud.engine, "_BACKUP_FIXED_OVERHEAD", 4096)
+    response = await client.post("/folders", json={"name": "capacity"}, headers=headers)
+    assert response.status_code == 400
+    assert "manifest capacity" in response.json()["detail"]
     assert await db_snapshot() == before
 
 

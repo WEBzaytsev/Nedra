@@ -428,25 +428,14 @@ mod tests {
 
     #[test]
     fn manifests_name_only_our_extensions() {
-        let chromium = manifest(
-            Family::Chromium,
-            "com.ciphermoth.desktop",
-            Path::new("/a/host"),
-        );
+        let chromium = manifest(Family::Chromium, "com.nedra.desktop", Path::new("/a/host"));
         assert_eq!(
             chromium["allowed_origins"],
-            json!(["chrome-extension://emeejhcdcdnlhejcpeohdafdnkmbaddn/"])
+            json!(["chrome-extension://alkkfkojagimdnneandmpodagadmmmii/"])
         );
         assert!(chromium.get("allowed_extensions").is_none());
-        let firefox = manifest(
-            Family::Firefox,
-            "com.ciphermoth.desktop",
-            Path::new("/a/host"),
-        );
-        assert_eq!(
-            firefox["allowed_extensions"],
-            json!(["ciphermoth@mr-grj.github.io"])
-        );
+        let firefox = manifest(Family::Firefox, "com.nedra.desktop", Path::new("/a/host"));
+        assert_eq!(firefox["allowed_extensions"], json!(["nedra@zaitsv.dev"]));
         assert_eq!(firefox["type"], "stdio");
     }
 

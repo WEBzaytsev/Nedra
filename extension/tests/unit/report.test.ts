@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { reportUnexpected } from "../../src/background/report";
 
-const SECRET = "hunter2-Moth-Secret";
+const SECRET = "hunter2-Nedra-Secret";
 
 const logged = (error: unknown): string => {
   const spy = vi.spyOn(console, "error").mockImplementation(() => undefined);

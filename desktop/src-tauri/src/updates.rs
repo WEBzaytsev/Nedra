@@ -41,7 +41,7 @@ fn target() -> String {
     format!("{os}-{}", std::env::consts::ARCH)
 }
 
-fn filenames(version: &str) -> [String; 2] {
+fn filename(version: &str) -> String {
     let suffix = if cfg!(target_os = "macos") {
         "app.tar.gz"
     } else if cfg!(windows) {
@@ -50,10 +50,7 @@ fn filenames(version: &str) -> [String; 2] {
         "AppImage"
     };
     let target = target();
-    [
-        format!("Nedra_{version}_{target}.{suffix}"),
-        format!("CipherMoth_{version}_{target}.{suffix}"),
-    ]
+    format!("Nedra_{version}_{target}.{suffix}")
 }
 
 fn validate(update: &Update) -> Result<(), String> {
@@ -62,14 +59,11 @@ fn validate(update: &Update) -> Result<(), String> {
     if newer <= current || !newer.pre.is_empty() || !newer.build.is_empty() {
         return Err("Only newer stable releases can be installed.".into());
     }
-    let names = filenames(&update.version);
-    let selected = names
-        .iter()
-        .find(|name| {
-            update.download_url.as_str()
-                == format!("{RELEASES}/download/v{}/{name}", update.version)
-        })
-        .ok_or_else(|| "The update does not match the official platform release.".to_string())?;
+    let selected = filename(&update.version);
+    if update.download_url.as_str() != format!("{RELEASES}/download/v{}/{selected}", update.version)
+    {
+        return Err("The update does not match the official platform release.".to_string());
+    }
     let decoded = base64::engine::general_purpose::STANDARD
         .decode(update.signature.trim())
         .map_err(|_| "Invalid update signature.")?;

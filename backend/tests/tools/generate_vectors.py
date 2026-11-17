@@ -14,21 +14,19 @@ import argparse
 import base64
 import hashlib
 import hmac
-import io
 import json
 import struct
 import sys
 import unicodedata
 from pathlib import Path
 
-import pyzipper
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.argon2 import Argon2id
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 OUT = Path(__file__).resolve().parents[3] / "testdata" / "vectors"
-FORMAT = "ciphermoth-test-vectors/1"
+FORMAT = "nedra-test-vectors/1"
 
 
 def argon2id_key(password: str, salt: bytes) -> str:
@@ -55,7 +53,7 @@ def seal(key: bytes, nonce: bytes, plaintext: bytes, associated: bytes) -> bytes
 
 
 def record_associated_data(*parts: bytes) -> bytes:
-    data = b"\x02ciphermoth/v2"
+    data = b"\x02nedra/v3"
     for part in parts:
         data += struct.pack(">I", len(part)) + part
     return data
@@ -66,9 +64,7 @@ def padded(document: bytes) -> bytes:
 
 
 def wrap_associated_data(salt: bytes) -> bytes:
-    return (
-        b"ciphermoth/v2/wrapped-vault-key" + struct.pack(">HIII", 2, 65536, 3, 4) + salt
-    )
+    return b"nedra/v3/wrapped-vault-key" + struct.pack(">HIII", 3, 65536, 3, 4) + salt
 
 
 def fixed(byte: int, length: int) -> bytes:
@@ -80,7 +76,7 @@ def doc(name: str, description: str, **sections: object) -> dict:
 
 
 ARGON2_PASSWORDS = [
-    ("Moth-Test-Vault-2026!", "00" * 16, "ASCII"),
+    ("Nedra-Test-Vault-2026!", "00" * 16, "ASCII"),
     ("correct horse battery staple", "ff" * 16, "spaces inside"),
     ("Mölle-Stern-2026", "a1b2c3d4e5f60718293a4b5c6d7e8f90", "NFC"),
     (
@@ -90,19 +86,19 @@ ARGON2_PASSWORDS = [
     ),
     ("ключ-вольта-2026", "0f1e2d3c4b5a69788796a5b4c3d2e1f0", "Cyrillic"),
     ("パスワード2026!", "13579bdf02468ace13579bdf02468ace", "Japanese"),
-    ("🦋 moth 🦋 2026", "deadbeefdeadbeefdeadbeefdeadbeef", "emoji, 4-byte UTF-8"),
+    ("🦋 user 🦋 2026", "deadbeefdeadbeefdeadbeefdeadbeef", "emoji, 4-byte UTF-8"),
     ("סיסמה-2026-ok", "0123456789abcdeffedcba9876543210", "right-to-left"),
     ("two  spaces\tand\ttabs 2026", "55" * 16, "inner whitespace is kept"),
     ("x" * 1023 + "!", "77" * 16, "1024 characters, the API maximum"),
 ]
 
 STRIP_CASES = [
-    ("  Moth-Test-Vault-2026!  ", "Moth-Test-Vault-2026!"),
-    ("\tMoth-Test-Vault-2026!\n", "Moth-Test-Vault-2026!"),
-    (" Moth-Test-Vault-2026!　", "Moth-Test-Vault-2026!"),
-    ("​Moth-Test-Vault-2026!", "​Moth-Test-Vault-2026!"),
-    ("\x1cMoth-Test-Vault-2026!", "\x1cMoth-Test-Vault-2026!"),
-    ("Moth Test Vault 2026!", "Moth Test Vault 2026!"),
+    ("  Nedra-Test-Vault-2026!  ", "Nedra-Test-Vault-2026!"),
+    ("\tNedra-Test-Vault-2026!\n", "Nedra-Test-Vault-2026!"),
+    (" Nedra-Test-Vault-2026!　", "Nedra-Test-Vault-2026!"),
+    ("​Nedra-Test-Vault-2026!", "​Nedra-Test-Vault-2026!"),
+    ("\x1cNedra-Test-Vault-2026!", "\x1cNedra-Test-Vault-2026!"),
+    ("Nedra Test Vault 2026!", "Nedra Test Vault 2026!"),
 ]
 
 
@@ -151,7 +147,7 @@ def backup_entries() -> list[dict]:
         {
             "name": "GitHub #work",
             "kind": "login",
-            "username": "moth@example.com",
+            "username": "user@example.com",
             "value": "gh-Secret-1",
             "url": "https://github.com",
             "totp_secret": "JBSWY3DPEHPK3PXP",
@@ -177,43 +173,8 @@ def backup_entries() -> list[dict]:
     ]
 
 
-def backup_vectors() -> tuple[dict, bytes]:
-    password = "Mölle-Stern-2026"
-    payload = json.dumps(
-        {"exported_at": "2026-10-10T12:00:00+00:00", "passwords": backup_entries()},
-        indent=2,
-        ensure_ascii=False,
-    ).encode("utf-8")
-    buffer = io.BytesIO()
-    with pyzipper.AESZipFile(
-        buffer, "w", compression=pyzipper.ZIP_DEFLATED, encryption=pyzipper.WZ_AES
-    ) as zf:
-        zf.setpassword(password.encode("utf-8"))
-        zf.writestr("ciphermoth_backup.json", payload)
-    return (
-        doc(
-            "backup_zip",
-            "Backup format v1: a ZIP with one member, ciphermoth_backup.json, "
-            "deflate-compressed and encrypted with WinZip AES-256 (AE-2, "
-            "PBKDF2-HMAC-SHA1 with 1000 iterations and a 16-byte salt, as "
-            "written by pyzipper) under the UTF-8 master password as submitted "
-            "after whitespace stripping. The JSON is {exported_at, passwords: "
-            "[{name, kind, username, value, url, totp_secret, description, "
-            "tags, custom_fields, folder, favorite}]}; releases before v1.4.0 "
-            "wrote only name, username, value, url, totp_secret, description, "
-            "tags and favorite. History, trash, attachments, settings and "
-            "timestamps are not included.",
-            file="backup-v1.zip",
-            password=password,
-            member="ciphermoth_backup.json",
-            json=json.loads(payload),
-        ),
-        buffer.getvalue(),
-    )
-
-
 VAULTS = [
-    ("Moth-Test-Vault-2026!", fixed(0x10, 16), fixed(0x40, 32), fixed(0x90, 12)),
+    ("Nedra-Test-Vault-2026!", fixed(0x10, 16), fixed(0x40, 32), fixed(0x90, 12)),
     ("Mölle-Stern-2026 🦋", fixed(0xA0, 16), fixed(0xC0, 32), fixed(0xE0, 12)),
 ]
 NAMES = [
@@ -233,7 +194,7 @@ def _document(**fields: object) -> bytes:
     base = {
         "name": "GitHub",
         "kind": "login",
-        "username": "moth@example.com",
+        "username": "user@example.com",
         "value": "gh-Secret-1",
         "url": "https://github.com",
         "totp_secret": "JBSWY3DPEHPK3PXP",
@@ -250,18 +211,18 @@ def _document(**fields: object) -> bytes:
     return json.dumps(base, ensure_ascii=False).encode("utf-8")
 
 
-def vault_v2_vectors() -> dict:
+def vault_v3_vectors() -> dict:
     vaults = []
     for password, salt, vault_key, nonce in VAULTS:
         derived = raw_argon2id(password, salt)
-        wrapping = hkdf(derived, "ciphermoth/v2/key-wrapping")
+        wrapping = hkdf(derived, "nedra/v3/key-wrapping")
         vaults.append(
             {
                 "password": password,
                 "salt_hex": salt.hex(),
                 "derived_hex": derived.hex(),
                 "password_check_hex": hkdf(
-                    derived, "ciphermoth/v2/password-commitment"
+                    derived, "nedra/v3/password-commitment"
                 ).hex(),
                 "key_wrapping_key_hex": wrapping.hex(),
                 "vault_key_hex": vault_key.hex(),
@@ -269,16 +230,14 @@ def vault_v2_vectors() -> dict:
                 "wrapped_key_hex": seal(
                     wrapping, nonce, vault_key, wrap_associated_data(salt)
                 ).hex(),
-                "key_check_hex": hkdf(vault_key, "ciphermoth/v2/key-check").hex(),
-                "record_key_hex": hkdf(
-                    vault_key, "ciphermoth/v2/record-encryption"
-                ).hex(),
-                "name_index_key_hex": hkdf(vault_key, "ciphermoth/v2/name-index").hex(),
+                "key_check_hex": hkdf(vault_key, "nedra/v3/key-check").hex(),
+                "record_key_hex": hkdf(vault_key, "nedra/v3/record-encryption").hex(),
+                "name_index_key_hex": hkdf(vault_key, "nedra/v3/name-index").hex(),
             }
         )
     vault_key = VAULTS[0][2]
-    record_key = hkdf(vault_key, "ciphermoth/v2/record-encryption")
-    index_key = hkdf(vault_key, "ciphermoth/v2/name-index")
+    record_key = hkdf(vault_key, "nedra/v3/record-encryption")
+    index_key = hkdf(vault_key, "nedra/v3/name-index")
     entry_uid, attachment_uid = fixed(0x01, 16), fixed(0x21, 16)
     content = bytes(range(256)) + b"\xff\xfe\x00\x80"
     plain_records = [
@@ -379,22 +338,22 @@ def vault_v2_vectors() -> dict:
         },
     ]
     return doc(
-        "vault_v2",
-        "Vault format 2 (docs/VAULT_FORMAT.md). derived = Argon2id(password, "
+        "vault_v3",
+        "Vault format 3 (docs/VAULT_FORMAT.md). derived = Argon2id(password, "
         "salt, m=65536 KiB, t=3, p=4, 32 bytes); password_check = HKDF-SHA256("
-        "derived, info='ciphermoth/v2/password-commitment'); key_wrapping_key = "
-        "HKDF(derived, 'ciphermoth/v2/key-wrapping'); wrapped_key = 0x02 || nonce "
+        "derived, info='nedra/v3/password-commitment'); key_wrapping_key = "
+        "HKDF(derived, 'nedra/v3/key-wrapping'); wrapped_key = 0x02 || nonce "
         "|| AES-256-GCM(key_wrapping_key, nonce, vault_key, wrap_associated_data); "
         "key_check, record_key and name_index_key = HKDF(vault_key, "
-        "'ciphermoth/v2/key-check' | 'ciphermoth/v2/record-encryption' | "
-        "'ciphermoth/v2/name-index'). HKDF uses no salt and 32-byte output. A "
+        "'nedra/v3/key-check' | 'nedra/v3/record-encryption' | "
+        "'nedra/v3/name-index'). HKDF uses no salt and 32-byte output. A "
         "sealed record = 0x02 || nonce || AES-256-GCM(record_key, nonce, "
-        "plaintext, 0x02 || 'ciphermoth/v2' || (u32 BE length || part)...). Name "
+        "plaintext, 0x02 || 'nedra/v3' || (u32 BE length || part)...). Name "
         "index = HMAC-SHA256(name_index_key, UTF-8 name). Documents are JSON "
         "padded with spaces to a multiple of 64 bytes.",
         vaults=vaults,
         wrong_passwords=[
-            {"password": "Moth-Test-Vault-2026?", "vault": 0, "note": "one character"},
+            {"password": "Nedra-Test-Vault-2026?", "vault": 0, "note": "one character"},
             {
                 "password": unicodedata.normalize("NFD", "Mölle-Stern-2026 🦋"),
                 "vault": 1,
@@ -416,10 +375,10 @@ def vault_v2_vectors() -> dict:
     )
 
 
-def backup_v2_manifest(content: bytes) -> dict:
+def backup_v3_manifest(content: bytes) -> dict:
     return {
-        "format": "ciphermoth-backup",
-        "version": 2,
+        "format": "nedra-backup",
+        "version": 3,
         "exported_at": "2026-10-15T12:00:00+00:00",
         "app_version": "vectors",
         "settings": {
@@ -431,14 +390,16 @@ def backup_v2_manifest(content: bytes) -> dict:
             "update_check_enabled": False,
         },
         "entries_count": 2,
+        "folders": [{"uid": "00112233445566778899aabbccddeeff", "name": "Work"}],
     }
 
 
-def backup_v2_entries(content: bytes) -> list[dict]:
+def backup_v3_entries(content: bytes) -> list[dict]:
     entry = json.loads(_document())
     return [
         {
             **entry,
+            "folder_uid": "00112233445566778899aabbccddeeff",
             "created": "2026-01-01T00:00:00.000001+00:00",
             "updated": "2026-02-01T00:00:00.000002+00:00",
             "deleted": None,
@@ -461,6 +422,7 @@ def backup_v2_entries(content: bytes) -> list[dict]:
                     history=[],
                 )
             ),
+            "folder_uid": "00112233445566778899aabbccddeeff",
             "created": "2025-06-01T00:00:00+00:00",
             "updated": "2025-07-01T00:00:00+00:00",
             "deleted": "2025-12-24T18:00:00.123456+00:00",
@@ -469,12 +431,12 @@ def backup_v2_entries(content: bytes) -> list[dict]:
     ]
 
 
-def backup_v2_vectors() -> tuple[dict, bytes]:
+def backup_v3_vectors() -> tuple[dict, bytes]:
     password = "Mölle-Stern-2026 🦋"
     salt = fixed(0x33, 16)
     content = bytes(range(256)) * 4 + b"\x00\xff"
-    manifest = json.dumps(backup_v2_manifest(content), ensure_ascii=False).encode()
-    entries = backup_v2_entries(content)
+    manifest = json.dumps(backup_v3_manifest(content), ensure_ascii=False).encode()
+    entries = backup_v3_entries(content)
     plaintext_frames = [
         manifest,
         json.dumps(entries[0], ensure_ascii=False).encode(),
@@ -482,12 +444,12 @@ def backup_v2_vectors() -> tuple[dict, bytes]:
         json.dumps(entries[1], ensure_ascii=False).encode(),
     ]
     derived = raw_argon2id(password, salt)
-    frame_key = hkdf(derived, "ciphermoth/backup/v2/frame-encryption")
-    commitment = hkdf(derived, "ciphermoth/backup/v2/key-commitment")
+    frame_key = hkdf(derived, "nedra/backup/v3/frame-encryption")
+    commitment = hkdf(derived, "nedra/backup/v3/key-commitment")
     header = struct.pack(
         ">8sHBIII16sI32s",
-        b"CMBACKUP",
-        2,
+        b"NEDRABKP",
+        3,
         1,
         65536,
         3,
@@ -516,18 +478,18 @@ def backup_v2_vectors() -> tuple[dict, bytes]:
     data = bytes(out)
     return (
         doc(
-            "backup_v2",
-            "Backup format 2 (docs/VAULT_FORMAT.md section 5). derived = "
+            "backup_v3",
+            "Backup format 3 (docs/VAULT_FORMAT.md section 5). derived = "
             "Argon2id(password, salt, header parameters); frame_key = HKDF(derived, "
-            "'ciphermoth/backup/v2/frame-encryption'); commitment = HKDF(derived, "
-            "'ciphermoth/backup/v2/key-commitment'). Header (75 bytes) = 'CMBACKUP' "
-            "|| u16 version 2 || u8 kdf 1 || u32 memory KiB || u32 iterations || "
+            "'nedra/backup/v3/frame-encryption'); commitment = HKDF(derived, "
+            "'nedra/backup/v3/key-commitment'). Header (75 bytes) = 'NEDRABKP' "
+            "|| u16 version 3 || u8 kdf 1 || u32 memory KiB || u32 iterations || "
             "u32 lanes || salt(16) || u32 frames || commitment(32). Each frame = "
             "u32 length || nonce(12) || AES-256-GCM(frame_key, nonce, plaintext, "
             "header || u32 index || u8 last). Frame 0 contains settings and the "
             "entry count; each entry has its own JSON frame followed by its "
             "attachment frames.",
-            file="backup-v2.cmbackup",
+            file="backup-v3.nedrabackup",
             file_sha256=hashlib.sha256(data).hexdigest(),
             password=password,
             salt_hex=salt.hex(),
@@ -545,16 +507,14 @@ def backup_v2_vectors() -> tuple[dict, bytes]:
 
 
 def outputs() -> tuple[dict[str, dict], dict[str, bytes]]:
-    backup_doc, backup_zip = backup_vectors()
-    backup_v2_doc, backup_v2_file = backup_v2_vectors()
+    backup_v3_doc, backup_v3_file = backup_v3_vectors()
     return (
         {
             "argon2id.json": argon2id_vectors(),
-            "backup_zip.json": backup_doc,
-            "vault-v2.json": vault_v2_vectors(),
-            "backup-v2.json": backup_v2_doc,
+            "vault-v3.json": vault_v3_vectors(),
+            "backup-v3.json": backup_v3_doc,
         },
-        {"backup-v1.zip": backup_zip, "backup-v2.cmbackup": backup_v2_file},
+        {"backup-v3.nedrabackup": backup_v3_file},
     )
 
 
@@ -583,7 +543,7 @@ def main() -> int:
                 json.dumps(content, indent=2, ensure_ascii=False) + "\n"
             )
     for name, data in binaries.items():
-        if name in wanted and name != "backup-v1.zip":
+        if name in wanted:
             (OUT / name).write_bytes(data)
     return 0
 

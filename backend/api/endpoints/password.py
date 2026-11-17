@@ -565,5 +565,5 @@ async def backup_passwords(
     backup = await crud.create_backup(body.master_password, key, verify_current=False)
     await auth_crud.context(credential.token, refresh=False)
     stamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
-    filename = f"nedra_backup_{stamp}.cmbackup"
+    filename = f"nedra_backup_{stamp}.nedrabackup"
     return BackupResponse(backup, filename)

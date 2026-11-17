@@ -62,7 +62,7 @@ class HistoryItem(_Strict):
 
 class EntryDocument(_Strict):
     """
-    The encrypted content of one entry, exactly as vault format 2 stores it
+    The encrypted content of one entry, exactly as vault format 3 stores it
     (docs/VAULT_FORMAT.md). Every key is required and nothing else is allowed,
     so a document this release did not write is refused instead of guessed at.
     """

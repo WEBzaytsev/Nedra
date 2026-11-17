@@ -1,5 +1,4 @@
 import http.server
-import importlib.util
 import json
 import os
 import shutil
@@ -22,7 +21,6 @@ from tests.support import (
     MASTER_PASSWORD,
     WRONG_MASTER_PASSWORD,
     db_execute,
-    db_snapshot,
     name_index,
     plant_entry,
 )
@@ -65,7 +63,7 @@ async def test_cli_entry_lifecycle(api: str) -> None:
             answers=[
                 "Pa$$-[bold]w0rd",
                 "Pa$$-[bold]w0rd",
-                "moth@example.com",
+                "user@example.com",
                 "https://bank.test",
                 "JBSWY3DPEHPK3PXP",
                 "checking",
@@ -91,7 +89,7 @@ async def test_cli_entry_lifecycle(api: str) -> None:
 
     details = ok(cli(api, "password", "get", "Bank [main] #1"))
     assert "Pa$$-[bold]w0rd" in details
-    assert "moth@example.com" in details
+    assert "user@example.com" in details
     assert "Finance" in details
     assert "2FA code" in details
 
@@ -106,7 +104,7 @@ async def test_cli_entry_lifecycle(api: str) -> None:
     )
     details = ok(cli(api, "password", "get", "Bank [main] #1"))
     assert "New-Pass-2" in details
-    assert "moth@example.com" in details
+    assert "user@example.com" in details
 
     ok(cli(api, "password", "delete", "Bank [main] #1", "--yes"))
     assert "Bank [main] #1" in ok(cli(api, "password", "trash"))
@@ -160,10 +158,10 @@ async def test_cli_backup_import_and_csv(api: str, tmp_path: Path) -> None:
         )
     )
     ok(cli(api, "backup", "--out", str(tmp_path)))
-    [archive] = list(tmp_path.glob("nedra_backup_*.cmbackup"))
+    [archive] = list(tmp_path.glob("nedra_backup_*.nedrabackup"))
     assert stat.S_IMODE(archive.stat().st_mode) == 0o600
     content = archive.read_bytes()
-    assert content.startswith(b"CMBACKUP")
+    assert content.startswith(b"NEDRABKP")
     assert b"mail" not in content
 
     ok(cli(api, "password", "delete", "mail", "--yes"))
@@ -274,7 +272,7 @@ async def test_cli_reports_and_removes_damaged_rows_without_a_traceback(
 FULL_ENTRY = {
     "password_name": "full",
     "kind": "login",
-    "username": "moth@example.com",
+    "username": "user@example.com",
     "password_value": "full-Value-1",
     "url": "https://full.test",
     "totp_secret": "JBSWY3DPEHPK3PXP",
@@ -593,12 +591,9 @@ def _fake_server(respond: Callable[[_Recorder], None]) -> Iterator[tuple[str, li
 
 
 TOKEN = "T" * 43
-FAKE_KEY = "K" * 43 + "="
 SERVERS = {
-    "v1.4.6": {"version": "1.4.6"},
-    "v1.4.7": {"version": "1.4.7", "features": ["entry-names-with-slash"]},
     "sessions": {
-        "version": "1.5.0",
+        "version": "5.0.0",
         "features": ["entry-names-with-slash", "vault-sessions"],
     },
 }
@@ -606,17 +601,11 @@ SERVERS = {
 
 def _answer_unlock(handler: _Recorder, server: str) -> bool:
     path = handler.path
-    sessions = "vault-sessions" in SERVERS[server].get("features", [])
     if path.endswith("/meta"):
         handler.send(200, SERVERS[server])
     elif path.endswith("/master_password/unlock"):
-        if sessions:
-            handler.send(200, {"valid": True, "session_token": TOKEN})
-        else:
-            handler.send(404, {"detail": "Not Found"})
-    elif path.endswith("/master_password/check"):
-        handler.send(200, {"valid": True, "key_derivation": FAKE_KEY})
-    elif path.endswith("/master_password/lock") and sessions:
+        handler.send(200, {"valid": True, "session_token": TOKEN})
+    elif path.endswith("/master_password/lock"):
         handler.send(200, {"locked": True})
     else:
         return False
@@ -658,20 +647,20 @@ def test_cli_streams_large_backups_and_never_publishes_partial_transfers(
             assert list(tmp_path.iterdir()) == []
         else:
             ok(result)
-            [archive] = tmp_path.glob("*.cmbackup")
+            [archive] = tmp_path.glob("*.nedrabackup")
             assert archive.stat().st_size == size
             assert stat.S_IMODE(archive.stat().st_mode) == 0o600
             assert not list(tmp_path.glob("*.partial"))
             # Repeating the command cannot replace the earlier backup.
             ok(cli(api, "backup", "--out", str(tmp_path)))
-            assert len(list(tmp_path.glob("*.cmbackup"))) == 2
+            assert len(list(tmp_path.glob("*.nedrabackup"))) == 2
             assert archive.stat().st_size == size
 
 
 def test_cli_import_streams_from_disk_and_rewinds_on_session_retry(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    file = tmp_path / "large.cmbackup"
+    file = tmp_path / "large.nedrabackup"
     file.write_bytes(b"ciphertext" * (3 * 1024 * 1024))
     attempts = 0
 
@@ -722,12 +711,7 @@ def test_cli_never_follows_redirects_with_the_key_or_password(
             unlocking = handler.path.endswith(
                 ("/master_password/check", "/master_password/unlock")
             )
-            legacy_probe = server != "sessions" and handler.path.endswith("/unlock")
-            if (
-                handler.path.endswith("/meta")
-                or legacy_probe
-                or (unlocking and not redirect_unlock)
-            ):
+            if handler.path.endswith("/meta") or (unlocking and not redirect_unlock):
                 _answer_unlock(handler, server)
             else:
                 handler.send(
@@ -777,32 +761,9 @@ def test_cli_uses_a_session_and_locks_it_when_the_command_ends() -> None:
     ]
     for _, path, headers in requests:
         headers = _lower(headers)
-        assert "x-nedra-key-derivation" not in headers
         assert "authorization" not in headers
         if path.endswith(("/passwords", "/missing", "/lock")):
             assert headers["x-nedra-session"] == TOKEN
-
-
-@pytest.mark.parametrize("server", ["v1.4.6", "v1.4.7"])
-def test_cli_refuses_servers_that_predate_sessions(server: str) -> None:
-    def respond(handler: _Recorder) -> None:
-        if not _answer_unlock(handler, server):
-            handler.send(200, [])
-
-    with _fake_server(respond) as (api, requests):
-        result = runner.invoke(
-            cli_app,
-            ["password", "list"],
-            input=MASTER_PASSWORD + "\n",
-            env={"NEDRA_API_URL": api, "COLUMNS": "200"},
-        )
-
-    assert result.exit_code == 1
-    assert "older than 1.5.0" in result.output
-    assert "Traceback" not in result.output
-    paths = [path.removeprefix("/api") for _, path, _ in requests]
-    assert paths == ["/meta", "/master_password/unlock"]
-    assert all("x-nedra-key-derivation" not in _lower(h) for _, _, h in requests)
 
 
 def test_cli_points_at_the_api_url_when_nothing_answers_there() -> None:
@@ -846,7 +807,6 @@ def test_cli_does_not_fall_back_to_the_vault_key_when_meta_fails(meta: str) -> N
     assert result.exit_code == 0, result.output
     paths = [path.removeprefix("/api") for _, path, _ in requests]
     assert "/master_password/check" not in paths
-    assert all("x-nedra-key-derivation" not in _lower(h) for _, _, h in requests)
 
 
 @pytest.mark.parametrize(
@@ -872,7 +832,7 @@ def test_cli_never_falls_back_to_the_vault_key_on_an_unrelated_error(
         elif handler.path.endswith("/master_password/unlock"):
             handler.send(unlock_status, unlock_body)
         else:
-            handler.send(200, {"valid": True, "key_derivation": FAKE_KEY})
+            handler.send(200, {"valid": True})
 
     with _fake_server(respond) as (api, requests):
         result = runner.invoke(
@@ -894,7 +854,7 @@ def test_cli_keeps_credentials_in_the_url_for_a_proxy() -> None:
             handler.send(200, [])
 
     with _fake_server(respond) as (api, requests):
-        proxied = api.replace("http://", "http://moth:proxy-pass@")
+        proxied = api.replace("http://", "http://user:proxy-pass@")
         result = runner.invoke(
             cli_app,
             ["password", "list"],
@@ -958,55 +918,6 @@ async def test_cli_ends_its_sessions_on_the_live_server(
     assert log.count("POST /api/master_password/unlock") == 2
     assert log.count("POST /api/master_password/lock") == 2
     assert "/master_password/check" not in log
-
-
-def _old_cli() -> typer.Typer:
-    path = Path(__file__).resolve().parents[2] / "testdata/clients/cli_v1_4_7.py"
-    spec = importlib.util.spec_from_file_location("nedra_cli_v1_4_7", path)
-    assert spec is not None and spec.loader is not None
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module.app
-
-
-def old_cli(api: str, *args: str, answers: list[str] | None = None) -> Result:
-    lines = [MASTER_PASSWORD, *(answers or [])]
-    return runner.invoke(
-        _old_cli(),
-        list(args),
-        input="\n".join(lines) + "\n",
-        env={"CIPHERMOTH_API_URL": api, "COLUMNS": "200"},
-    )
-
-
-async def test_the_v147_cli_is_told_to_update_and_changes_nothing(
-    api: str, tmp_path: Path, live_server_log: Path
-) -> None:
-    ok(cli(api, "password", "create", "kept", answers=["kept-Pass-1"] * 2 + [""] * 5))
-    before = await db_snapshot()
-    log_start = live_server_log.stat().st_size
-    for args, answers in (
-        (["password", "list"], []),
-        (["password", "get", "kept"], []),
-        (
-            ["password", "create", "from-old-cli"],
-            ["old-cli-Pass-1", "old-cli-Pass-1", "moth", "", "", "", ""],
-        ),
-        (["password", "delete", "kept", "--yes"], []),
-        (["backup", "--out", str(tmp_path)], []),
-    ):
-        result = old_cli(api, *args, answers=answers)
-        assert result.exit_code == 1, args
-        assert "no longer hands out or accepts the vault key" in result.output
-        assert "CLI to 1.5.0 or newer" in result.output
-        assert "Traceback" not in result.output
-        assert "kept-Pass-1" not in result.output
-    assert await db_snapshot() == before
-    assert list(tmp_path.iterdir()) == []
-    log = live_server_log.read_bytes()[log_start:].decode(errors="replace")
-    assert log.count("POST /api/master_password/check") == 5
-    assert "/api/passwords" not in log
-    assert "kept-Pass-1" in ok(cli(api, "password", "get", "kept"))
 
 
 @pytest.mark.parametrize(

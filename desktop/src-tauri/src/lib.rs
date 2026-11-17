@@ -86,7 +86,6 @@ fn core_config(app: &tauri::AppHandle) -> Result<CoreConfig, Box<dyn std::error:
             "LOCALAPPDATA",
             "USERPROFILE",
             "NEDRA_SECURITY_KEY_RP_ID",
-            "CIPHERMOTH_SECURITY_KEY_RP_ID",
             "WEBAUTHN_RP_IDS",
         ]
     } else {
@@ -95,7 +94,6 @@ fn core_config(app: &tauri::AppHandle) -> Result<CoreConfig, Box<dyn std::error:
             "TMPDIR",
             "LANG",
             "NEDRA_SECURITY_KEY_RP_ID",
-            "CIPHERMOTH_SECURITY_KEY_RP_ID",
             "WEBAUTHN_RP_IDS",
         ]
     };

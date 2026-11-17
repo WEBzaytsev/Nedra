@@ -23,7 +23,6 @@ from tests.support import (
     engine,
     entry,
     read_current_vault,
-    retired_key_header,
     stored_vault_key,
     unlock,
 )
@@ -41,7 +40,7 @@ async def _key_check() -> bytes | None:
 
 
 async def _accepts(key: str) -> bool:
-    expected = hkdf(raw_key_bytes(key), "ciphermoth/v2/key-check")
+    expected = hkdf(raw_key_bytes(key), "nedra/v3/key-check")
     return hmac.compare_digest(expected, await _key_check() or b"")
 
 
@@ -55,10 +54,6 @@ async def _failures(key: str) -> int:
     async with engine.connect() as conn:
         vault = await read_vault(conn, key, strict=False)
     return sum(1 for p in vault.problems if p.reason == "does not authenticate")
-
-
-def _random_key() -> str:
-    return base64.urlsafe_b64encode(os.urandom(32)).decode()
 
 
 async def test_create_stores_a_key_check_for_the_vault_key(
@@ -100,7 +95,7 @@ async def _seed_everything(client: httpx.AsyncClient, headers: Headers) -> bytes
         entry(
             "full",
             "first-Value-1",
-            username="moth@example.com",
+            username="user@example.com",
             url="https://example.com",
             totp_secret="otpauth://totp/x?secret=JBSWY3DPEHPK3PXP",
             description="plain description",
@@ -232,27 +227,6 @@ async def test_rotation_with_wrong_current_password_changes_nothing(
     await unlock(client)
 
 
-@pytest.mark.parametrize("header_key", ["real", "other"])
-async def test_rotation_carrying_a_vault_key_header_changes_nothing(
-    client: httpx.AsyncClient, header_key: str
-) -> None:
-    token = await create_vault(client)
-    await _seed_everything(client, auth(token))
-    key = await stored_vault_key() if header_key == "real" else _random_key()
-    before = await db_snapshot()
-
-    resp = await client.patch(
-        "/master_password/update",
-        json=ROTATE,
-        headers=auth(token) + retired_key_header(key),
-    )
-    assert resp.status_code == 403
-    assert resp.json()["code"] == "invalid_key"
-    assert key not in resp.text
-    assert await db_snapshot() == before
-    assert (await client.get("/passwords", headers=auth(token))).status_code == 200
-
-
 async def test_write_in_flight_during_rotation_is_reencrypted(
     client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -360,7 +334,7 @@ async def test_a_damaged_key_check_fails_closed_and_is_never_rewritten(
     )
     assert resp.status_code == 200
     if damage == "foreign key":
-        damaged = hkdf(os.urandom(32), "ciphermoth/v2/key-check")
+        damaged = hkdf(os.urandom(32), "nedra/v3/key-check")
     else:
         damaged = bytes(32)
     password = MASTER_PASSWORD

@@ -38,11 +38,11 @@ from tests.support import (
 )
 
 VECTORS = Path(__file__).resolve().parents[2] / "testdata" / "vectors"
-FROZEN = (VECTORS / "backup-v2.cmbackup").read_bytes()
+FROZEN = (VECTORS / "backup-v3.nedrabackup").read_bytes()
 FROZEN_KEY = helpers.BackupKey(
-    bytes.fromhex(json.loads((VECTORS / "backup-v2.json").read_text())["derived_hex"])
+    bytes.fromhex(json.loads((VECTORS / "backup-v3.json").read_text())["derived_hex"])
 )
-FROZEN_PASSWORD = json.loads((VECTORS / "backup-v2.json").read_text())["password"]
+FROZEN_PASSWORD = json.loads((VECTORS / "backup-v3.json").read_text())["password"]
 MIB = 1024 * 1024
 PLAINTEXT = (
     "kind",
@@ -78,7 +78,7 @@ def _refused(data: bytes) -> bool:
 
 def test_the_frozen_backup_reads_completely() -> None:
     manifest, active, content, trashed = _read_all(FROZEN)
-    assert json.loads(manifest)["version"] == 2
+    assert json.loads(manifest)["version"] == 3
     assert json.loads(manifest)["entries_count"] == 2
     assert json.loads(active)["name"] == "GitHub"
     assert json.loads(trashed)["name"] == "GitHub"
@@ -124,7 +124,7 @@ def test_every_single_bit_flip_anywhere_in_a_backup_is_refused() -> None:
 def test_every_truncation_and_any_extension_is_refused() -> None:
     for length in range(len(FROZEN)):
         assert _refused(FROZEN[:length]), length
-    for extra in (b"\x00", b"CMBACKUP", FROZEN[-20:]):
+    for extra in (b"\x00", b"NEDRABKP", FROZEN[-20:]):
         assert _refused(FROZEN + extra)
 
 
@@ -189,8 +189,8 @@ def test_a_frame_length_beyond_the_limit_is_refused_before_reading_it() -> None:
 @pytest.mark.parametrize(
     ("field", "offset", "value"),
     [
-        ("magic", 0, b"CMBACKUQ"),
-        ("version", 8, struct.pack(">H", 3)),
+        ("magic", 0, b"BADMAGIC"),
+        ("version", 8, struct.pack(">H", 2)),
         ("kdf", 10, b"\x02"),
         ("memory", 11, struct.pack(">I", 4 * 1024 * 1024)),
         ("iterations", 15, struct.pack(">I", 1000)),
@@ -229,7 +229,7 @@ async def _import(
     return await client.post(
         "/passwords/import",
         data={"master_password": password, "on_conflict": on_conflict},
-        files={"file": ("b.cmbackup", data, "application/octet-stream")},
+        files={"file": ("b.nedrabackup", data, "application/octet-stream")},
         headers=headers,
     )
 
@@ -394,7 +394,7 @@ async def test_malformed_manifests_are_refused_without_writing(
     await client.post("/passwords/create", json=entry("kept"), headers=headers)
     entries, contents, overrides = MALFORMED[case]
     manifest = {
-        "format": "ciphermoth-backup",
+        "format": "nedra-backup",
         "version": 2,
         "exported_at": "2026-10-15T00:00:00+00:00",
         "app_version": "test",
@@ -480,7 +480,7 @@ async def test_a_complete_backup_restores_everything_byte_for_byte(
     )
     assert backup.status_code == 200
     assert backup.headers["content-type"] == "application/octet-stream"
-    assert ".cmbackup" in backup.headers["content-disposition"]
+    assert ".nedrabackup" in backup.headers["content-disposition"]
     assert not any(e.backed_up for e in (await read_current_vault()).entries)
 
     await reset_vault()
@@ -923,7 +923,7 @@ async def test_backup_response_closes_spool_after_send_failure_or_cancellation(
     backup = tempfile.SpooledTemporaryFile(max_size=1)
     backup.write(b"ciphertext")
     backup.seek(0)
-    response = BackupResponse(backup, "test.cmbackup")
+    response = BackupResponse(backup, "test.nedrabackup")
     body_started = asyncio.Event()
     allow_send = asyncio.Event()
 
@@ -1027,7 +1027,7 @@ def _multipart(
             f"--{boundary}\r\nContent-Disposition: form-data; "
             f'name="master_password"\r\n\r\n{MASTER_PASSWORD}\r\n'
             f"--{boundary}\r\nContent-Disposition: form-data; "
-            f'name="file"; filename="b.cmbackup"\r\n'
+            f'name="file"; filename="b.nedrabackup"\r\n'
             "Content-Type: application/octet-stream\r\n\r\n"
         ).encode()
         for index, chunk in enumerate(chunks):
@@ -1060,8 +1060,8 @@ async def test_a_backup_upload_takes_one_file_and_holds_no_lock_while_it_arrives
         "/passwords/import",
         data={"master_password": MASTER_PASSWORD},
         files=[
-            ("file", ("a.cmbackup", FROZEN, "x/y")),
-            ("file", ("b.cmbackup", FROZEN, "x/y")),
+            ("file", ("a.nedrabackup", FROZEN, "x/y")),
+            ("file", ("b.nedrabackup", FROZEN, "x/y")),
         ],
         headers=headers,
     )

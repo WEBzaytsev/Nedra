@@ -46,7 +46,7 @@ def hkdf(key: bytes, label: str) -> bytes:
 
 
 def associated_data(*parts: bytes) -> bytes:
-    data = b"\x02ciphermoth/v2"
+    data = b"\x02nedra/v3"
     for part in parts:
         data += struct.pack(">I", len(part)) + part
     return data
@@ -166,13 +166,13 @@ def raw_key_bytes(key: str | bytes) -> bytes:
 
 
 class _Reader:
-    """An independent format 2 reader built on the primitives, following
+    """An independent format 3 reader built on the primitives, following
     docs/VAULT_FORMAT.md, so the tests do not check helpers.py with itself."""
 
     def __init__(self, raw_key: bytes) -> None:
-        self.records = AESGCM(hkdf(raw_key, "ciphermoth/v2/record-encryption"))
-        self.index_key = hkdf(raw_key, "ciphermoth/v2/name-index")
-        self.check = hkdf(raw_key, "ciphermoth/v2/key-check")
+        self.records = AESGCM(hkdf(raw_key, "nedra/v3/record-encryption"))
+        self.index_key = hkdf(raw_key, "nedra/v3/name-index")
+        self.check = hkdf(raw_key, "nedra/v3/key-check")
         self.problems: list[Problem] = []
 
     def flag(self, table: str, row_id: object, column: str, reason: str) -> None:
@@ -222,8 +222,8 @@ def _check_vault_row(
     if len(rows) > 1:
         reader.flag("vault", None, "*", f"{len(rows)} rows")
     row = rows[0]
-    if row["format_version"] != 2 or row["kdf"] != "argon2id":
-        reader.flag("vault", row["id"], "format_version", "not format 2 argon2id")
+    if row["format_version"] != 3 or row["kdf"] != "argon2id":
+        reader.flag("vault", row["id"], "format_version", "not format 3 argon2id")
     if master_password is not None:
         derived = Argon2id(
             salt=row["kdf_salt"],
@@ -232,15 +232,15 @@ def _check_vault_row(
             lanes=row["kdf_lanes"],
             memory_cost=row["kdf_memory_kib"],
         ).derive(master_password.encode())
-        commitment = hkdf(derived, "ciphermoth/v2/password-commitment")
+        commitment = hkdf(derived, "nedra/v3/password-commitment")
         if not hmac.compare_digest(commitment, row["password_check"]):
             reader.flag("vault", row["id"], "password_check", "password rejected")
         else:
             associated = (
-                b"ciphermoth/v2/wrapped-vault-key"
+                b"nedra/v3/wrapped-vault-key"
                 + struct.pack(
                     ">HIII",
-                    2,
+                    3,
                     row["kdf_memory_kib"],
                     row["kdf_iterations"],
                     row["kdf_lanes"],
@@ -249,13 +249,13 @@ def _check_vault_row(
             )
             wrapped = row["wrapped_key"]
             try:
-                raw = AESGCM(hkdf(derived, "ciphermoth/v2/key-wrapping")).decrypt(
+                raw = AESGCM(hkdf(derived, "nedra/v3/key-wrapping")).decrypt(
                     wrapped[1:13], wrapped[13:], associated
                 )
             except InvalidTag:
                 reader.flag("vault", row["id"], "wrapped_key", "does not unwrap")
             else:
-                if hkdf(raw, "ciphermoth/v2/key-check") != reader.check:
+                if hkdf(raw, "nedra/v3/key-check") != reader.check:
                     reader.flag("vault", row["id"], "wrapped_key", "another key")
     if hmac.compare_digest(reader.check, row["key_check"]):
         return "valid"
@@ -422,7 +422,7 @@ async def read_vault(
 ) -> VaultContents:
     """
     Decrypt every entry, active and trashed, and every attachment with an
-    independent format 2 reader, and check the structural invariants of a
+    independent format 3 reader, and check the structural invariants of a
     vault: authenticated ciphertext bound to its row, exact document keys,
     name indexes that match the names, unique active names, attachment sizes.
     With ``strict`` any problem raises VaultIntegrityError.

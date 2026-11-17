@@ -99,7 +99,7 @@ describe("the shipped manifests", () => {
   it("firefox has a fixed id and declares it collects nothing", () => {
     const manifest = manifestFor("firefox");
     expect(manifest.browser_specific_settings.gecko).toEqual({
-      id: "ciphermoth@mr-grj.github.io",
+      id: "nedra@zaitsv.dev",
       strict_min_version: "128.0",
       data_collection_permissions: { required: ["none"] },
     });
@@ -116,12 +116,12 @@ describe("the shipped manifests", () => {
   });
 
   it("real builds talk to the real app's native host only", () => {
-    expect(nativeHost()).toBe("com.ciphermoth.desktop");
+    expect(nativeHost()).toBe("com.nedra.desktop");
     expect(nativeHost({ test: true })).toBe("com.nedra.desktop.qa");
     expect(nativeHost({ dev: true })).toBe("com.nedra.desktop.dev");
     for (const target of ["chromium", "firefox"]) {
       const code = readFileSync(join(ROOT, "dist", target, "background.js"), "utf8");
-      expect(code).toContain('"com.ciphermoth.desktop"');
+      expect(code).toContain('"com.nedra.desktop"');
       expect(code).not.toMatch(/com\.nedra\.desktop\.(qa|dev)/);
     }
   });

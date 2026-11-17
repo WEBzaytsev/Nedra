@@ -21,12 +21,12 @@ derived = Argon2id(
     salt=salt, length=32, iterations=iterations, lanes=lanes, memory_cost=memory
 ).derive(password.encode())
 kek = HKDF(
-    algorithm=hashes.SHA256(), length=32, salt=None, info=b"ciphermoth/v2/key-wrapping"
+    algorithm=hashes.SHA256(), length=32, salt=None, info=b"nedra/v3/key-wrapping"
 ).derive(derived)
 key = AESGCM(kek).decrypt(
     wrapped[1:13],
     wrapped[13:],
-    b"ciphermoth/v2/wrapped-vault-key"
+    b"nedra/v3/wrapped-vault-key"
     + struct.pack(">HIII", 2, memory, iterations, lanes)
     + salt,
 )

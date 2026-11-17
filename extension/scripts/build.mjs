@@ -42,7 +42,7 @@ export const nativeHost = ({ test = false, dev = false } = {}) =>
     ? "com.nedra.desktop.qa"
     : dev
       ? "com.nedra.desktop.dev"
-      : "com.ciphermoth.desktop";
+      : "com.nedra.desktop";
 const { version } = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 const BUDGET_BYTES = 60 * 1024;
 

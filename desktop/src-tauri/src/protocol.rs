@@ -1,6 +1,6 @@
 use std::io::{self, Read};
 
-pub const MAGIC: [u8; 2] = *b"CM";
+pub const MAGIC: [u8; 2] = *b"ND";
 pub const VERSION: u8 = 1;
 pub const PREFIX_SIZE: usize = 16;
 pub const MAX_HEADER: usize = 64 * 1024;

@@ -1,15 +1,11 @@
-import io
 import json
 import sqlite3
-import zipfile
 from contextlib import closing
 from pathlib import Path
 
 import httpx
 import pytest
-import pyzipper
 
-from crud.backup import MAX_LEGACY_JSON_BYTES
 from storage import VAULT_FILE
 from tests.support import (
     MASTER_PASSWORD,
@@ -20,7 +16,6 @@ from tests.support import (
     db_execute,
     db_snapshot,
     entry,
-    legacy_backup_zip,
 )
 
 MIB = 1024 * 1024
@@ -35,112 +30,6 @@ async def vault(client: httpx.AsyncClient) -> Headers:
     return headers
 
 
-def _zip(members: dict[str, bytes], password: str = MASTER_PASSWORD) -> bytes:
-    buf = io.BytesIO()
-    with pyzipper.AESZipFile(
-        buf, "w", compression=pyzipper.ZIP_DEFLATED, encryption=pyzipper.WZ_AES
-    ) as zf:
-        zf.setpassword(password.encode())
-        for name, data in members.items():
-            zf.writestr(name, data)
-    return buf.getvalue()
-
-
-def _plain_zip(members: dict[str, bytes]) -> bytes:
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        for name, data in members.items():
-            zf.writestr(name, data)
-    return buf.getvalue()
-
-
-def _auth_code_offset(archive: bytes) -> int:
-    with zipfile.ZipFile(io.BytesIO(archive)) as zf:
-        info = zf.infolist()[0]
-    name_length = int.from_bytes(
-        archive[info.header_offset + 26 : info.header_offset + 28], "little"
-    )
-    extra_length = int.from_bytes(
-        archive[info.header_offset + 28 : info.header_offset + 30], "little"
-    )
-    data_start = info.header_offset + 30 + name_length + extra_length
-    return data_start + info.compress_size - 5
-
-
-GOOD = legacy_backup_zip([{"name": "restored", "value": "v-1"}], MASTER_PASSWORD)
-MEMBER = "ciphermoth_backup.json"
-
-
-def _flip(data: bytes, at: int) -> bytes:
-    return data[:at] + bytes([data[at] ^ 0xFF]) + data[at + 1 :]
-
-
-HOSTILE_BACKUPS = {
-    "empty": b"",
-    "not-a-zip": b"name,password\nx,y\n",
-    "truncated-half": GOOD[: len(GOOD) // 2],
-    "truncated-tail": GOOD[:-22],
-    "flipped-ciphertext": _flip(GOOD, len(GOOD) // 2),
-    "flipped-auth-code": _flip(GOOD, _auth_code_offset(GOOD)),
-    "other-password": legacy_backup_zip(
-        [{"name": "x", "value": "y"}], "A-Different-Password-1"
-    ),
-    "unencrypted": _plain_zip(
-        {MEMBER: b'{"passwords": [{"name": "x", "value": "y"}]}'}
-    ),
-    "missing-member": _zip({"other.json": b"{}"}),
-    "invalid-json": _zip({MEMBER: b"{not json"}),
-    "json-array-root": _zip({MEMBER: b"[]"}),
-    "passwords-not-a-list": _zip({MEMBER: b'{"passwords": {"name": "x"}}'}),
-    "no-passwords-key": _zip({MEMBER: b'{"exported_at": "now"}'}),
-    "invalid-utf8-json": _zip(
-        {MEMBER: b'{"passwords": [{"name": "\xff", "value": "y"}]}'}
-    ),
-    "zip-bomb": _zip(
-        {
-            MEMBER: b'{"passwords": [], "pad": "'
-            + b" " * (MAX_LEGACY_JSON_BYTES + MIB)
-            + b'"}'
-        }
-    ),
-}
-
-
-@pytest.mark.parametrize("name", sorted(HOSTILE_BACKUPS))
-async def test_hostile_backup_files_are_refused_cleanly(
-    client: httpx.AsyncClient, vault: Headers, name: str
-) -> None:
-    before = await db_snapshot()
-
-    resp = await client.post(
-        "/passwords/import",
-        data={"master_password": MASTER_PASSWORD},
-        files={"file": ("backup.zip", HOSTILE_BACKUPS[name], "application/zip")},
-        headers=vault,
-    )
-
-    if name == "other-password":
-        assert resp.status_code == 403, resp.text
-        assert await db_snapshot() == before
-    else:
-        assert resp.status_code == 400, resp.text
-        assert await db_snapshot() == before
-    assert (await client.get("/passwords", headers=vault)).status_code == 200
-
-
-async def test_a_legacy_zip_opens_with_its_own_password_not_the_vaults(
-    client: httpx.AsyncClient, vault: Headers
-) -> None:
-    resp = await client.post(
-        "/passwords/import",
-        data={"master_password": "A-Different-Password-1"},
-        files={"file": ("b.zip", HOSTILE_BACKUPS["other-password"], "application/zip")},
-        headers=vault,
-    )
-    assert resp.status_code == 200, resp.text
-    assert resp.json()["imported"] == 1
-
-
 async def _upload(
     client: httpx.AsyncClient,
     headers: Headers,
@@ -149,7 +38,7 @@ async def _upload(
     entry_name: str = "box",
 ) -> httpx.Response:
     raw_name = filename.encode() if isinstance(filename, str) else filename
-    boundary = b"moth-boundary"
+    boundary = b"user-boundary"
     body = (
         b"--" + boundary + b"\r\n"
         b'Content-Disposition: form-data; name="file"; filename="' + raw_name + b'"\r\n'

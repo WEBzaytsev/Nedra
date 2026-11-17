@@ -1,5 +1,5 @@
 """
-Reading and writing the frames of a backup file (backup format 2,
+Reading and writing the frames of a backup file (backup format 3,
 docs/VAULT_FORMAT.md section 5). The cryptography, including what each frame
 is bound to, is in ``helpers.BackupKey``; this module only lays the frames out
 and enforces sizes, order and completeness.

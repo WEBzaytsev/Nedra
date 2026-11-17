@@ -1,5 +1,3 @@
-import os
-import warnings
 from functools import lru_cache
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
@@ -71,25 +69,6 @@ SETTINGS_DEFAULTS = {
 }
 
 
-def _legacy_environment(values: dict[str, Any], fields: list[str]) -> dict[str, Any]:
-    """Use the retired product prefix only when NEDRA_* is absent."""
-    used = False
-    for field in fields:
-        canonical = f"NEDRA_{field.upper()}"
-        legacy = f"CIPHERMOTH_{field.upper()}"
-        if field not in values and canonical not in os.environ and legacy in os.environ:
-            values[field] = os.environ[legacy]
-            used = True
-    if used:
-        warnings.warn(
-            "Legacy product-prefixed environment variables are deprecated; "
-            "rename them to NEDRA_*.",
-            DeprecationWarning,
-            stacklevel=3,
-        )
-    return values
-
-
 class VaultDefaults(BaseSettings):
     inactivity_ms: int = Field(
         default=SETTINGS_DEFAULTS["inactivity_ms"], ge=30_000, le=3_600_000
@@ -110,9 +89,6 @@ class VaultDefaults(BaseSettings):
 
     model_config = SettingsConfigDict(env_prefix="NEDRA_", extra="ignore")
 
-    def __init__(self, **values: Any) -> None:
-        super().__init__(**_legacy_environment(values, list(SETTINGS_DEFAULTS)))
-
     @model_validator(mode="after")
     def _warning_comes_before_the_lock(self) -> "VaultDefaults":
         if self.warn_before_ms >= self.inactivity_ms:
@@ -129,9 +105,6 @@ class StorageSettings(BaseSettings):
     data_dir: Path = Path("data")
 
     model_config = SettingsConfigDict(env_prefix="NEDRA_", extra="ignore")
-
-    def __init__(self, **values: Any) -> None:
-        super().__init__(**_legacy_environment(values, ["data_dir"]))
 
 
 @lru_cache

@@ -18,7 +18,7 @@ use x25519_dalek::{PublicKey, StaticSecret};
 use zeroize::Zeroizing;
 
 /// Frozen authenticated protocol label for pre-Nedra and current pairings.
-pub const LABEL: &str = "ciphermoth/extension/v1";
+pub const LABEL: &str = "nedra/extension/v1";
 pub const TO_APP: u8 = 0x01;
 pub const TO_EXTENSION: u8 = 0x02;
 /// A connection is closed long before; this keeps counters far from overflow.

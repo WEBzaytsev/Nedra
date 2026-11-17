@@ -310,11 +310,7 @@ class CoreServer:
         else:
             _, path, _, headers = request
             token = next(
-                (
-                    value
-                    for name, value in headers
-                    if name.lower() == "x-nedra-session"
-                ),
+                (value for name, value in headers if name.lower() == "x-nedra-session"),
                 None,
             )
             if status == 200 and path in (

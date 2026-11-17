@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Nedra",
-  "version": "4.0.0",
-  "identifier": "com.ciphermoth.desktop",
+  "version": "5.0.0",
+  "identifier": "com.nedra.desktop",
   "build": {
     "frontendDist": "../../frontend/dist",
     "devUrl": "http://127.0.0.1:3000",
@@ -74,7 +74,9 @@
       }
     },
     "createUpdaterArtifacts": true,
-    "externalBin": ["binaries/nedra-native-host"]
+    "externalBin": [
+      "binaries/nedra-native-host"
+    ]
   },
   "plugins": {
     "updater": {

@@ -77,9 +77,6 @@ class VaultModel(BaseModel):
     )
 
     format_version: Mapped[int] = mapped_column(Integer)
-    folder_links_ready: Mapped[bool] = mapped_column(
-        Boolean, default=False, server_default=false()
-    )
     owner_user_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("users.id", ondelete="RESTRICT"), nullable=True
     )

@@ -93,9 +93,7 @@ class Challenges:
 
 
 def session_binding(token: str) -> bytes:
-    return hashlib.sha256(
-        b"ciphermoth/security-key-challenge\x00" + token.encode()
-    ).digest()
+    return hashlib.sha256(b"nedra/security-key-challenge\x00" + token.encode()).digest()
 
 
 @dataclass(frozen=True, slots=True)

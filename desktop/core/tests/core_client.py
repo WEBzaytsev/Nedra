@@ -60,7 +60,7 @@ def frame(
     request_id: int,
     header: dict | bytes,
     body: bytes = b"",
-    magic=b"CM",
+    magic=b"ND",
     version=1,
 ) -> bytes:
     header_bytes = header if isinstance(header, bytes) else json.dumps(header).encode()
@@ -129,7 +129,7 @@ class Core:
                 self.frames.put(None)
                 return
             magic, version, kind, request_id, header_len, body_len = PREFIX.unpack(raw)
-            if magic != b"CM" or version != 1:
+            if magic != b"ND" or version != 1:
                 self.frames.put(Frame(-1, 0, {"desync": raw.hex()}, b""))
                 return
             header = stream.read(header_len)

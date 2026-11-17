@@ -106,15 +106,8 @@ def collect(bundle, out, version, qa=False):
         else:
             record(canonical, False)
         if update and not qa:
-            # The first Nedra release must remain installable by released 3.x
-            # clients, which authenticate the legacy artifact filename. The
-            # package itself is Nedra; only this updater transport alias is
-            # frozen for the transition. Nedra 4 accepts both names, so a later
-            # manifest can switch to the canonical filename.
-            legacy = out / f"CipherMoth_{version}_{native}.{suffix}"
-            shutil.copy2(candidates[0], legacy)
-            sign(legacy)
-            record(legacy, True)
+            sign(canonical)
+            records[-1]["updater"] = True
     source = subprocess.check_output(
         ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True
     ).strip()

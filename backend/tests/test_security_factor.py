@@ -37,7 +37,7 @@ async def test_security_routes_require_a_session_and_issue_first_key_options(cli
 
 @pytest.mark.anyio
 async def test_factor_wrapped_material_fails_closed_without_the_factor():
-    password = "Moth-Test-Vault-2026!"
+    password = "Nedra-Test-Vault-2026!"
     factor_key = new_factor_key()
     material, vault_key = await create_key_material(password, factor_key=factor_key)
 

@@ -11,11 +11,11 @@ Download the package for your operating system and CPU from [GitHub Releases](ht
 
 When update checks are enabled, Nedra reads `latest.json` from this repository after unlock. Installation starts only after **Download and install**. The Tauri updater verifies the embedded public key, signed version, target, and artifact before it closes the vault and launches the installer. An update check sends no vault contents, credentials, sessions, or entry metadata; GitHub still receives ordinary connection metadata.
 
-The production bundle and native-host identifier remains `com.ciphermoth.desktop` solely so Nedra 4 updates existing desktop installations in place and keeps their local vault and browser pairing. It is a frozen compatibility identifier, not the product name. The updater public key is likewise retained across the rename. Never delete an application-data directory to repair an update.
+Nedra 5 starts the independent desktop identity `com.nedra.desktop` and its own application-data directory. It does not discover, import, or update another application's local data, extension pairing, browser storage, or device registrations. Do not move an encrypted database between application identities. Use the one-time offline migration procedure below.
 
 ## Self-hosted Docker installation
 
-Nedra stores the complete installation in the `vault_data` volume. Create a checked snapshot before replacing containers:
+Nedra stores the complete installation in its `vault_data` volume. Create a checked snapshot before replacing containers:
 
 ```shell
 docker compose -f docker-compose.prod.yml exec backend nedra-admin snapshot
@@ -24,25 +24,44 @@ docker compose -f docker-compose.prod.yml up -d --remove-orphans
 docker compose -f docker-compose.prod.yml exec backend nedra-admin check
 ```
 
-`NEDRA_VERSION` selects `latest` or an exact release such as `4.0.0`. Sessions are memory-only and users must unlock again after a restart.
+`NEDRA_VERSION` selects `latest` or an exact release such as `5.0.0`. Sessions are memory-only and users must unlock again after a restart.
 
 Published images are multi-architecture and signed by the release workflow. Verify both image references before a controlled deployment:
 
 ```shell
-cosign verify ghcr.io/webzaytsev/nedra-backend:4.0.0 \
-  --certificate-identity 'https://github.com/WEBzaytsev/Nedra/.github/workflows/release.yml@refs/tags/v4.0.0' \
+cosign verify ghcr.io/webzaytsev/nedra-backend:5.0.0 \
+  --certificate-identity 'https://github.com/WEBzaytsev/Nedra/.github/workflows/release.yml@refs/tags/v5.0.0' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 
-cosign verify ghcr.io/webzaytsev/nedra-frontend:4.0.0 \
-  --certificate-identity 'https://github.com/WEBzaytsev/Nedra/.github/workflows/release.yml@refs/tags/v4.0.0' \
+cosign verify ghcr.io/webzaytsev/nedra-frontend:5.0.0 \
+  --certificate-identity 'https://github.com/WEBzaytsev/Nedra/.github/workflows/release.yml@refs/tags/v5.0.0' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
-## Snapshots, backups, and rollback
+## Nedra 5 boundary and one-time migration
+
+Nedra 5 is intentionally incompatible with installations that use another application identity, SQLite application id, schema, cryptographic domain, backup header, browser database, extension identity, native-host name, bundle id, Compose project, environment prefix, request header, or release artifact name. The runtime has no compatibility aliases, old-format decoder, automatic fallback, or transitional updater artifact.
+
+A cutover is an offline operator procedure, not a transitional release:
+
+1. Stop writes and keep the old service stopped for the entire conversion.
+2. Create a consistent SQLite snapshot with the old runtime and verify its integrity and foreign keys.
+3. Keep that snapshot and the old exact image references as the rollback pair.
+4. Run the bounded offline converter against a copy. It decrypts with an authorized administrator credential, rewrites every authenticated value into the Nedra 5 domain, sets SQLite application id `0x4E454452`, schema `10`, and vault format `3`, and invalidates credentials that cannot be rewrapped without their owners.
+5. Verify the converted file with `nedra-admin check`, then decrypt every entry and attachment through the normal Nedra 5 API before publication.
+6. Start a clean Nedra 5 Compose project and volume. Do not reuse the old project name or volume.
+7. Administrators reset affected human credentials and rotate MCP service tokens. Users re-enrol security keys, device unlock, Touch ID, browser extension pairing, and recovery codes.
+8. Verify public health, login, ACL, MCP permissions, entry counts, attachments, backup export/import, and audit records before reopening writes.
+
+Portable `.nedrabackup` files contain only entries visible to one account plus trash, history, attachments, folders, and settings. They do **not** contain users, roles, groups, grants, service accounts, factors, device registrations, or recovery state, so they are not a substitute for the full offline conversion.
+
+Rollback means stopping Nedra 5 and restoring the old exact runtime together with its untouched pre-conversion snapshot. Never open a converted schema-10 vault with the old runtime, and never restore only one half of the pair.
+
+## Snapshots, backups, and recovery
 
 A **snapshot** is a checked SQLite copy of the whole installation, including accounts, groups, grants, and service permissions. `nedra-admin snapshot` uses SQLite's online backup API, includes committed WAL data, runs integrity and foreign-key checks, fsyncs the result, and publishes it under `/data/snapshots/`. Do not copy a live `vault.db` by itself.
 
-A portable **backup** (`.cmbackup`) contains entries visible to one account, including trash, history, attachments, and settings. It does not contain users, roles, grants, factors, or device registrations. Keep both snapshots and portable backups.
+A portable **backup** (`.nedrabackup`) contains entries visible to one account, including trash, history, attachments, folders, and settings. New exports use only Nedra backup format 3. Other backup headers and payload versions are refused.
 
 Check either the live vault or a snapshot:
 
@@ -61,48 +80,16 @@ docker compose -f docker-compose.prod.yml run --rm backend \
 docker compose -f docker-compose.prod.yml start backend
 ```
 
-Restore validates the candidate before replacement and keeps the displaced vault under `/data/snapshots/replaced-<time>/`. Changes committed after the restored snapshot are lost. To roll application code back, pin the previous image version and restore the pre-update snapshot with a release that understands that schema.
+Restore validates the candidate before replacement and keeps the displaced vault under `/data/snapshots/replaced-<time>/`. Changes committed after the restored snapshot are lost.
 
-## Schema migrations
+## Supported format
 
-Nedra 4 uses schema 9. A server refuses an older or newer schema instead of mutating it on startup. Stop the backend and run the exact checked migrations required by the reported source schema. Each command creates its own rollback snapshot and applies its changes in one transaction.
-
-```shell
-# schema 6 → 7
-docker compose -f docker-compose.prod.yml run --rm backend \
-  nedra-admin migrate-hardware-factors --yes
-# schema 7 → 8
-docker compose -f docker-compose.prod.yml run --rm backend \
-  nedra-admin migrate-device-unlock --yes
-# schema 8 → 9
-docker compose -f docker-compose.prod.yml run --rm backend \
-  nedra-admin migrate-native-device-unlock --yes
-```
-
-Earlier supported migration commands remain available for legacy CipherMoth vaults: `migrate-users`, `migrate-folders`, `migrate-service-permissions`, and `migrate-recovery`. Run them only for the exact schema named by `nedra-admin check`, in order, with the backend stopped.
-
-Vault format 1 files from CipherMoth 2.0 and earlier are never converted in place. Export a portable backup with that legacy application, keep its raw snapshot for rollback, move the old vault aside with `nedra-admin set-aside`, bootstrap Nedra, and import the backup. Legacy ZIP backups remain read-only import formats; new exports always use the authenticated streaming backup format.
-
-## Compatibility during the product rename
-
-New configuration and clients use `NEDRA_*`, `x-nedra-session`, and `x-nedra-entry`. Nedra temporarily reads the corresponding `CIPHERMOTH_*` environment variables and `x-ciphermoth-*` request headers when no canonical value is present. Conflicting canonical and legacy request headers are rejected. Update automation to canonical names; compatibility readers may be removed in a future major release.
-
-The following identifiers are intentionally frozen because changing them would invalidate existing data or installed clients:
-
-- authenticated vault, backup, and browser-pairing cryptographic labels;
-- the Firefox extension ID and Chromium extension key-derived ID;
-- the extension IndexedDB pairing database containing non-extractable keys;
-- the authenticated desktop-extension channel and page handoff message names;
-- the production desktop bundle/native-host identifier;
-- the Docker Compose project name, so existing `vault_data` volumes are reused;
-- the updater signing public key and transitional `CipherMoth_*` artifact alias required by installed 3.x clients.
-
-These values are compatibility contracts only. All product names, packages, commands, images, release files, update URLs, and user-facing interfaces are Nedra.
+Nedra 5 creates and opens only SQLite application id `0x4E454452`, schema `10`, and vault format `3`. It does not migrate an older database on startup and does not expose historical `migrate-*` commands. An unknown application id, schema, vault format, backup header, or backup payload is refused before mutation.
 
 ## Failure handling
 
 - If SQLite integrity or foreign-key checks fail, restore the latest known-good snapshot.
-- If the vault was written by a newer schema, update again or restore a snapshot created before the upgrade.
+- If the vault was written by another schema or format, stop; do not edit `PRAGMA` values by hand.
 - If another process owns the data directory, run only one backend against the volume.
 - If permissions are wrong, the container runs as uid 1000; fix ownership of a bind-mounted data directory rather than weakening permissions.
 - If individual encrypted rows are damaged, the UI reports them and `nedra damaged` lists them. Restore a snapshot or explicitly remove only the rechecked damaged rows with `nedra damaged --remove`.

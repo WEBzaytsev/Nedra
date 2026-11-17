@@ -1,15 +1,15 @@
 # Changelog
 
-This file records public Nedra releases. Development history before the independent Nedra release line is intentionally not presented as a product release history.
+This file records public Nedra releases.
 
-## [4.0.0] - 2026-11-17
+## [5.0.0] - 2026-11-17
 
-### Product
+### Independent product boundary
 
-- Established Nedra as the canonical product in `WEBzaytsev/Nedra`.
-- Replaced the former product identity across the web app, desktop application, browser extension, CLI, MCP server, installers, packages, images, update metadata, SBOMs, and documentation.
-- Introduced canonical `nedra`, `nedra-admin`, `NEDRA_*`, `nedra-*` package, and `ghcr.io/webzaytsev/nedra-*` names.
-- Retained bounded compatibility readers and migration paths where changing an authenticated storage or installed-client identifier in place would make existing vaults, backups, pairings, or desktop installations unreadable.
+- Established Nedra as the only product identity across the web app, desktop application, browser extension, CLI, MCP server, installers, packages, images, update metadata, SBOMs, storage, protocols, and documentation.
+- Introduced the Nedra 5 cryptographic domain, vault format 3, backup format 3, SQLite application id `0x4E454452`, schema 10, `com.nedra.desktop`, new browser-extension identities, Nedra-only storage names, and Nedra-only release artifacts.
+- Removed compatibility aliases, old-format backup import, retired-client middleware, transitional update artifacts, and runtime fallback paths.
+- Defined the previous installation boundary as a one-time offline conversion with checked snapshots and paired rollback, not a transitional release.
 
 ### Vault and access
 
@@ -24,6 +24,6 @@ This file records public Nedra releases. Development history before the independ
 - Chromium and Firefox extension with server and native desktop transports.
 - Tauri desktop applications for macOS, Windows, and Linux, including native packaging and signed update verification.
 - Multi-architecture container images with deterministic CycloneDX SBOMs, BuildKit provenance, and keyless cosign signatures.
-- Checked schema migrations, installation snapshots, integrity verification, rollback gates, and reproducible release manifests.
+- Checked installation snapshots, integrity verification, rollback gates, and reproducible release manifests.
 
-[4.0.0]: https://github.com/WEBzaytsev/Nedra/releases/tag/v4.0.0
+[5.0.0]: https://github.com/WEBzaytsev/Nedra/releases/tag/v5.0.0

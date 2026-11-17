@@ -7,9 +7,7 @@
 use std::io;
 use std::path::{Path, PathBuf};
 
-// Frozen production bundle/native-host identity. Keeping it is what makes a
-// Nedra release an in-place update of existing installations.
-const IDENTIFIER: &str = "com.ciphermoth.desktop";
+const IDENTIFIER: &str = "com.nedra.desktop";
 const QA_IDENTIFIER: &str = "com.nedra.desktop.qa";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -69,7 +67,7 @@ impl Identity {
 
     pub fn host_name(&self) -> &'static str {
         match self {
-            Identity::Production => "com.ciphermoth.desktop",
+            Identity::Production => "com.nedra.desktop",
             Identity::Development => "com.nedra.desktop.dev",
             Identity::Qa(_) => "com.nedra.desktop.qa",
         }

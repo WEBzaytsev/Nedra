@@ -3,17 +3,12 @@ import { LayoutProvider, Provider as GravityProvider, useLayoutContext } from "@
 import { useTranslation } from "react-i18next";
 
 const STORAGE_KEY = "nedra-theme";
-const LEGACY_STORAGE_KEY = "ciphermoth-theme";
+
 
 const ModeContext = createContext(null);
 
 const initialMode = () => {
-  const saved =
-    window.localStorage.getItem(STORAGE_KEY) ?? window.localStorage.getItem(LEGACY_STORAGE_KEY);
-  if (saved === "light" || saved === "dark") {
-    window.localStorage.setItem(STORAGE_KEY, saved);
-    window.localStorage.removeItem(LEGACY_STORAGE_KEY);
-  }
+  const saved = window.localStorage.getItem(STORAGE_KEY);
   return saved === "light" || saved === "dark" ? saved : "dark";
 };
 

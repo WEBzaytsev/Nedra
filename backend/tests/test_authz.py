@@ -12,10 +12,7 @@ from tests.support import (
     create_vault,
     db_snapshot,
     entry,
-    forged_keys,
     forged_tokens,
-    legacy_backup_zip,
-    retired_key_header,
     stored_vault_key,
     unlock,
 )
@@ -55,7 +52,7 @@ CSV_BODY = b"name,username,password,url\ncsv-entry,someone,csv-Pass-1,https://x.
 
 
 def _alpha() -> dict:
-    return entry("alpha", username="moth@example.com")
+    return entry("alpha", username="user@example.com")
 
 
 PROTECTED_ROUTES: dict[tuple[str, str], Spec] = {
@@ -226,7 +223,9 @@ PROTECTED_ROUTES: dict[tuple[str, str], Spec] = {
     ("POST", "/api/passwords/import"): lambda c, h, x: c.post(
         "/passwords/import",
         data={"master_password": MASTER_PASSWORD, "on_conflict": "overwrite"},
-        files={"file": ("backup.zip", x["backup_zip"], "application/zip")},
+        files={
+            "file": ("backup.nedrabackup", x["backup_zip"], "application/octet-stream")
+        },
         headers=h,
     ),
     ("POST", "/api/passwords/import/csv"): lambda c, h, x: c.post(
@@ -451,6 +450,7 @@ EXTENSION_ROUTES = {
     ("POST", "/api/extension/lock"),
 }
 REACHED = {
+    ("POST", "/api/passwords/import"): 400,
     ("POST", "/api/security/keys"): 400,
     ("POST", "/api/security/device-unlock"): 400,
     ("DELETE", "/api/security/device-unlock/{device_id}"): 404,
@@ -547,9 +547,7 @@ async def seed(client: httpx.AsyncClient, headers: Headers) -> dict:
         await client.put(f"/groups/{group_id}/members/{member_id}", headers=headers),
     ):
         assert response.status_code == 200, response.text
-    backup_zip = legacy_backup_zip(
-        [{"name": "from-backup", "value": "restored-Value-1"}], MASTER_PASSWORD
-    )
+    backup_zip = b"PK\x03\x04unsupported"
     return {
         "attachment_id": attachment_id,
         "backup_zip": backup_zip,
@@ -563,13 +561,6 @@ async def seed(client: httpx.AsyncClient, headers: Headers) -> dict:
     }
 
 
-def _expected_rejection(headers: Headers) -> tuple[int, str]:
-    names = {name.lower() for name, _ in headers}
-    if b"x-nedra-key-derivation" in names:
-        return 403, "invalid_key"
-    return 401, "invalid_session"
-
-
 async def _assert_rejected_without_side_effects(
     client: httpx.AsyncClient,
     spec: Spec,
@@ -581,7 +572,7 @@ async def _assert_rejected_without_side_effects(
     before = await db_snapshot()
     for label, headers in credentials.items():
         resp = await spec(client, headers, ctx)
-        status, code = _expected_rejection(headers)
+        status, code = 401, "invalid_session"
         if expect_code:
             assert resp.status_code == status, (
                 f"{label}: {resp.status_code} {resp.text}"
@@ -590,12 +581,6 @@ async def _assert_rejected_without_side_effects(
         else:
             assert resp.status_code in (401, 403), f"{label}: {resp.text}"
         assert await db_snapshot() == before, f"{label} changed the database"
-
-
-def _as_key_headers(keys: dict[str, str | bytes | None]) -> dict[str, Headers]:
-    return {
-        label: retired_key_header(key) for label, key in keys.items() if key is not None
-    }
 
 
 def test_every_api_route_is_classified() -> None:
@@ -626,38 +611,12 @@ async def test_forged_session_tokens_are_rejected(
 
 
 @pytest.mark.parametrize("route", list(PROTECTED_ROUTES), ids=ROUTE_IDS)
-async def test_the_vault_key_is_never_accepted_as_a_credential(
-    client: httpx.AsyncClient, route: tuple[str, str]
-) -> None:
-    token = await create_vault(client)
-    ctx = await seed(client, auth(token))
-    spec = PROTECTED_ROUTES[route]
-    key = await stored_vault_key()
-    keys = {"real key": key, **forged_keys(key)}
-    credentials = {
-        **_as_key_headers(keys),
-        **{
-            f"open session and {label}": auth(token) + headers
-            for label, headers in _as_key_headers(keys).items()
-        },
-        "open session and key header first": retired_key_header(key) + auth(token),
-        "key header in capitals": [(b"X-Nedra-Key-Derivation", key.encode())],
-    }
-
-    await _assert_rejected_without_side_effects(client, spec, ctx, credentials)
-
-    resp = await spec(client, auth(token), ctx)
-    assert resp.status_code == REACHED.get(route, 200), resp.text
-
-
-@pytest.mark.parametrize("route", list(PROTECTED_ROUTES), ids=ROUTE_IDS)
 async def test_sessions_and_keys_from_before_a_rotation_are_rejected(
     client: httpx.AsyncClient, route: tuple[str, str]
 ) -> None:
     token = await create_vault(client)
     ctx = await seed(client, auth(token))
     other = await unlock(client)
-    old_key = await stored_vault_key()
     resp = await client.patch(
         "/master_password/update",
         json={
@@ -676,7 +635,6 @@ async def test_sessions_and_keys_from_before_a_rotation_are_rejected(
         {
             "rotating session": auth(token),
             "other session": auth(other),
-            "stale key": retired_key_header(old_key),
         },
     )
 
@@ -696,10 +654,7 @@ async def test_uninitialized_vault_rejects_everything(
         "trashed_entry_id": 1,
         "trashed_deleted_at": "2026-01-01T00:00:00",
     }
-    credentials = {
-        **_as_key_headers(forged_keys("A" * 43 + "=")),
-        "random token": auth("A" * 43),
-    }
+    credentials = {"random token": auth("A" * 43)}
     await _assert_rejected_without_side_effects(
         client, PROTECTED_ROUTES[route], ctx, credentials, expect_code=False
     )

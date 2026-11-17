@@ -52,7 +52,7 @@ def _canaries(label: str) -> str:
 
 
 def _format_1_vault(path: Path) -> None:
-    """A vault as CipherMoth 2.0 left it: schema 1, plaintext names, the last
+    """A vault as Nedra 2.0 left it: schema 1, plaintext names, the last
     change committed only to the WAL."""
     with closing(sqlite3.connect(path)) as connection:
         connection.execute("PRAGMA journal_mode=WAL")
@@ -89,7 +89,7 @@ def _files(folder: Path) -> dict[str, bytes]:
     }
 
 
-async def test_a_new_vault_is_format_2_with_a_wrapped_key_and_no_verifier(
+async def test_a_new_vault_is_format_3_with_a_wrapped_key_and_no_verifier(
     client: httpx.AsyncClient,
 ) -> None:
     await create_vault(client)
@@ -98,7 +98,7 @@ async def test_a_new_vault_is_format_2_with_a_wrapped_key_and_no_verifier(
         "length(kdf_salt), length(password_check), length(wrapped_key), "
         "length(key_check) FROM vault"
     )
-    assert row == (2, "argon2id", 65536, 3, 4, 16, 32, 61, 32)
+    assert row == (3, "argon2id", 65536, 3, 4, 16, 32, 61, 32)
     tables = {
         name
         for (name,) in await db_execute(
@@ -125,7 +125,7 @@ async def test_a_new_vault_is_format_2_with_a_wrapped_key_and_no_verifier(
     }
     assert not tables & {"master_password", "passwords", "password_attachments"}
     [(user_version,)] = await db_execute("PRAGMA user_version")
-    assert user_version == SCHEMA_VERSION == 9
+    assert user_version == SCHEMA_VERSION == 10
 
 
 async def test_the_schema_has_no_plaintext_entry_columns_or_indexes() -> None:
@@ -144,7 +144,6 @@ async def test_the_schema_has_no_plaintext_entry_columns_or_indexes() -> None:
             "wrapped_key",
             "key_check",
             "owner_user_id",
-            "folder_links_ready",
         },
         "entries": {
             "id",
@@ -307,7 +306,7 @@ async def test_entry_content_never_reaches_the_vault_files_snapshots_or_backups(
             for encoded in (secret.encode(), secret.encode("utf-16-le")):
                 assert encoded not in data, f"{secret!r} in {where}"
         assert raw not in data, where
-        assert hkdf(raw, "ciphermoth/v2/record-encryption") not in data, where
+        assert hkdf(raw, "nedra/v3/record-encryption") not in data, where
 
 
 async def test_a_wrong_password_changes_nothing_on_disk(
@@ -556,13 +555,10 @@ async def test_a_format_1_vault_is_refused_untouched_and_can_be_set_aside(
     assert f"{VAULT_FILE}-wal" in before
 
     database = Database(folder)
-    with pytest.raises(StorageError, match="CipherMoth 2.0 or earlier") as refused:
+    with pytest.raises(StorageError, match="unsupported vault schema"):
         await database.prepare()
     await database.dispose()
-    assert "set-aside" in str(refused.value)
-    assert "Nothing was changed" in str(refused.value)
     assert _files(folder) == before
-    assert any("CipherMoth 2.0" in p for p in check_file(folder / VAULT_FILE))
 
     monkeypatch.setenv("NEDRA_DATA_DIR", str(folder))
     storage_settings = __import__("settings").get_storage_settings
@@ -606,7 +602,7 @@ async def test_set_aside_refuses_while_the_vault_is_served_and_needs_a_file(
     assert (folder / VAULT_FILE).exists()
 
 
-@pytest.mark.parametrize("version", [3, 99])
+@pytest.mark.parametrize("version", [4, 99])
 async def test_a_newer_vault_format_is_refused_untouched(
     tmp_path: Path, version: int
 ) -> None:

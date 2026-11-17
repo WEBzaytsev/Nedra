@@ -504,7 +504,7 @@ def wait_report(
                 elif stage in ("backup_save", "backup_open"):
                     assert dialogs, "Build dialog QA only with --dialogs on macOS"
                     # The OS picker authorizes the path; it never enters JS.
-                    destination = path.parent / "nedra-backup.cmbackup"
+                    destination = path.parent / "nedra-backup.nedrabackup"
                     script = """on run argv
 tell application id "com.nedra.desktop.qa" to activate
 delay 1

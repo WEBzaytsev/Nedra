@@ -95,7 +95,7 @@ test("fill from the paired app, by popup and by shortcut", async () => {
   await expect
     .poll(() => fieldValues(page))
     .toEqual([
-      { id: "user", value: "moth@example.com" },
+      { id: "user", value: "user@example.com" },
       { id: "pass", value: GITHUB_PASSWORD },
     ]);
   const single = await site("https://multi.test/login.html");
@@ -282,7 +282,7 @@ test("a worker started with the restart marker reopens the settings once", async
 
 test("the profile holds no secret from the vault or the channel", async () => {
   await browser.close();
-  const canaries = [GITHUB_PASSWORD, "moth@example.com"];
+  const canaries = [GITHUB_PASSWORD, "user@example.com"];
   const hits: string[] = [];
   const walk = (dir: string) => {
     for (const name of readdirSync(dir)) {

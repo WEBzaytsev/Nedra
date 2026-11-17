@@ -509,9 +509,7 @@ const App = () => {
         <span class="brand-mark">
           <NedraIcon size={28} />
         </span>
-        <span class="wordmark">
-          Cipher<span>Moth</span>
-        </span>
+        <span class="wordmark">Nedra</span>
       </h1>
       <p class="tagline">Your secrets stay in the dark.</p>
       {status ? (

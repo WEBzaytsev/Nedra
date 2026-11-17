@@ -4,11 +4,10 @@ in throwaway Compose projects named <prefix>-*. Needs the backend and frontend
 images tagged ghcr.io/webzaytsev/nedra-{backend,frontend}:<tag>.
 
     python3 docker/smoke/compose_smoke.py --tag smoke
-    python3 docker/smoke/compose_smoke.py --tag smoke --legacy-compose old.yml
 
 Only Python's standard library is used. Every project and volume it creates is
-removed at the end. --installer creates and preserves a simulated legacy
-PostgreSQL volume while removing the disposable Nedra stack, so it refuses to
+removed at the end. --installer preserves its simulated PostgreSQL volume while
+removing the disposable Nedra stack, so it refuses to
 run outside GitHub Actions.
 """
 
@@ -447,7 +446,7 @@ def fresh_install(
         cli("password", "purge", "cli-entry", "--yes")
         cli("backup", "--out", "/tmp")
         backups = stack.dc(
-            "exec", "-T", "backend", "sh", "-c", "ls /tmp/nedra_backup_*.cmbackup"
+            "exec", "-T", "backend", "sh", "-c", "ls /tmp/nedra_backup_*.nedrabackup"
         ).stdout.split()
         if len(backups) != 1:
             fail(f"nedra backup wrote {backups}")
@@ -680,33 +679,6 @@ def fresh_install(
             fail("snapshot recovery of a damaged vault")
         ok("a damaged vault is refused untouched and the snapshot recovers it")
 
-        stack.dc("stop", "backend")
-        stack.python(
-            "import sqlite3; c = sqlite3.connect('/data/vault.db');"
-            "c.execute('PRAGMA user_version=1'); c.commit()"
-        )
-        before = stack.vault_sha256()
-        stack.dc("start", "backend")
-        stack.backend_exited_with("CipherMoth 2.0 or earlier")
-        stack.dc("stop", "backend")
-        if stack.vault_sha256() != before:
-            fail("a vault of format 1 was changed")
-        moved = stack.admin("set-aside", "--yes", running=False).stdout
-        kept_vault = moved.split("moved to ")[-1].split()[0]
-        kept_sha = stack.python(
-            "import hashlib, pathlib;"
-            "print(':'.join(hashlib.sha256(p.read_bytes()).hexdigest()"
-            f" for p in sorted(pathlib.Path('{kept_vault}').glob('vault.db*'))"
-            " if not p.name.endswith('-shm') and p.stat().st_size))"
-        )
-        if kept_sha != before:
-            fail("set-aside changed the vault it moved")
-        stack.dc("start", "backend")
-        stack.wait_healthy()
-        if stack.json("GET", "/master_password/status")["initialized"]:
-            fail("a new vault was not empty after set-aside")
-        ok("a format 1 vault is refused untouched and set-aside moves it byte for byte")
-
         logs = stack.dc("logs", "--no-color").stdout
         backend_logs = stack.dc("logs", "--no-color", "backend").stdout
         secrets = [MASTER, ROTATED, "gh-Value-1", "gh-Value-2", "cli-Value-1", *tokens]
@@ -745,9 +717,6 @@ def fresh_install(
                         f"ghcr.io/webzaytsev/nedra-{image}:{tag}",
                     ).stdout
                 )[0]
-                labels = info["Config"]["Labels"] or {}
-                if labels.get("io.ciphermoth.min-updater-protocol") != "3":
-                    fail(f"{image} labels {labels}")
                 ok(
                     f"published {image} image",
                     f"{info['Architecture']} {info['RepoDigests']}",
@@ -859,94 +828,6 @@ def bind_mounted(tag: str, prefix: str, workdir: Path) -> None:
         )
 
 
-def legacy(tag: str, prefix: str, workdir: Path, old_compose: Path) -> None:
-    folder = workdir / "legacy"
-    folder.mkdir()
-    compose = folder / "docker-compose.prod.yml"
-    shutil.copy(old_compose, compose)
-    refusal_override = folder / "refusal.yml"
-    refusal_override.write_text(
-        'services:\n  backend:\n    restart: "no"\n', encoding="utf-8"
-    )
-    env = {"POSTGRES_PASSWORD": "smoke-legacy-password", "NEDRA_VERSION": "1.6.0"}
-    stack = Stack(f"{prefix}-legacy", compose, env)
-    try:
-        stack.dc("up", "-d")
-        stack.wait_healthy(timeout=180)
-        token = stack.json(
-            "POST", "/master_password/create", {"master_password": MASTER}
-        )["session_token"]
-        stack.json(
-            "POST",
-            "/passwords/create",
-            {"password_name": "legacy-entry", "password_value": "v"},
-            token,
-        )
-        ok("a v1.6.0 PostgreSQL install runs from its own compose file")
-
-        stack.env["NEDRA_VERSION"] = tag
-        stack.dc("up", "-d", overrides=(str(refusal_override),))
-        stack.backend_exited_with("no longer uses PostgreSQL")
-        container = stack.wait_backend_exit(78)
-        inspect = json.loads(run("docker", "inspect", container).stdout)[0]
-        code = inspect["State"]["ExitCode"]
-        mounts = [m for m in inspect["Mounts"] if m["Destination"] == "/data"]
-        if mounts:
-            listing = run(
-                "docker",
-                "run",
-                "--rm",
-                "-v",
-                f"{mounts[0]['Name']}:/d",
-                "--entrypoint",
-                "ls",
-                f"ghcr.io/webzaytsev/nedra-backend:{tag}",
-                "-A",
-                "/d",
-            ).stdout.split()
-            if any(name.startswith("vault.db") for name in listing):
-                fail(
-                    f"the new image created a vault next to the PostgreSQL install: {listing}"
-                )
-        try:
-            status = stack.request("GET", "/health", timeout=3)[0]
-        except (urllib.error.URLError, OSError):
-            status = None
-        if status == 200:
-            fail("the new backend served requests from the old compose file")
-        rows = stack.dc(
-            "exec",
-            "-T",
-            "db",
-            "psql",
-            "-U",
-            "nedra",
-            "-d",
-            "nedra",
-            "-tAc",
-            "SELECT count(*) FROM passwords",
-        ).stdout.strip()
-        if rows != "1":
-            fail(f"the PostgreSQL vault changed: {rows} rows")
-        ok(
-            "the new image refuses the old compose file, creates no vault, leaves PostgreSQL intact",
-            f"exit code {code}",
-        )
-
-        stack.env["NEDRA_VERSION"] = "1.6.0"
-        stack.dc("up", "-d")
-        stack.wait_healthy(timeout=180)
-        token = stack.unlock()
-        names = [
-            e["password_name"] for e in stack.json("GET", "/passwords", token=token)
-        ]
-        if names != ["legacy-entry"]:
-            fail(f"pinned back to v1.6.0: {names}")
-        ok("pinning the old release back brings the PostgreSQL vault back unchanged")
-    finally:
-        stack.down()
-
-
 def installer(workdir: Path, tag: str) -> None:
     if os.environ.get("GITHUB_ACTIONS") != "true":
         fail("--installer creates a volume named nedra_postgres_data; CI only")
@@ -1005,7 +886,6 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--tag", required=True)
     parser.add_argument("--prefix", default="nedra-smoke")
-    parser.add_argument("--legacy-compose", type=Path)
     parser.add_argument("--installer", action="store_true")
     parser.add_argument("--skip-bind", action="store_true")
     parser.add_argument("--expect-version")
@@ -1017,8 +897,6 @@ def main() -> None:
         fresh_install(args.tag, args.prefix, workdir, args.expect_version)
         if not args.skip_bind:
             bind_mounted(args.tag, args.prefix, workdir)
-        if args.legacy_compose:
-            legacy(args.tag, args.prefix, workdir, args.legacy_compose)
         if args.installer:
             installer(workdir, args.tag)
     finally:

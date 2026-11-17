@@ -18,8 +18,6 @@ RUN npm run build
 
 FROM node:22-alpine@sha256:1314fb30ec37592d5845e5a160d522c0e680972aa534549940b8d73bde88481a AS runtime
 
-LABEL io.ciphermoth.min-updater-protocol="3"
-
 ARG VITE_GITHUB_REPO=WEBzaytsev/Nedra
 ENV NEDRA_GITHUB_REPO=$VITE_GITHUB_REPO
 

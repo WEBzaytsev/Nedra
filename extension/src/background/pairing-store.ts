@@ -5,7 +5,7 @@
 
 // Frozen storage identity: the database contains non-extractable CryptoKeys,
 // so copying them to a newly named IndexedDB database is not dependable.
-const DB = "ciphermoth";
+const DB = "nedra";
 const STORE = "pairing";
 const KEY = "desktop";
 

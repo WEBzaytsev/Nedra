@@ -156,7 +156,7 @@ jobs:
           for image in backend frontend; do
             label="$(docker image inspect ghcr.io/webzaytsev/nedra-$image:ci --format '{{json .Config.Labels}}')"
             echo "$image: $label"
-            echo "$label" | grep -q '"io.ciphermoth.min-updater-protocol":"3"'
+            echo "$label" | grep -q '"io.nedra.min-updater-protocol":"3"'
           done
 
       - name: Install and exercise the Compose stack and install.sh

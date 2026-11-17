@@ -9,10 +9,10 @@
 //! extension can claim this id, so the check only keeps out other store
 //! extensions. The pairing is what authenticates the extension.
 
-pub const CHROMIUM_IDS: &[&str] = &["emeejhcdcdnlhejcpeohdafdnkmbaddn"];
+pub const CHROMIUM_IDS: &[&str] = &["alkkfkojagimdnneandmpodagadmmmii"];
 // Firefox uses this as the installed extension identity. Changing it would
 // create a second extension rather than update existing Nedra installations.
-pub const FIREFOX_IDS: &[&str] = &["ciphermoth@mr-grj.github.io"];
+pub const FIREFOX_IDS: &[&str] = &["nedra@zaitsv.dev"];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Caller {
@@ -68,28 +68,26 @@ mod tests {
 
     #[test]
     fn pinned_callers_only() {
-        let chrome = "chrome-extension://emeejhcdcdnlhejcpeohdafdnkmbaddn/";
+        let chrome = "chrome-extension://alkkfkojagimdnneandmpodagadmmmii/";
         assert!(caller_from_args(&args(&[chrome])).is_some());
         assert!(caller_from_args(&args(&[chrome, "--parent-window=1234"])).is_some());
-        assert!(caller_from_args(&args(&[
-            "/x/com.ciphermoth.desktop.json",
-            "ciphermoth@mr-grj.github.io"
-        ]))
-        .is_some());
+        assert!(
+            caller_from_args(&args(&["/x/com.nedra.desktop.json", "nedra@zaitsv.dev"])).is_some()
+        );
         for refused in [
             &["chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/"][..],
-            &["chrome-extension://emeejhcdcdnlhejcpeohdafdnkmbaddn"],
-            &["chrome-extension://emeejhcdcdnlhejcpeohdafdnkmbaddn/x"],
-            &["chrome-extension://EMEEJHCDCDNLHEJCPEOHDAFDNKMBADDN/"],
+            &["chrome-extension://alkkfkojagimdnneandmpodagadmmmii"],
+            &["chrome-extension://alkkfkojagimdnneandmpodagadmmmii/x"],
+            &["chrome-extension://ALKKFKOJAGIMDNNEANDMPODAGADMMMII/"],
             &[chrome, "--other"],
             &[chrome, "--parent-window=1", "--parent-window=2"],
             &["/x/manifest.json", "evil@example.com"],
-            &["/x/manifest.json", "ciphermoth@mr-grj.github.io.evil"],
+            &["/x/manifest.json", "nedra@zaitsv.dev.evil"],
             &[
                 "/x/manifest.json",
-                "chrome-extension://emeejhcdcdnlhejcpeohdafdnkmbaddn/",
+                "chrome-extension://alkkfkojagimdnneandmpodagadmmmii/",
             ],
-            &["nedra@mr-grj.github.io"],
+            &["nedra@zaitsv.dev"],
             &[],
         ] {
             assert_eq!(caller_from_args(&args(refused)), None, "{refused:?}");

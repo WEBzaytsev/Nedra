@@ -234,7 +234,7 @@ test.describe("4. Origin tricks", () => {
     try {
       for (const [host, expected] of [
         ["evil.github.io", 0],
-        ["docs.moth.github.io", 1],
+        ["docs.user.github.io", 1],
       ] as const) {
         const page = await browser.context.newPage();
         await page.goto(`https://${host}/login.html`);
@@ -390,7 +390,7 @@ test.describe("6. Messaging", () => {
     const post = (page: Page, request: string) =>
       page.evaluate(
         ({ request, fake }) =>
-          window.postMessage({ type: "ciphermoth:extension-session", request, redeem: fake }, "*"),
+          window.postMessage({ type: "nedra:extension-session", request, redeem: fake }, "*"),
         { request, fake }
       );
     // No pending request: the bridge is not even on the page.
@@ -422,7 +422,7 @@ test.describe("6. Messaging", () => {
         document.body.append(frame);
         frame.addEventListener("load", () =>
           frame.contentWindow!.postMessage(
-            { type: "ciphermoth:extension-session", request, redeem: fake },
+            { type: "nedra:extension-session", request, redeem: fake },
             "*"
           )
         );
@@ -443,7 +443,7 @@ test.describe("6. Messaging", () => {
     // Replay after the server-bound handoff was consumed: the bridge is gone.
     await handoff.evaluate(
       ({ request, fake }) =>
-        window.postMessage({ type: "ciphermoth:extension-session", request, redeem: fake }, "*"),
+        window.postMessage({ type: "nedra:extension-session", request, redeem: fake }, "*"),
       { request: pending, fake }
     );
     await handoff.waitForTimeout(800);

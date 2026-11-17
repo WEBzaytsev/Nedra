@@ -1,5 +1,5 @@
 {
-  "format": "ciphermoth-test-vectors/1",
+  "format": "nedra-test-vectors/1",
   "name": "totp",
   "description": "RFC 6238 TOTP with HMAC-SHA1. The secret is the stored form: upper-case RFC 4648 base32 without padding or spaces (see normalize_totp_secret). Implementations must accept secrets whose length is not a multiple of 8 by padding before decoding. counter = floor(time / period) as an 8-byte big-endian integer; dynamic truncation per RFC 4226 section 5.3.",
   "vectors": [
@@ -76,7 +76,7 @@
       "code": "279037"
     },
     {
-      "source": "CipherMoth frozen, computed with an independent RFC 6238 implementation",
+      "source": "Nedra frozen, computed with an independent RFC 6238 implementation",
       "secret": "JBSWY3DPEHPK3PXP",
       "time": 0,
       "period": 30,
@@ -84,7 +84,7 @@
       "code": "282760"
     },
     {
-      "source": "CipherMoth frozen, computed with an independent RFC 6238 implementation",
+      "source": "Nedra frozen, computed with an independent RFC 6238 implementation",
       "secret": "JBSWY3DPEHPK3PXP",
       "time": 29,
       "period": 30,
@@ -92,7 +92,7 @@
       "code": "282760"
     },
     {
-      "source": "CipherMoth frozen, computed with an independent RFC 6238 implementation",
+      "source": "Nedra frozen, computed with an independent RFC 6238 implementation",
       "secret": "JBSWY3DPEHPK3PXP",
       "time": 30,
       "period": 30,
@@ -100,7 +100,7 @@
       "code": "996554"
     },
     {
-      "source": "CipherMoth frozen, computed with an independent RFC 6238 implementation",
+      "source": "Nedra frozen, computed with an independent RFC 6238 implementation",
       "secret": "JBSWY3DPEHPK3PXP",
       "time": 1760000000,
       "period": 30,
@@ -108,7 +108,7 @@
       "code": "885822"
     },
     {
-      "source": "CipherMoth frozen, computed with an independent RFC 6238 implementation",
+      "source": "Nedra frozen, computed with an independent RFC 6238 implementation",
       "secret": "KRUGKIDROVUWG2ZAMJZG653OEBTG66BAJJ",
       "time": 1760000000,
       "period": 30,
@@ -116,7 +116,7 @@
       "code": "464327"
     },
     {
-      "source": "CipherMoth frozen, computed with an independent RFC 6238 implementation",
+      "source": "Nedra frozen, computed with an independent RFC 6238 implementation",
       "secret": "MZXW6YTBOI",
       "time": 1760000015,
       "period": 30,
@@ -124,7 +124,7 @@
       "code": "577341"
     },
     {
-      "source": "CipherMoth frozen, computed with an independent RFC 6238 implementation",
+      "source": "Nedra frozen, computed with an independent RFC 6238 implementation",
       "secret": "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQGEZA",
       "time": 1760000045,
       "period": 30,
@@ -132,7 +132,7 @@
       "code": "107120"
     },
     {
-      "source": "CipherMoth frozen, 60 second period",
+      "source": "Nedra frozen, 60 second period",
       "secret": "JBSWY3DPEHPK3PXP",
       "time": 1760000059,
       "period": 60,

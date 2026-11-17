@@ -27,12 +27,12 @@ import {
   TEST_BUILD,
 } from "./paths";
 
-export const MASTER_PASSWORD = "Moth-Test-Vault-2026!";
+export const MASTER_PASSWORD = "Nedra-Test-Vault-2026!";
 export const TOTP_SECRET = "JBSWY3DPEHPK3PXP";
 export const GITHUB_PASSWORD = "gh-canary-Secret-7Q";
 export const WORK_PASSWORD = "gh-work-canary-2R";
 export const INTRANET_PASSWORD = "intranet-canary-5T";
-export const NOTE_BODY = "note-canary-safe-behind-the-moth-painting";
+export const NOTE_BODY = "note-canary-safe-behind-the-user-painting";
 
 export interface RecordedRequest {
   host: string;
@@ -345,7 +345,7 @@ export const seedVault = async (stack: Stack): Promise<string> => {
     {
       password_name: "GitHub",
       password_value: GITHUB_PASSWORD,
-      username: "moth@example.com",
+      username: "user@example.com",
       url: "https://github.test/login",
       totp_secret: TOTP_SECRET,
       favorite: true,
@@ -359,16 +359,16 @@ export const seedVault = async (stack: Stack): Promise<string> => {
     {
       password_name: "Intranet",
       password_value: INTRANET_PASSWORD,
-      username: "moth",
+      username: "user",
       url: "http://intranet.test",
     },
     {
       password_name: "Multi",
       password_value: "multi-canary-9",
-      username: "moth",
+      username: "user",
       url: "multi.test",
     },
-    { password_name: "Docs", password_value: "docs-canary-3", url: "moth.github.io" },
+    { password_name: "Docs", password_value: "docs-canary-3", url: "user.github.io" },
     {
       password_name: "Notes for GitHub",
       password_value: NOTE_BODY,

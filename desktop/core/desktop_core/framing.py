@@ -2,7 +2,7 @@ import json
 import struct
 from dataclasses import dataclass
 
-MAGIC = b"CM"
+MAGIC = b"ND"
 PROTOCOL_VERSION = 1
 PREFIX = struct.Struct(">2sBBIII")
 PREFIX_SIZE = PREFIX.size

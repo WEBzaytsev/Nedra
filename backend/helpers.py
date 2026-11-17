@@ -1,5 +1,5 @@
 """
-Every cryptographic construction of vault format 2 and backup format 2, in one
+Every cryptographic construction of vault format 3 and backup format 3, in one
 place so it can be reviewed as a whole. The specification is
 docs/VAULT_FORMAT.md; the known-answer vectors are in testdata/vectors.
 
@@ -11,7 +11,6 @@ import asyncio
 import base64
 import hashlib
 import hmac
-import io
 import os
 import struct
 import threading
@@ -20,14 +19,13 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 
-import pyzipper
 from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.argon2 import Argon2id
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
-FORMAT_VERSION = 2
+FORMAT_VERSION = 3
 KDF_NAME = "argon2id"
 KEY_BYTES = 32
 SALT_BYTES = 16
@@ -38,25 +36,23 @@ SEALED_OVERHEAD = 1 + NONCE_BYTES + TAG_BYTES
 
 _SEALED_VERSION = b"\x02"
 _DOCUMENT_BLOCK = 64
-# Frozen vault-format identifiers. They are authenticated input for every
-# schema-9 vault written before the product became Nedra, so changing their
-# bytes would make existing data unreadable. They are a decoder contract, not
-# the public product name.
-_FORMAT_LABEL = b"ciphermoth/v2"
-_WRAP_LABEL = b"ciphermoth/v2/wrapped-vault-key"
-_PASSWORD_COMMITMENT = "ciphermoth/v2/password-commitment"
-_KEY_WRAPPING = "ciphermoth/v2/key-wrapping"
-_SECOND_FACTOR_WRAP_LABEL = b"ciphermoth/v2/wrapped-vault-key/second-factor"
-_SECOND_FACTOR_COMMITMENT = "ciphermoth/v2/password-and-factor-commitment"
-_SECOND_FACTOR_WRAPPING = "ciphermoth/v2/password-and-factor-key-wrapping"
-_SECURITY_KEY_WRAPPING = "ciphermoth/v2/security-key-wrapping"
-_DEVICE_UNLOCK_WRAPPING = "ciphermoth/device-unlock/v1/key-wrapping"
-_NATIVE_DEVICE_UNLOCK_WRAPPING = "ciphermoth/native-device-unlock/v1/key-wrapping"
-_RECORD_ENCRYPTION = "ciphermoth/v2/record-encryption"
-_NAME_INDEX = "ciphermoth/v2/name-index"
-_KEY_CHECK = "ciphermoth/v2/key-check"
-_BACKUP_COMMITMENT = "ciphermoth/backup/v2/key-commitment"
-_BACKUP_FRAMES = "ciphermoth/backup/v2/frame-encryption"
+# Nedra 5 authenticated domain separators. Changing these bytes requires an
+# explicit data migration because every sealed value authenticates them.
+_FORMAT_LABEL = b"nedra/v3"
+_WRAP_LABEL = b"nedra/v3/wrapped-vault-key"
+_PASSWORD_COMMITMENT = "nedra/v3/password-commitment"
+_KEY_WRAPPING = "nedra/v3/key-wrapping"
+_SECOND_FACTOR_WRAP_LABEL = b"nedra/v3/wrapped-vault-key/second-factor"
+_SECOND_FACTOR_COMMITMENT = "nedra/v3/password-and-factor-commitment"
+_SECOND_FACTOR_WRAPPING = "nedra/v3/password-and-factor-key-wrapping"
+_SECURITY_KEY_WRAPPING = "nedra/v3/security-key-wrapping"
+_DEVICE_UNLOCK_WRAPPING = "nedra/device-unlock/v1/key-wrapping"
+_NATIVE_DEVICE_UNLOCK_WRAPPING = "nedra/native-device-unlock/v1/key-wrapping"
+_RECORD_ENCRYPTION = "nedra/v3/record-encryption"
+_NAME_INDEX = "nedra/v3/name-index"
+_KEY_CHECK = "nedra/v3/key-check"
+_BACKUP_COMMITMENT = "nedra/backup/v3/key-commitment"
+_BACKUP_FRAMES = "nedra/backup/v3/frame-encryption"
 
 _KDF_WORKERS = 2
 _KDF_POOL = ThreadPoolExecutor(max_workers=_KDF_WORKERS, thread_name_prefix="nedra-kdf")
@@ -222,7 +218,7 @@ class VaultKey:
     def entry_draft_key(self, user_id: int) -> bytes:
         """A browser-only draft key, separated from vault keys and other users."""
         # Frozen because browser draft ciphertext authenticates this label.
-        return _hkdf(self._raw, f"ciphermoth/browser-entry-draft/v1/{user_id}")
+        return _hkdf(self._raw, f"nedra/browser-entry-draft/v1/{user_id}")
 
     def seal_entry(self, uid: bytes, document: bytes) -> bytes:
         return _seal(self._records, _padded(document), _associated_data(b"entry", uid))
@@ -575,8 +571,8 @@ def unwrap_native_device_unlock_key(
     return VaultKey(raw)
 
 
-BACKUP_MAGIC = b"CMBACKUP"
-BACKUP_VERSION = 2
+BACKUP_MAGIC = b"NEDRABKP"
+BACKUP_VERSION = 3
 BACKUP_KDF_ARGON2ID = 1
 _BACKUP_HEADER = struct.Struct(">8sHBIII16sI32s")
 BACKUP_HEADER_BYTES = _BACKUP_HEADER.size
@@ -679,36 +675,6 @@ async def new_backup_key(
 
 async def backup_key_for(password: str, header: BackupHeader) -> BackupKey:
     return BackupKey(await derive(password, header.salt, header.params))
-
-
-LEGACY_BACKUP_MEMBER = "ciphermoth_backup.json"
-
-
-def read_legacy_backup(data: bytes, password: str, max_bytes: int) -> bytes:
-    """
-    The JSON of a backup ZIP written by CipherMoth 2.0.x or earlier (WinZip AES,
-    PBKDF2-HMAC-SHA1 with 1000 iterations). Read-only: nothing writes this
-    format any more. Raises DecryptionFailed for a wrong password or a damaged
-    archive and BackupFormatError for anything else that is not such a backup.
-    """
-    try:
-        with pyzipper.AESZipFile(io.BytesIO(data), "r") as archive:
-            if LEGACY_BACKUP_MEMBER not in archive.namelist():
-                raise BackupFormatError("The ZIP file is not a Nedra backup.")
-            if not archive.getinfo(LEGACY_BACKUP_MEMBER).flag_bits & 0x1:
-                raise BackupFormatError("The ZIP file is not encrypted.")
-            archive.setpassword(password.encode())
-            with archive.open(LEGACY_BACKUP_MEMBER) as member:
-                content = member.read(max_bytes + 1)
-    except BackupFormatError:
-        raise
-    except RuntimeError as error:
-        raise DecryptionFailed from error
-    except Exception as error:
-        raise BackupFormatError("The ZIP file could not be read.") from error
-    if len(content) > max_bytes:
-        raise BackupFormatError("The backup content is too large.")
-    return content
 
 
 def generate_totp(

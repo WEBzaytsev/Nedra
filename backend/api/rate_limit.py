@@ -7,8 +7,4 @@ limiter = Limiter(key_func=get_remote_address)
 
 
 def rate(default: str) -> str:
-    return (
-        os.environ.get("NEDRA_RATE_LIMIT")
-        or os.environ.get("CIPHERMOTH_RATE_LIMIT")
-        or default
-    )
+    return os.environ.get("NEDRA_RATE_LIMIT") or default

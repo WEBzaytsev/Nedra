@@ -1,6 +1,6 @@
 {
   "name": "nedra-extension",
-  "version": "4.0.0",
+  "version": "5.0.0",
   "private": true,
   "type": "module",
   "description": "Fill logins from your self-hosted Nedra vault.",

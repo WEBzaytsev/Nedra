@@ -12,13 +12,13 @@ macOS bundles are ad-hoc signed, not notarized, and Gatekeeper can reject an int
 
 ## Data isolation
 
-Nedra retains the production identity `com.ciphermoth.desktop` so version 4 is an in-place update of installed clients and opens their existing local vault. This frozen compatibility identifier is not a public product name. Tauri resolves the OS application-local directory:
+Nedra uses the production identity `com.nedra.desktop`. Tauri resolves its OS application-local directory:
 
-- macOS: `~/Library/Application Support/com.ciphermoth.desktop/data/vault.db`.
+- macOS: `~/Library/Application Support/com.nedra.desktop/data/vault.db`.
 - Windows: the user's Local AppData directory under that identity.
-- Linux: `$XDG_DATA_HOME/com.ciphermoth.desktop/data/vault.db`, normally `~/.local/share/...`.
+- Linux: `$XDG_DATA_HOME/com.nedra.desktop/data/vault.db`, normally `~/.local/share/...`.
 
-Debug builds use a separate `development/` subdirectory. QA builds require an explicit absolute synthetic-data root and use `com.nedra.desktop.qa`. Release builds ignore environment overrides for the core executable and vault path. Reinstalling the bundle leaves data untouched. Never delete the data directory to fix a startup failure.
+Debug builds use a separate `development/` subdirectory. QA builds require an explicit absolute synthetic-data root and use `com.nedra.desktop.qa`. Release builds ignore environment overrides for the core executable and vault path. Nedra does not scan or import another application identity's directory. Reinstalling the bundle leaves Nedra data untouched. Never delete the data directory to fix a startup failure.
 
 The production storage layer creates POSIX directories `0700` and files `0600`, takes the existing single-process vault lock, checks an existing file read-only before opening it, and uses SQLite WAL, FULL synchronous writes, and the production schema/format identity. Unsupported or damaged vaults are refused, not migrated or replaced. Windows uses the current user's application-local directory and inherited OS ACLs; the installer does not grant other users access.
 
@@ -57,7 +57,7 @@ Production capabilities allow only the app's narrow commands and event subscript
 
 Attachment/CSV file inputs use the webview's OS picker. Downloads use a native Save dialog and create a new file with restricted permissions. Existing files are refused instead of silently overwritten. External entry links use a protocol allowlist and the system browser.
 
-Backups use the **existing v3 `.cmbackup` implementation**. Export streams the response to a private encrypted staging file next to the native-selected destination, fsyncs it, then atomically creates the final filename without replacement. Import reads bounded ciphertext chunks through the same production multipart endpoint, preserving auth, validation and transactional rollback. Neither direction sends the whole backup through an IPC frame. Wrong passwords, damage, cancellation, disk errors and a destination creation race must not produce a successful partial export or partially restored records.
+Backups use Nedra backup format 3 (`.nedrabackup`). Export streams the response to a private encrypted staging file next to the native-selected destination, fsyncs it, then atomically creates the final filename without replacement. Import reads bounded ciphertext chunks through the same production multipart endpoint, preserving auth, validation and transactional rollback. Neither direction sends the whole backup through an IPC frame. Wrong passwords, damage, cancellation, disk errors and a destination creation race must not produce a successful partial export or partially restored records.
 
 An abrupt OS kill can leave a hidden `.nedra-*.partial` file containing ciphertext in the selected export folder. It is never presented as a completed backup and may be removed manually. No plaintext vault staging is used. Exported attachments and CSV source files are plaintext files explicitly chosen by the user.
 

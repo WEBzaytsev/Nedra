@@ -13,16 +13,13 @@ import httpx
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-import crud.master_password
 import helpers
-from api.retired_clients import UPGRADE_REQUIRED
 from crud.engine import Database, create_engine
 from crud.master_password import MasterPasswordCRUD
 from crud.password import PasswordCRUD
 from errors import SessionRequired
 from helpers import VaultKey
 from main import app, get_application
-from settings import get_api_settings
 from storage import VAULT_FILE
 from tests.integrity import hkdf
 from tests.support import (
@@ -37,7 +34,6 @@ from tests.support import (
     entry,
     fresh_vault_sessions,
     read_current_vault,
-    retired_key_header,
     stored_vault_key,
     unlock,
 )
@@ -708,26 +704,6 @@ async def test_a_reverse_proxy_may_keep_its_own_authorization_header(
     assert resp.headers["www-authenticate"] != "Basic"
 
 
-async def test_a_session_token_and_a_vault_key_together_are_refused(
-    client: httpx.AsyncClient, app_clock: FakeClock
-) -> None:
-    token = await create_vault(client)
-    key = await stored_vault_key()
-    app_clock.advance(IDLE_MS - 10_000)
-    for headers in (
-        auth(token) + retired_key_header(key),
-        retired_key_header(key) + auth(token),
-    ):
-        resp = await client.post(
-            "/passwords/create", json=entry("both"), headers=headers
-        )
-        assert resp.status_code == 403
-        assert resp.json() == {"detail": UPGRADE_REQUIRED, "code": "invalid_key"}
-    assert await db_execute("SELECT id FROM entries") == []
-    assert sessions().info(token).expires_in_ms == 10_000
-    assert (await client.get("/passwords", headers=auth(token))).status_code == 200
-
-
 async def test_a_write_in_flight_during_rotation_is_reencrypted(
     client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -953,7 +929,7 @@ async def test_neither_tokens_nor_keys_are_stored_in_the_database(
         assert secret.encode() not in blobs
     assert raw_key not in blobs
     for label in ("record-encryption", "name-index"):
-        assert hkdf(raw_key, f"ciphermoth/v2/{label}") not in blobs
+        assert hkdf(raw_key, f"nedra/v3/{label}") not in blobs
 
 
 def _fail_commit_number(monkeypatch: pytest.MonkeyPatch, failing: int) -> None:
@@ -1016,59 +992,6 @@ async def test_browsers_may_send_the_session_header(client: httpx.AsyncClient) -
     assert resp.headers.get("access-control-allow-credentials") is None
 
 
-async def test_the_retired_key_route_answers_without_deriving_a_key(
-    client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    await create_vault(client)
-    key = await stored_vault_key()
-    before = len(sessions())
-
-    async def never(*args: Any) -> Any:
-        raise AssertionError("the retired route must not check the password")
-
-    monkeypatch.setattr(MasterPasswordCRUD, "unlock", never)
-    monkeypatch.setattr(crud.master_password, "unlock_key_material", never)
-    monkeypatch.setattr(helpers, "derive", never)
-    for body in (
-        {"master_password": MASTER_PASSWORD},
-        {"master_password": WRONG_MASTER_PASSWORD},
-        {},
-    ):
-        resp = await client.post("/master_password/check", json=body)
-        assert resp.status_code == 410
-        assert resp.json() == {"detail": UPGRADE_REQUIRED, "code": "upgrade_required"}
-        assert key not in resp.text
-        assert resp.headers["cache-control"] == "no-store"
-    assert len(sessions()) == before
-
-
-async def test_the_retired_key_header_is_refused_on_public_routes_too(
-    client: httpx.AsyncClient,
-) -> None:
-    key_header = retired_key_header("K" * 43 + "=")
-    resp = await client.post(
-        "/master_password/create",
-        json={"master_password": MASTER_PASSWORD},
-        headers=key_header,
-    )
-    assert resp.status_code == 403
-    assert await db_execute("SELECT id FROM vault") == []
-
-    await create_vault(client)
-    before = len(sessions())
-    for method, path, body in (
-        ("POST", "/master_password/unlock", {"master_password": MASTER_PASSWORD}),
-        ("POST", "/master_password/lock", None),
-        ("GET", "/master_password/status", None),
-        ("GET", "/meta", None),
-        ("GET", "/health", None),
-    ):
-        resp = await client.request(method, path, json=body, headers=key_header)
-        assert resp.status_code == 403, path
-        assert resp.json() == {"detail": UPGRADE_REQUIRED, "code": "invalid_key"}
-    assert len(sessions()) == before
-
-
 async def test_the_server_no_longer_advertises_the_vault_key_protocol(
     client: httpx.AsyncClient,
 ) -> None:
@@ -1088,45 +1011,6 @@ async def test_the_server_no_longer_advertises_the_vault_key_protocol(
     paths = app.openapi()["paths"]
     assert "/api/master_password/check" not in paths
     assert "key-derivation" not in str(app.openapi()).lower()
-
-
-async def test_a_leftover_legacy_setting_is_ignored(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    for value in ("true", "false", ""):
-        monkeypatch.setenv("NEDRA_LEGACY_KEY_AUTH", value)
-        settings = get_api_settings().__class__()
-        assert not hasattr(settings, "legacy_key_auth")
-        server = get_application(vault_sessions=fresh_vault_sessions())
-        async with httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=server), base_url="http://testserver/api"
-        ) as other:
-            resp = await other.post(
-                "/master_password/check", json={"master_password": MASTER_PASSWORD}
-            )
-            assert resp.status_code == 410
-            resp = await other.get("/passwords", headers=retired_key_header("K"))
-            assert resp.status_code == 403
-
-
-async def test_old_browser_tabs_can_read_the_refusal(client: httpx.AsyncClient) -> None:
-    origin = [(b"origin", b"http://localhost:3000")]
-    resp = await client.options(
-        "/passwords",
-        headers={
-            "Origin": "http://localhost:3000",
-            "Access-Control-Request-Method": "GET",
-            "Access-Control-Request-Headers": "x-nedra-key-derivation",
-        },
-    )
-    assert resp.status_code == 200
-    resp = await client.get(
-        "/passwords", headers=origin + retired_key_header("K" * 43 + "=")
-    )
-    assert resp.status_code == 403
-    assert resp.headers["access-control-allow-origin"] == "http://localhost:3000"
-    assert resp.json()["code"] == "invalid_key"
-    assert resp.headers["x-frame-options"] == "DENY"
 
 
 async def test_a_restarted_server_has_no_sessions(tmp_path: Path) -> None:

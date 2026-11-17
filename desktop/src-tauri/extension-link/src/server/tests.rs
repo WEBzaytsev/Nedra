@@ -8,7 +8,7 @@ use crate::ipc::Endpoint;
 use std::sync::atomic::AtomicU32;
 use std::sync::mpsc;
 
-const CHROME: &str = "chrome-extension://emeejhcdcdnlhejcpeohdafdnkmbaddn/";
+const CHROME: &str = "chrome-extension://alkkfkojagimdnneandmpodagadmmmii/";
 
 struct Fake {
     store: Store,

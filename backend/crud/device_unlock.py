@@ -68,7 +68,7 @@ def _encode(value: bytes) -> str:
 
 def _enroll_binding(token: str, rp_id: str) -> bytes:
     return hashlib.sha256(
-        b"ciphermoth/device-unlock/enroll/v1\0"
+        b"nedra/device-unlock/enroll/v1\0"
         + session_binding(token)
         + b"\0"
         + rp_id.encode()
@@ -76,9 +76,7 @@ def _enroll_binding(token: str, rp_id: str) -> bytes:
 
 
 def _login_binding(user_id: int) -> bytes:
-    return hashlib.sha256(
-        f"ciphermoth/device-unlock/login/v1/{user_id}".encode()
-    ).digest()
+    return hashlib.sha256(f"nedra/device-unlock/login/v1/{user_id}".encode()).digest()
 
 
 def _slot(row: UserDeviceUnlockModel) -> DeviceUnlockSlot:

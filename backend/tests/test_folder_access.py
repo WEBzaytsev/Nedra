@@ -5,8 +5,8 @@ import pytest
 
 from tests.support import auth, db_execute, entry, reset_vault
 
-ADMIN_PASSWORD = "Moth-Admin-Password-2026!"
-MEMBER_PASSWORD = "Moth-Member-Password-2026!"
+ADMIN_PASSWORD = "Nedra-Admin-Password-2026!"
+MEMBER_PASSWORD = "Nedra-Member-Password-2026!"
 
 
 async def bootstrap(
@@ -373,7 +373,9 @@ async def test_backup_restores_folder_identity_and_entry_links(
     _owner, restored_headers = await bootstrap(client)
     restored = await client.post(
         "/passwords/import",
-        files={"file": ("vault.cmbackup", backup.content, "application/octet-stream")},
+        files={
+            "file": ("vault.nedrabackup", backup.content, "application/octet-stream")
+        },
         data={"master_password": ADMIN_PASSWORD, "on_conflict": "skip"},
         headers=restored_headers,
     )

@@ -92,9 +92,10 @@ async def unlock(
     response_model=VaultLock,
 )
 async def lock(
-    token: SessionTokenHeader, vault_sessions: VaultSessionsDep
+    vault_sessions: VaultSessionsDep, token: SessionTokenHeader = None
 ) -> VaultLock:
-    vault_sessions.revoke(token)
+    if token is not None:
+        vault_sessions.revoke(token)
     return VaultLock(locked=True)
 
 

@@ -1,8 +1,8 @@
 const HANDOFF_KEY = "nedraExtensionHandoff";
 // Frozen page/extension bridge names keep already installed extensions able to
 // complete a handoff while the web application is upgraded first.
-const SESSION_MESSAGE = "ciphermoth:extension-session";
-const CONNECTED_MESSAGE = "ciphermoth:extension-connected";
+const SESSION_MESSAGE = "nedra:extension-session";
+const CONNECTED_MESSAGE = "nedra:extension-connected";
 export const HANDOFF_ROUTE = "#/connect-extension";
 export const ACK_TIMEOUT_MS = 10_000;
 const TTL_MS = 5 * 60 * 1000;

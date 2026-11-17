@@ -27,7 +27,7 @@ def _slot(*, requires_factor: bool = False) -> DeviceUnlockSlot:
 
 @pytest.mark.anyio
 async def test_device_unlock_wrap_is_bound_to_device_and_factor_policy_async():
-    _, vault_key = await create_key_material("Moth-Test-Vault-2026!")
+    _, vault_key = await create_key_material("Nedra-Test-Vault-2026!")
     device_secret = os.urandom(32)
     factor_key = os.urandom(32)
     slot = _slot(requires_factor=True)
@@ -79,7 +79,7 @@ async def test_password_login_refreshes_device_unlock_reminder_after_responding(
     )
 
     logged_in = await client.post(
-        "/auth/login", json={"username": "admin", "password": "Moth-Test-Vault-2026!"}
+        "/auth/login", json={"username": "admin", "password": "Nedra-Test-Vault-2026!"}
     )
 
     assert logged_in.status_code == 200, logged_in.text

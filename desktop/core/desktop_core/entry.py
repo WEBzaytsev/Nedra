@@ -9,7 +9,7 @@ import sys
 import time
 from pathlib import Path
 
-CORE_VERSION = "4.0.0"
+CORE_VERSION = "5.0.0"
 
 
 async def serve(proto_in, proto_out, data_dir, applied, started):
@@ -18,14 +18,10 @@ async def serve(proto_in, proto_out, data_dir, applied, started):
     from crud.engine import Database
     from main import get_application
     from settings import get_api_settings, get_vault_defaults
-    from storage import migrate_users_if_needed
     from vault_sessions import VaultSessions
 
     from .server import CoreServer
 
-    # Desktop startup is single-process. Upgrade an upstream 3.1 vault here so
-    # an installed app never needs an external administration CLI.
-    migrate_users_if_needed(data_dir)
     get_api_settings().disable_docs = True
     app = get_application(
         database=Database(data_dir),
@@ -90,9 +86,7 @@ def main(started):
         return asyncio.run(serve(proto_in, proto_out, args.data_dir, applied, started))
     except Exception as exc:
         # Never render an exception message (it can include SQL parameters).
-        logging.getLogger("nedra.core").error(
-            "startup failed: %s", type(exc).__name__
-        )
+        logging.getLogger("nedra.core").error("startup failed: %s", type(exc).__name__)
         from . import framing
 
         os.write(

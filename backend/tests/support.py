@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import hashlib
 import io
 import json
 import os
@@ -16,7 +17,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import httpx
-import pyzipper
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from cryptography.hazmat.primitives.kdf.argon2 import Argon2id
@@ -33,8 +33,8 @@ from vault_sessions import Instant, VaultSessions, system_clock
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 
-MASTER_PASSWORD = "Moth-Test-Vault-2026!"
-NEW_MASTER_PASSWORD = "Moth-Rotated-Vault-2027?"
+MASTER_PASSWORD = "Nedra-Test-Vault-2026!"
+NEW_MASTER_PASSWORD = "Nedra-Rotated-Vault-2027?"
 WRONG_MASTER_PASSWORD = "Not-The-Vault-Password-1"
 
 TABLES = (
@@ -60,7 +60,7 @@ def data_dir() -> Path:
 
 
 async def reset_vault() -> None:
-    """Reset the shared test vault with a legacy stored-defaults settings row."""
+    """Reset the shared test vault with the stored-defaults settings row."""
     async with engine.begin() as conn:
         for table in (
             "attachments",
@@ -103,14 +103,6 @@ def auth(token: str | bytes | None) -> Headers:
         return []
     value = token if isinstance(token, bytes) else token.encode("latin-1")
     return [(b"x-nedra-session", value)]
-
-
-def retired_key_header(key: str | bytes | None) -> Headers:
-    """The vault key header v1.4.x clients sent, which v1.6.0 refuses."""
-    if key is None:
-        return []
-    value = key if isinstance(key, bytes) else key.encode("latin-1")
-    return [(b"x-nedra-key-derivation", value)]
 
 
 async def create_vault(
@@ -157,11 +149,11 @@ def unwrap_vault_key(row: tuple, master_password: str) -> bytes:
     ).derive(master_password.encode())
     wrapped = bytes(wrapped)
     associated = (
-        b"ciphermoth/v2/wrapped-vault-key"
-        + struct.pack(">HIII", 2, memory, iterations, lanes)
+        b"nedra/v3/wrapped-vault-key"
+        + struct.pack(">HIII", 3, memory, iterations, lanes)
         + bytes(salt)
     )
-    return AESGCM(_hkdf(derived, "ciphermoth/v2/key-wrapping")).decrypt(
+    return AESGCM(_hkdf(derived, "nedra/v3/key-wrapping")).decrypt(
         wrapped[1:13], wrapped[13:], associated
     )
 
@@ -228,7 +220,6 @@ async def forged_tokens(
         "non-ascii": auth("сессия-токен".encode()),
         "in Authorization": [(b"authorization", b"Bearer " + real_token.encode())],
         "vault key as token": auth(vault_key),
-        "token as vault key": retired_key_header(real_token),
         "locked": auth(locked),
     }
 
@@ -443,22 +434,6 @@ async def plant_entry(
     return entry_id
 
 
-def legacy_backup_zip(entries: list[dict[str, object]], password: str) -> bytes:
-    """A backup ZIP as CipherMoth 2.0 and earlier wrote it (backup format 1)."""
-    payload = json.dumps(
-        {"exported_at": "2026-10-01T00:00:00+00:00", "passwords": entries},
-        indent=2,
-        ensure_ascii=False,
-    ).encode("utf-8")
-    buffer = io.BytesIO()
-    with pyzipper.AESZipFile(
-        buffer, "w", compression=pyzipper.ZIP_DEFLATED, encryption=pyzipper.WZ_AES
-    ) as archive:
-        archive.setpassword(password.encode())
-        archive.writestr("ciphermoth_backup.json", payload)
-    return buffer.getvalue()
-
-
 async def read_current_vault(
     master_password: str = MASTER_PASSWORD, *, strict: bool = True
 ):
@@ -516,7 +491,7 @@ def backup_file(
     manifest: dict | None = None,
     frames: int | None = None,
 ) -> bytes:
-    """A backup (format 2) built with the frame writer, for import tests that
+    """A backup (format 3) built with the frame writer, for import tests that
     need files the export would never produce."""
     from backup_format import BackupWriter
     from helpers import (
@@ -526,13 +501,26 @@ def backup_file(
         argon2id,
     )
 
+    entries = [dict(entry) if isinstance(entry, dict) else entry for entry in entries]
+    folders: dict[str, str] = {}
+    for item in entries:
+        if not isinstance(item, dict):
+            continue
+        folder = item.get("folder")
+        if isinstance(folder, str) and folder and not item.get("folder_uid"):
+            uid = hashlib.sha256(("nedra-test-folder:" + folder).encode()).hexdigest()[
+                :32
+            ]
+            item["folder_uid"] = uid
+            folders[folder] = uid
     document = manifest or {
-        "format": "ciphermoth-backup",
-        "version": 2,
+        "format": "nedra-backup",
+        "version": 3,
         "exported_at": "2026-10-15T00:00:00+00:00",
         "app_version": "test",
         "settings": settings or dict(SETTINGS_DEFAULTS),
         "entries_count": len(entries),
+        "folders": [{"uid": uid, "name": name} for name, uid in folders.items()],
     }
     entries_to_write = document.pop("entries", entries)
     document.setdefault("entries_count", len(entries_to_write))
@@ -552,7 +540,8 @@ def backup_file(
     content_iter = iter(contents)
     for entry in entries_to_write:
         writer.write(json.dumps(entry).encode())
-        for _ in entry.get("attachments", []):
+        attachments = entry.get("attachments", []) if isinstance(entry, dict) else []
+        for _ in attachments:
             try:
                 writer.write(next(content_iter))
             except StopIteration:

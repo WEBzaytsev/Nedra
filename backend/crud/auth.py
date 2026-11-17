@@ -10,7 +10,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from crud.base import BaseCRUD
 from crud.engine import Database, after_commit, after_rollback
-from crud.folder import migrate_folder_links
 from crud.master_password import _store, fetch_vault, key_material
 from crud.settings import SettingsCRUD
 from errors import (
@@ -354,7 +353,6 @@ class AuthCRUD(BaseCRUD):
             .where(EntryModel.owner_id.is_(None))
             .values(owner_id=user.id)
         )
-        await migrate_folder_links(self.session, key)
         await self._refresh_timeout()
         return self._open_session(user, key)
 
@@ -417,7 +415,6 @@ class AuthCRUD(BaseCRUD):
                     _record_password_unlock(database, current.id)
                 ),
             )
-        await migrate_folder_links(self.session, key)
         await self._refresh_timeout()
         return self._open_session(current, key, factor_enabled)
 
@@ -481,7 +478,6 @@ class AuthCRUD(BaseCRUD):
         canonical = await validate_vault_material(self.session, vault)
         if not key.matches(canonical.key_check):
             return AuthResponse(valid=False)
-        await migrate_folder_links(self.session, key)
         await self._refresh_timeout()
         return self._open_session(current, key, second_factor)
 

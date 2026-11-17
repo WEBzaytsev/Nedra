@@ -431,7 +431,7 @@ const en = {
   backup: {
     title: "Create backup",
     description:
-      "Export entries available to your account as an encrypted .cmbackup file. Your current account password protects the file.",
+      "Export entries available to your account as an encrypted .nedrabackup file. Your current account password protects the file.",
     passwordRequired: "Enter your account password.",
   },
   importDialog: {
@@ -442,7 +442,7 @@ const en = {
     csvDescription:
       "Choose a CSV export from Chrome, Bitwarden, KeePass, Proton Pass or another password manager. Nedra matches the columns automatically.",
     backupDescription:
-      "Choose a Nedra .cmbackup file, then enter the backup password to restore its entries.",
+      "Choose a Nedra .nedrabackup file, then enter the backup password to restore its entries.",
     chooseCsv: "Choose CSV file",
     chooseBackup: "Choose backup file",
     selectCsv: "Select a CSV file to continue.",
@@ -691,7 +691,7 @@ Object.assign(en.vault, {
 });
 Object.assign(en.backup, {
   descriptionFull:
-    "Save entries available to your account, trash, password history, attachments and settings in one encrypted .cmbackup file. Your current account password protects this portable copy.",
+    "Save entries available to your account, trash, password history, attachments and settings in one encrypted .nedrabackup file. Your current account password protects this portable copy.",
   restoreAdvice:
     "Use Import to restore the file into this vault or a new one. Store it in a safe place: anyone with the backup password can open it, even after you change your account password.",
   desktopAdvice: "Choose a new filename in the save dialog to keep earlier backups.",

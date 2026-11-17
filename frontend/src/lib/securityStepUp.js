@@ -30,7 +30,7 @@ const context = async (action, fields) => {
     ["sign"]
   );
   const bytes = new TextEncoder().encode(
-    `ciphermoth/security-step-up-context/v1\0${action}\0${JSON.stringify(canonical(fields))}`
+    `nedra/security-step-up-context/v1\0${action}\0${JSON.stringify(canonical(fields))}`
   );
   return base64url(await crypto.subtle.sign("HMAC", key, bytes));
 };

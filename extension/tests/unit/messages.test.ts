@@ -12,7 +12,7 @@ const REDEEM = "kM3x1y8Qe0bWv7c2Z9pL4t";
 describe("parseMessage", () => {
   it.each([
     { type: "status" },
-    { type: "unlock", username: "admin", password: "Moth-Test-Vault-2026!" },
+    { type: "unlock", username: "admin", password: "Nedra-Test-Vault-2026!" },
     { type: "configure", vault: "https://v.example", api: null },
     { type: "matches", tabId: 0 },
     { type: "fill", tabId: 3, id: 7, origin: "https://github.com", confirmed: false },

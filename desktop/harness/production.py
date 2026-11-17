@@ -62,7 +62,7 @@ def main():
         import plistlib
 
         info = plistlib.loads((app / "Contents/Info.plist").read_bytes())
-        assert info["CFBundleIdentifier"] == "com.ciphermoth.desktop"
+        assert info["CFBundleIdentifier"] == "com.nedra.desktop"
         assert info["CFBundleShortVersionString"] == version
         assert "Alpha" not in info["CFBundleName"]
         shell = app / "Contents/MacOS/nedra-desktop"

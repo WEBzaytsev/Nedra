@@ -25,7 +25,6 @@ from models import (
     GroupMemberModel,
     GroupModel,
     UserModel,
-    VaultModel,
     utc_now,
 )
 from schemas import (
@@ -58,54 +57,6 @@ def _strongest(permissions: Sequence[str | SharePermission]) -> SharePermission 
     if SharePermission.read in permissions:
         return SharePermission.read
     return None
-
-
-async def migrate_folder_links(session, key: VaultKey) -> None:
-    """Create stable folders for legacy encrypted folder strings after unlock.
-
-    The schema migration only adds storage. This key-dependent step is one
-    transaction and marks the singleton vault row only after every entry has
-    been checked, so a failure cannot leave a completed-looking partial map.
-    """
-    vault = await session.get(VaultModel, 1)
-    if vault is None or vault.folder_links_ready:
-        return
-    folders: dict[tuple[int, bytes], FolderModel] = {}
-    existing = (await session.scalars(select(FolderModel))).all()
-    for folder in existing:
-        folders[(folder.owner_id, folder.name_index)] = folder
-
-    entries = (await session.scalars(select(EntryModel).order_by(EntryModel.id))).all()
-    for entry in entries:
-        if entry.owner_id is None:
-            raise InvalidRequest(
-                "An entry has no owner, so folders cannot be migrated."
-            )
-        document = open_entry(key, entry)
-        name = document.folder
-        if not name:
-            if entry.folder_id is not None:
-                raise InvalidRequest("An entry without a folder has a folder link.")
-            continue
-        index = key.folder_name_index(entry.owner_id, name)
-        folder = folders.get((entry.owner_id, index))
-        if folder is None:
-            folder = FolderModel(
-                owner_id=entry.owner_id,
-                name_index=index,
-                document=b"",
-            )
-            seal_folder(key, folder, name)
-            session.add(folder)
-            await session.flush()
-            folders[(entry.owner_id, index)] = folder
-        elif open_folder(key, folder).name != name:
-            raise InvalidRequest("Two folder names have the same integrity index.")
-        if entry.folder_id not in (None, folder.id):
-            raise InvalidRequest("An entry has a conflicting folder link.")
-        entry.folder_id = folder.id
-    vault.folder_links_ready = True
-    await session.flush()
 
 
 class FolderCRUD:

@@ -40,7 +40,7 @@ def generate(root, version, commit, verifier, public_key):
             "windows": "exe",
             "linux": "AppImage",
         }[target.split("-")[0]]
-        names.add(f"CipherMoth_{version}_{target}.{updater_suffix}")
+        names.add(f"Nedra_{version}_{target}.{updater_suffix}")
         assert {row["file"] for row in report["artifacts"]} == names
         for row in report["artifacts"]:
             path = root / row["file"]

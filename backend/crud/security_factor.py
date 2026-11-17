@@ -70,7 +70,7 @@ def _decode(value: str) -> bytes:
 
 
 def _binding(user_id: int) -> bytes:
-    return hashlib.sha256(f"ciphermoth/security-factor/{user_id}".encode()).digest()
+    return hashlib.sha256(f"nedra/security-factor/{user_id}".encode()).digest()
 
 
 def step_up_context(
@@ -82,14 +82,14 @@ def step_up_context(
     ).encode()
     return hmac.new(
         token.encode(),
-        b"ciphermoth/security-step-up-context/v1\0" + action.encode() + b"\0" + encoded,
+        b"nedra/security-step-up-context/v1\0" + action.encode() + b"\0" + encoded,
         hashlib.sha256,
     ).digest()
 
 
 def _step_up_binding(token: str, action: SecurityAction, context: bytes) -> bytes:
     return hashlib.sha256(
-        b"ciphermoth/security-step-up-binding/v1\0"
+        b"nedra/security-step-up-binding/v1\0"
         + session_binding(token)
         + b"\0"
         + action.encode()

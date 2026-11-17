@@ -13,8 +13,8 @@ use nedra_extension_link::framing;
 use nedra_extension_link::identity::Identity;
 use serde_json::{json, Value};
 
-const CHROME: &str = "chrome-extension://emeejhcdcdnlhejcpeohdafdnkmbaddn/";
-const FIREFOX: &str = "ciphermoth@mr-grj.github.io";
+const CHROME: &str = "chrome-extension://alkkfkojagimdnneandmpodagadmmmii/";
+const FIREFOX: &str = "nedra@zaitsv.dev";
 
 fn host(root: &Path, args: &[&str]) -> Child {
     Command::new(env!("CARGO_BIN_EXE_native-host"))

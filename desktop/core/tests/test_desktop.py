@@ -222,7 +222,7 @@ def test_large_backup_roundtrip(core, tmp_path):
             [["content-type", ct], ["x-nedra-session", token]],
         )
         assert result.header["status"] == 200
-    backup = tmp_path / "large.cmbackup"
+    backup = tmp_path / "large.nedrabackup"
     assert (
         native(core, "backup_export", backup, token, master_password=PASSWORD)[0] == 200
     )

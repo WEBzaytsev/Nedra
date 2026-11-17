@@ -1,48 +1,48 @@
 {
-  "format": "ciphermoth-test-vectors/1",
-  "name": "backup_v2",
-  "description": "Backup format 2 (docs/VAULT_FORMAT.md section 5). derived = Argon2id(password, salt, header parameters); frame_key = HKDF(derived, 'ciphermoth/backup/v2/frame-encryption'); commitment = HKDF(derived, 'ciphermoth/backup/v2/key-commitment'). Header (75 bytes) = 'CMBACKUP' || u16 version 2 || u8 kdf 1 || u32 memory KiB || u32 iterations || u32 lanes || salt(16) || u32 frames || commitment(32). Each frame = u32 length || nonce(12) || AES-256-GCM(frame_key, nonce, plaintext, header || u32 index || u8 last). Frame 0 contains settings and the entry count; each entry has its own JSON frame followed by its attachment frames.",
-  "file": "backup-v2.cmbackup",
-  "file_sha256": "56696ca791ff5d938378870cf440b0375a42a979782d8089b33ddd7f675ca47e",
+  "format": "nedra-test-vectors/1",
+  "name": "backup_v3",
+  "description": "Backup format 3 (docs/VAULT_FORMAT.md section 5). derived = Argon2id(password, salt, header parameters); frame_key = HKDF(derived, 'nedra/backup/v3/frame-encryption'); commitment = HKDF(derived, 'nedra/backup/v3/key-commitment'). Header (75 bytes) = 'NEDRABKP' || u16 version 3 || u8 kdf 1 || u32 memory KiB || u32 iterations || u32 lanes || salt(16) || u32 frames || commitment(32). Each frame = u32 length || nonce(12) || AES-256-GCM(frame_key, nonce, plaintext, header || u32 index || u8 last). Frame 0 contains settings and the entry count; each entry has its own JSON frame followed by its attachment frames.",
+  "file": "backup-v3.nedrabackup",
+  "file_sha256": "0636b000005860ed827cd4935b9721b1c353db4a1c9f6a0a2593875311be4f54",
   "password": "Mölle-Stern-2026 🦋",
   "salt_hex": "333435363738393a3b3c3d3e3f404142",
   "derived_hex": "c6c6da302ea763fac939df53bcd927d0ec45f714d4ae6629661b87a43f6114b9",
-  "frame_key_hex": "b83f99afb1909443be6992d52a0c6f2d1916c5f735b0fae7020da8286cb7bec2",
-  "commitment_hex": "1af95da8cdb5bdfe96c284884c7ee402864072f16de9fa2794656990444745f3",
-  "header_hex": "434d4241434b5550000201000100000000000300000004333435363738393a3b3c3d3e3f404142000000041af95da8cdb5bdfe96c284884c7ee402864072f16de9fa2794656990444745f3",
+  "frame_key_hex": "3bf20117aca8e097cdd3178e8d2b186e9022920dde322abd3e657791b293a45d",
+  "commitment_hex": "c8d603d3b40218cd079453611f9cbc1b94ea355265e252d6342ac8f3218e418b",
+  "header_hex": "4e45445241424b50000301000100000000000300000004333435363738393a3b3c3d3e3f40414200000004c8d603d3b40218cd079453611f9cbc1b94ea355265e252d6342ac8f3218e418b",
   "frames": [
     {
       "index": 0,
       "last": false,
       "nonce_hex": "707172737475767778797a7b",
-      "associated_data_hex": "434d4241434b5550000201000100000000000300000004333435363738393a3b3c3d3e3f404142000000041af95da8cdb5bdfe96c284884c7ee402864072f16de9fa2794656990444745f30000000000",
-      "plaintext_sha256": "853f745184e9e6629baf4e701e9b1e8a9f98468ed2ae467e30f5c59725f470fa"
+      "associated_data_hex": "4e45445241424b50000301000100000000000300000004333435363738393a3b3c3d3e3f40414200000004c8d603d3b40218cd079453611f9cbc1b94ea355265e252d6342ac8f3218e418b0000000000",
+      "plaintext_sha256": "6c03ddec4a6feddfcd51631c8dcf42eabf8956c0124e304dbfde80f2f47f09a7"
     },
     {
       "index": 1,
       "last": false,
       "nonce_hex": "7172737475767778797a7b7c",
-      "associated_data_hex": "434d4241434b5550000201000100000000000300000004333435363738393a3b3c3d3e3f404142000000041af95da8cdb5bdfe96c284884c7ee402864072f16de9fa2794656990444745f30000000100",
-      "plaintext_sha256": "508be5cd2eef21cc965f49860f9f1d192abc44104e24c2fd375fa376e736ab36"
+      "associated_data_hex": "4e45445241424b50000301000100000000000300000004333435363738393a3b3c3d3e3f40414200000004c8d603d3b40218cd079453611f9cbc1b94ea355265e252d6342ac8f3218e418b0000000100",
+      "plaintext_sha256": "1cbac3327c9a920d4f618fd7512573fe822fd627117cbaaf84e6f575516a3d5b"
     },
     {
       "index": 2,
       "last": false,
       "nonce_hex": "72737475767778797a7b7c7d",
-      "associated_data_hex": "434d4241434b5550000201000100000000000300000004333435363738393a3b3c3d3e3f404142000000041af95da8cdb5bdfe96c284884c7ee402864072f16de9fa2794656990444745f30000000200",
+      "associated_data_hex": "4e45445241424b50000301000100000000000300000004333435363738393a3b3c3d3e3f40414200000004c8d603d3b40218cd079453611f9cbc1b94ea355265e252d6342ac8f3218e418b0000000200",
       "plaintext_sha256": "3e058c054674e6b0bc5a525f9ba16e47e60beeb2f435e1435bac8e2182c97159"
     },
     {
       "index": 3,
       "last": true,
       "nonce_hex": "737475767778797a7b7c7d7e",
-      "associated_data_hex": "434d4241434b5550000201000100000000000300000004333435363738393a3b3c3d3e3f404142000000041af95da8cdb5bdfe96c284884c7ee402864072f16de9fa2794656990444745f30000000301",
-      "plaintext_sha256": "af0c86e4b31b439a7c97a3bf31eef4b6dccb685c6c3b9f80bfc1ee5b4c16999f"
+      "associated_data_hex": "4e45445241424b50000301000100000000000300000004333435363738393a3b3c3d3e3f40414200000004c8d603d3b40218cd079453611f9cbc1b94ea355265e252d6342ac8f3218e418b0000000301",
+      "plaintext_sha256": "58c15633a788d370cc149001fa01bf9a6f4151c290a6e4c3d7d34d51c376e88b"
     }
   ],
   "manifest": {
-    "format": "ciphermoth-backup",
-    "version": 2,
+    "format": "nedra-backup",
+    "version": 3,
     "exported_at": "2026-10-15T12:00:00+00:00",
     "app_version": "vectors",
     "settings": {
@@ -53,13 +53,19 @@
       "clipboard_clear_ms": 15000,
       "update_check_enabled": false
     },
-    "entries_count": 2
+    "entries_count": 2,
+    "folders": [
+      {
+        "uid": "00112233445566778899aabbccddeeff",
+        "name": "Work"
+      }
+    ]
   },
   "entries": [
     {
       "name": "GitHub",
       "kind": "login",
-      "username": "moth@example.com",
+      "username": "user@example.com",
       "value": "gh-Secret-1",
       "url": "https://github.com",
       "totp_secret": "JBSWY3DPEHPK3PXP",
@@ -83,6 +89,7 @@
           "changed_at": "2026-01-01T00:00:00+00:00"
         }
       ],
+      "folder_uid": "00112233445566778899aabbccddeeff",
       "created": "2026-01-01T00:00:00.000001+00:00",
       "updated": "2026-02-01T00:00:00.000002+00:00",
       "deleted": null,
@@ -99,7 +106,7 @@
     {
       "name": "GitHub",
       "kind": "login",
-      "username": "moth@example.com",
+      "username": "user@example.com",
       "value": "older-Secret",
       "url": "https://github.com",
       "totp_secret": "JBSWY3DPEHPK3PXP",
@@ -118,6 +125,7 @@
       "folder": "Work",
       "favorite": false,
       "history": [],
+      "folder_uid": "00112233445566778899aabbccddeeff",
       "created": "2025-06-01T00:00:00+00:00",
       "updated": "2025-07-01T00:00:00+00:00",
       "deleted": "2025-12-24T18:00:00.123456+00:00",
