@@ -80,28 +80,31 @@ bool nedra_qa_click(double x, double y) {
         NSView *webView = nedra_qa_webview(window.contentView);
         if (webView == nil || x < 0 || y < 0 || x >= NSWidth(webView.bounds) || y >= NSHeight(webView.bounds)) return;
         NSPoint local = NSMakePoint(x, webView.isFlipped ? y : NSHeight(webView.bounds) - y);
-        NSView *target = [webView hitTest:local];
-        if (target == nil) return;
-        NSPoint location = [webView convertPoint:local toView:nil];
-        NSTimeInterval timestamp = NSProcessInfo.processInfo.systemUptime;
-        NSEvent *moved = [NSEvent mouseEventWithType:NSEventTypeMouseMoved
-            location:location modifierFlags:0 timestamp:timestamp
-            windowNumber:window.windowNumber context:nil eventNumber:0
-            clickCount:0 pressure:0.0];
-        NSEvent *down = [NSEvent mouseEventWithType:NSEventTypeLeftMouseDown
-            location:location modifierFlags:0 timestamp:timestamp
-            windowNumber:window.windowNumber context:nil eventNumber:0
-            clickCount:1 pressure:1.0];
-        NSEvent *up = [NSEvent mouseEventWithType:NSEventTypeLeftMouseUp
-            location:location modifierFlags:0 timestamp:timestamp + 0.05
-            windowNumber:window.windowNumber context:nil eventNumber:0
-            clickCount:1 pressure:0.0];
-        if (moved == nil || down == nil || up == nil) return;
+        if ([webView hitTest:local] == nil) return;
+        NSPoint windowPoint = [webView convertPoint:local toView:nil];
+        NSPoint screenPoint = [window convertPointToScreen:windowPoint];
+        CGRect mainDisplay = CGDisplayBounds(CGMainDisplayID());
+        CGPoint quartzPoint = CGPointMake(
+            screenPoint.x,
+            CGRectGetMaxY(mainDisplay) - screenPoint.y
+        );
+        CGEventRef moved = CGEventCreateMouseEvent(NULL, kCGEventMouseMoved, quartzPoint, kCGMouseButtonLeft);
+        CGEventRef down = CGEventCreateMouseEvent(NULL, kCGEventLeftMouseDown, quartzPoint, kCGMouseButtonLeft);
+        CGEventRef up = CGEventCreateMouseEvent(NULL, kCGEventLeftMouseUp, quartzPoint, kCGMouseButtonLeft);
+        if (moved == NULL || down == NULL || up == NULL) {
+            if (moved != NULL) CFRelease(moved);
+            if (down != NULL) CFRelease(down);
+            if (up != NULL) CFRelease(up);
+            return;
+        }
         [window makeKeyAndOrderFront:nil];
-        window.acceptsMouseMovedEvents = YES;
-        [window sendEvent:moved];
-        [window sendEvent:down];
-        [window sendEvent:up];
+        pid_t pid = NSProcessInfo.processInfo.processIdentifier;
+        CGEventPostToPid(pid, moved);
+        CGEventPostToPid(pid, down);
+        CGEventPostToPid(pid, up);
+        CFRelease(moved);
+        CFRelease(down);
+        CFRelease(up);
         sent = true;
     };
     if (NSThread.isMainThread) click(); else dispatch_sync(dispatch_get_main_queue(), click);
