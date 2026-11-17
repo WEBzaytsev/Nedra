@@ -202,7 +202,7 @@ def build_mcp_server(
 
     @server.tool()
     async def create_entry(entry: Password) -> dict[str, object]:
-        """Create an entry owned by this service identity's human owner."""
+        """Create an entry and return its non-secret metadata."""
 
         async def call(session, context):
             crud = AuthorizedPasswordCRUD(session, context)
@@ -216,13 +216,13 @@ def build_mcp_server(
             )
             assert model is not None
             created, owner, access = await _by_id(crud, model.id, EntryPermission.write)
-            return _detail(created, owner, access)
+            return _index(created, owner, access)
 
         return await service_call(ServiceOperation.create, "create_entry", call)
 
     @server.tool()
     async def update_entry(entry_id: int, changes: EntryChanges) -> dict[str, object]:
-        """Update fields on one entry when this service identity has write access."""
+        """Update one writable entry and return its non-secret metadata."""
 
         async def call(session, context):
             if not changes:
@@ -234,7 +234,7 @@ def build_mcp_server(
             updated = Password.model_validate(values)
             await crud.update_password(current.password_name, updated, context.key)
             result, owner, access = await _by_id(crud, entry_id, EntryPermission.write)
-            return _detail(result, owner, access)
+            return _index(result, owner, access)
 
         return await service_call(ServiceOperation.update, "update_entry", call)
 

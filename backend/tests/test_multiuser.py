@@ -777,6 +777,44 @@ async def _mcp_service_acl_flow(client: httpx.AsyncClient) -> None:
     assert {source["source"] for source in created_entry["access_sources"]} == {
         "folder"
     }
+    secret_fields = {
+        "password_value",
+        "totp_secret",
+        "custom_fields",
+        "password_history",
+    }
+    assert secret_fields.isdisjoint(created_entry)
+
+    configured_update = await client.put(
+        f"/users/{service['id']}/service-operations",
+        json={
+            "operations": ["list", "get", "create", "update"],
+            "current_password": ADMIN_PASSWORD,
+        },
+        headers=owner_headers,
+    )
+    assert configured_update.status_code == 200, configured_update.text
+    updated = await mcp_post(
+        client,
+        token,
+        {
+            "jsonrpc": "2.0",
+            "id": 5,
+            "method": "tools/call",
+            "params": {
+                "name": "update_entry",
+                "arguments": {
+                    "entry_id": created_entry["id"],
+                    "changes": {"password_value": "changed-secret"},
+                },
+            },
+        },
+        protocol,
+    )
+    assert updated.status_code == 200, updated.text
+    updated_entry = updated.json()["result"]["structuredContent"]
+    assert updated_entry["id"] == created_entry["id"]
+    assert secret_fields.isdisjoint(updated_entry)
 
     stripped = await client.put(
         f"/users/{service['id']}/service-operations",
