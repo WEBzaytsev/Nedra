@@ -313,6 +313,7 @@ def linux_strangers(path: Path) -> dict:
             # The system Python: another user may not reach the runner's venv.
             [*prefix, "/usr/bin/python3", "-I", "-c", probe, str(path), CHROMIUM_ID],
             capture_output=True,
+            check=False,
             text=True,
             timeout=30,
         )
@@ -332,7 +333,10 @@ def check_on(root: Path, report: dict, report_path: Path, app_executable: Path) 
     assert manifests["Chrome"]["allowed_origins"] == [
         f"chrome-extension://{CHROMIUM_ID}/"
     ]
-    assert manifests["Firefox"]["allowed_extensions"] == ["nedra@mr-grj.github.io"]
+    # Frozen for existing Firefox installs and native-host registration continuity.
+    assert manifests["Firefox"]["allowed_extensions"] == [
+        "ciphermoth@mr-grj.github.io"
+    ]
     host = manifests["Chrome"]["path"]
     assert manifests["Firefox"]["path"] == host
     assert Path(host).is_file(), host

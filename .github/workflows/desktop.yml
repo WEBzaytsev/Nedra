@@ -223,5 +223,6 @@ jobs:
             desktop-results/source-builds.txt
             desktop-results/native/results.json
             desktop-results/native/webview.json
+            desktop-results/native/shell.log
             desktop-results/update/results.json
           retention-days: 14

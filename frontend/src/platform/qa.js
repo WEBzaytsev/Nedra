@@ -10,8 +10,8 @@ const EXTENSION_LOGIN = {
   username: "qa@example.test",
   url: "https://login.example.test",
 };
-async function until(fn) {
-  for (let n = 0; n < 200; n++) {
+async function until(fn, attempts = 200) {
+  for (let n = 0; n < attempts; n++) {
     const result = fn();
     if (result) return result;
     await pause(100);
@@ -83,11 +83,14 @@ const button = (label) =>
   );
 const checks = [];
 try {
+  // A first launch can spend well over 20 seconds starting the frozen core on
+  // hosted macOS VMs. Later UI transitions keep the shorter failure budget.
   await until(
     () =>
       button("Create Vault") ||
       button("Unlock Vault") ||
-      document.querySelector('input[type="checkbox"]')
+      document.querySelector('input[type="checkbox"]'),
+    600
   );
   const interactiveMs = Math.round(performance.now());
   if (!sessionStorage.getItem("qa-interactive-ms")) {
