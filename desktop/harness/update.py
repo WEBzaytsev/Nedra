@@ -187,12 +187,22 @@ class Host:
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             for path in self.root.glob("update-request-*.json"):
-                report = json.loads(path.read_text())
+                try:
+                    report = json.loads(path.read_text())
+                except (OSError, json.JSONDecodeError):
+                    # Windows can briefly deny readers while the installed app
+                    # publishes the atomically renamed request file. Treat the
+                    # directory entry as ready only after it can be read and
+                    # parsed; the outer deadline still fails a persistent lock.
+                    continue
                 if report["id"] not in self.seen:
+                    try:
+                        path.unlink()
+                    except OSError:
+                        continue
                     self.seen.add(report["id"])
                     self.report = report
                     assert report["result"].get("ok", True), report["result"]
-                    path.unlink()
                     return report
             time.sleep(0.1)
         raise TimeoutError("Installed update app did not report; see scoped shell.log")

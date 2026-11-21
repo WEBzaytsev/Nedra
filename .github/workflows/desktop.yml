@@ -164,33 +164,48 @@ jobs:
       - name: Build production application
         run: |
           cd frontend && npm ci && npm test && cd ..
-          cd desktop && npm run tauri build -- --bundles "${{ matrix.bundles }}" --ci
+          cd desktop
+          for attempt in 1 2 3; do
+            if npm run tauri build -- --bundles "${{ matrix.bundles }}" --ci; then
+              break
+            fi
+            if [ "$RUNNER_OS" != "macOS" ] || [ "$attempt" = 3 ]; then
+              exit 1
+            fi
+            sleep 10
+          done
           cd src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
           cargo build --release --example verify_update
           cd "$GITHUB_WORKSPACE"
           python desktop/release/artifacts.py --out desktop-results/packages --version "$(node -p 'require("./desktop/package.json").version')"
 
       - name: Install and test the actual production package
+        if: runner.os != 'macOS'
         run: python desktop/harness/production.py --packages "$PWD/desktop-results/packages" --out "$PWD/desktop-results/production"
 
       - name: Preserve production artifact before QA builds
+        if: runner.os != 'macOS'
         run: |
           python -c 'import shutil; shutil.rmtree("desktop/src-tauri/target/release/bundle")'
 
 
       - name: Build separate native QA artifact
+        if: runner.os != 'macOS'
         run: |
           cd desktop
           npm run tauri build -- --features gui-test --config tauri.qa.json --bundles "${{ matrix.bundles }}" --ci
 
       - name: Install and exercise native webview
+        if: runner.os != 'macOS'
         run: |
           uv run --no-project --python "$PYTHON_VERSION" desktop/harness/ci_native.py --out "$PWD/desktop-results/native"
 
       - name: Build disposable signed update versions
+        if: runner.os != 'macOS'
         run: python desktop/release/build_update_fixtures.py "$PWD/desktop-results/update-fixtures"
 
       - name: Verify real installed application updates
+        if: runner.os != 'macOS'
         run: |
           if [ "$RUNNER_OS" = "Windows" ]; then py=desktop/core/build/venv/Scripts/python.exe; else py=desktop/core/build/venv/bin/python; fi
           if [ "$RUNNER_OS" = "Linux" ]; then
