@@ -1,17 +1,3 @@
-// "Unlock in Nedra": the web app unlocks (master password, security key,
-// passkey) and hands this extension a session token.
-//
-// 1. A random 256-bit request nonce is made here and never sent to a server
-//    (it travels in the URL fragment).
-// 2. The bridge content script is registered for the vault's origin only, for
-//    as long as the request is pending, and a tab opens
-//    <vault>/#/connect-extension?request=<nonce>&browser=<name>.
-// 3. After the user confirms in the web app, it posts the token to its own
-//    window; the bridge forwards it here.
-// 4. The token is accepted once, only from the top frame of that tab, on that
-//    origin, with that nonce, within five minutes, and only after the server
-//    confirms it is a live extension session.
-
 import { request } from "./api";
 import { adoptToken, browserName } from "./session";
 import { getHandoff, getServer, installId, setHandoff } from "./storage";
@@ -95,8 +81,7 @@ export const startHandoff = async (): Promise<void> => {
     body: { request: requestNonce, tab, origin: config.vault, browser, client },
   });
   const url = `${config.vault}/#/connect-extension?request=${requestNonce}&tab=${tab}&browser=${browser}&client=${client}`;
-  // Back to this tab when the handoff tab closes (Chrome would otherwise pick a
-  // neighbour). Only its id is read: no tabs permission, no address.
+
   const [current] = await ext.tabs.query({ active: true, lastFocusedWindow: true });
   const returnTo = current?.id ?? null;
   const handoffTab = await ext.tabs.create({ url: "about:blank", active: true });
@@ -155,7 +140,7 @@ export const receiveToken = async (
     !sameSecret(message.request, pending.request)
   )
     return false;
-  // Single use locally before redeeming the server-bound capability.
+
   await clearHandoff();
   const config = await getServer();
   if (!config || config.vault !== pending.vault) return false;

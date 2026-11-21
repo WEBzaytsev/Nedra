@@ -63,10 +63,6 @@ _BACKUP_CHUNK_BYTES = 1024 * 1024
 
 
 class BackupResponse(StreamingResponse):
-    """Own the ciphertext file across success, disconnect and send failure.
-    BackgroundTask alone is not guaranteed to run when response delivery raises.
-    """
-
     def __init__(self, backup, filename: str) -> None:
         self.backup = backup
         size = backup.seek(0, 2)
@@ -460,12 +456,6 @@ async def import_passwords(
     vault_sessions: VaultSessionsDep,
     database: Annotated[Database, Depends(get_database)],
 ) -> PasswordImportResult:
-    """
-    The body is read only after the session check (no form parameters, so
-    FastAPI does not parse it first), with one file part and no database
-    transaction open while it arrives; the CRUD method checks the key
-    against the vault once the slow work is done.
-    """
     async with request.form(max_files=1, max_fields=2) as form:
         file = form.get("file")
         master_password = form.get("master_password")

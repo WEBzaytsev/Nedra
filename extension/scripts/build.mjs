@@ -1,23 +1,3 @@
-// Builds the extension for Chromium and Firefox, reproducibly.
-//
-//   node scripts/build.mjs             dist/chromium, dist/firefox
-//   node scripts/build.mjs --package   ... plus dist/packages/*.zip and SHA256SUMS
-//   node scripts/build.mjs --test      dist-test/chromium (Playwright build, see below)
-//   node scripts/build.mjs --desktop-dev  dist-dev/{chromium,firefox}: a real build
-//                                         that talks to the development desktop app
-//                                         (`make desktop-dev`, or a debug bundle)
-//
-// Reproducible: pinned toolchain (package-lock.json), no minification, no
-// source maps, no timestamps or paths in the output, zip entries sorted with a
-// fixed mtime (SOURCE_DATE_EPOCH, default 2026-01-01) and fixed attributes.
-// Building the same commit twice gives byte-identical packages (verify.mjs).
-//
-// The --test build is for automated tests only and never shipped: it adds host
-// permissions for every site (Playwright cannot click the toolbar button, which
-// is what grants activeTab), the clipboardRead permission, a 3 s clipboard
-// timer, a popup that can be pointed at a tab (#tab=<id>) and a hook to run the
-// fill command. All of it hangs off __E2E__, which is false in real builds.
-
 import { createHash } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
@@ -29,26 +9,19 @@ import * as esbuild from "esbuild";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const args = new Set(process.argv.slice(2));
-const TEST = args.has("--test");
 const DESKTOP_DEV = args.has("--desktop-dev");
 const PACKAGE = args.has("--package");
-if (DESKTOP_DEV && (TEST || PACKAGE)) throw new Error("--desktop-dev builds are never packaged");
-const targets = TEST ? ["chromium"] : ["chromium", "firefox"];
-const outRoot = join(root, TEST ? "dist-test" : DESKTOP_DEV ? "dist-dev" : "dist");
-// The native host the extension talks to in desktop mode: the real app's, the
-// QA app's (test build) or the development app's (never shipped).
-export const nativeHost = ({ test = false, dev = false } = {}) =>
-  test
-    ? "com.nedra.desktop.qa"
-    : dev
-      ? "com.nedra.desktop.dev"
-      : "com.nedra.desktop";
+if (DESKTOP_DEV && PACKAGE) throw new Error("--desktop-dev builds are never packaged");
+const targets = ["chromium", "firefox"];
+const outRoot = join(root, DESKTOP_DEV ? "dist-dev" : "dist");
+
+export const nativeHost = ({ dev = false } = {}) =>
+  dev ? "com.nedra.desktop.dev" : "com.nedra.desktop";
 const { version } = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 const BUDGET_BYTES = 60 * 1024;
 
 const readJson = (path) => JSON.parse(readFileSync(join(root, path), "utf8"));
 
-// Arrays are concatenated (permissions), objects merged, the rest replaced.
 const merge = (base, extra) => {
   const out = { ...base };
   for (const [key, value] of Object.entries(extra)) {
@@ -60,16 +33,9 @@ const merge = (base, extra) => {
   return out;
 };
 
-export const manifestFor = (target, { test = false } = {}) => {
+export const manifestFor = (target) => {
   let manifest = merge(readJson("manifest/base.json"), readJson(`manifest/${target}.json`));
   manifest.version = version;
-  if (test) {
-    manifest = merge(manifest, {
-      permissions: ["clipboardRead", "nativeMessaging"],
-      host_permissions: ["https://*/*", "http://*/*"],
-    });
-    manifest.name = "Nedra (test build)";
-  }
   return manifest;
 };
 
@@ -104,8 +70,7 @@ const buildTarget = async (target) => {
     format: "iife",
     platform: "browser",
     target: target === "chromium" ? ["chrome120"] : ["firefox128"],
-    // Syntax only (constant folding, dead code removal), so the test-build
-    // branches vanish from real builds; names and layout stay readable.
+
     minifySyntax: true,
     sourcemap: false,
     legalComments: "none",
@@ -113,8 +78,7 @@ const buildTarget = async (target) => {
     jsx: "automatic",
     jsxImportSource: "preact",
     define: {
-      __E2E__: JSON.stringify(TEST),
-      __NATIVE_HOST__: JSON.stringify(nativeHost({ test: TEST, dev: DESKTOP_DEV })),
+      __NATIVE_HOST__: JSON.stringify(nativeHost({ dev: DESKTOP_DEV })),
       __TARGET__: JSON.stringify(target),
       __VERSION__: JSON.stringify(version),
     },
@@ -139,10 +103,7 @@ const buildTarget = async (target) => {
   cpSync(join(root, "src/icons"), join(out, "icons"), { recursive: true });
   for (const [name, source] of Object.entries(FONTS))
     cpSync(join(root, source), join(out, "fonts", name));
-  writeFileSync(
-    join(out, "manifest.json"),
-    `${JSON.stringify(manifestFor(target, { test: TEST }), null, 2)}\n`
-  );
+  writeFileSync(join(out, "manifest.json"), `${JSON.stringify(manifestFor(target), null, 2)}\n`);
   return out;
 };
 
@@ -150,8 +111,6 @@ const popupWeight = (out) =>
   ["popup.js", "popup.css", "popup.html", "fonts/space-grotesk.woff2", "fonts/space-mono.woff2"]
     .map((file) => gzipSync(readFileSync(join(out, file)), { level: 9 }).length)
     .reduce((a, b) => a + b, 0);
-
-// --- reproducible zip (store method for nothing, deflate for everything) ---------
 
 const CRC_TABLE = Array.from({ length: 256 }, (_, n) => {
   let c = n;

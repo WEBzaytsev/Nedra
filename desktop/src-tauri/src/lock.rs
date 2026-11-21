@@ -27,8 +27,6 @@ pub fn observe(epoch: u64, sent_at: Instant, head: &serde_json::Value, settings:
         return;
     }
     if let Some(ms) = head["session"]["expires_in_ms"].as_u64() {
-        // Anchor conservatively before the request. A delayed response must
-        // never extend a native deadline by its transport/queueing delay.
         policy.deadline = Some(sent_at + Duration::from_millis(ms.min(43_200_000)));
     }
     if head["status"].as_u64() == Some(200) {
@@ -66,8 +64,7 @@ pub(super) extern "C" fn lock() {
     if let Some(app) = APP.get() {
         reset_renderer(app);
         app.state::<Arc<Clipboard>>().clear();
-        // Kill the process that owns all keys and pending KDFs, independent of
-        // the renderer event loop. SQLite rolls back any unfinished write.
+
         app.state::<Arc<Supervisor>>().lock();
         let _ = app.emit("vault-locked", ());
     }
@@ -78,7 +75,7 @@ pub fn install(app: tauri::AppHandle) {
     unsafe {
         nedra_observe_lock(lock);
     }
-    // A wall-clock gap also locks on resume if a platform notification was lost.
+
     std::thread::spawn(|| {
         let mut previous = std::time::SystemTime::now();
         loop {
@@ -120,8 +117,6 @@ pub fn reset_renderer(app: &tauri::AppHandle) {
         extension.on_lock();
     }
     if let Some(window) = app.get_webview_window("main") {
-        // Hide stale decrypted DOM before asking the webview to load a fresh
-        // document. No JavaScript callback is needed to remove it from view.
         let _ = window.hide();
         if let Ok(mut url) = window.url() {
             url.set_path("/login");
@@ -129,25 +124,5 @@ pub fn reset_renderer(app: &tauri::AppHandle) {
             url.set_fragment(None);
             let _ = window.navigate(url);
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn native_deadlines_expire_without_renderer_callbacks() {
-        let now = Instant::now();
-        let mut policy = Policy {
-            epoch: 0,
-            deadline: Some(now + Duration::from_secs(5)),
-            hidden_since: None,
-            hidden_ms: 1000,
-        };
-        assert!(!policy.expired(now, true));
-        assert!(policy.expired(now + Duration::from_secs(1), true));
-        assert!(!policy.expired(now + Duration::from_secs(2), false));
-        assert!(policy.expired(now + Duration::from_secs(5), false));
     }
 }

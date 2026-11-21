@@ -30,10 +30,7 @@ const Connection = ({ status, reload }: { status: Status; reload: () => void }) 
       setMessage({ text: target, bad: true });
       return;
     }
-    // Ask for exactly the vault's origin (and the API's, if separate), right
-    // here in the click: the browser shows the user which site it is.
     const origins = permissionOrigins(target);
-    // Access the stored connection uses stays, whatever happens to this attempt.
     const held =
       status.vault && status.api ? permissionOrigins({ vault: status.vault, api: status.api }) : [];
     const drop = async (patterns: string[]) => {
@@ -59,7 +56,6 @@ const Connection = ({ status, reload }: { status: Status; reload: () => void }) 
         setMessage({ text: next.error ?? "Update Nedra first.", bad: true });
         return;
       }
-      // A new address: the old one's access is no longer needed.
       await drop(notNeededBy(held, origins));
       setMessage({
         text: "Connected. Open Nedra from the toolbar to unlock.",
@@ -78,14 +74,20 @@ const Connection = ({ status, reload }: { status: Status; reload: () => void }) 
   };
 
   const disconnect = async () => {
-    await send({ type: "forget" }).catch(() => {});
-    setVault("");
-    setApi("");
-    setMessage({
-      text: "Disconnected. Nothing of your vault is left in this browser.",
-      bad: false,
-    });
-    reload();
+    setBusy(true);
+    setMessage(null);
+    try {
+      await send({ type: "forget" });
+      setVault("");
+      setApi("");
+      setMessage({ text: "Disconnected from this browser.", bad: false });
+      reload();
+    } catch (err) {
+      setMessage({ text: err instanceof Error ? err.message : "Could not disconnect.", bad: true });
+      reload();
+    } finally {
+      setBusy(false);
+    }
   };
 
   const connected = status.mode === "server" && status.phase !== "setup";
@@ -105,8 +107,8 @@ const Connection = ({ status, reload }: { status: Status; reload: () => void }) 
         </div>
       ) : (
         <p>
-          Connect to your own Nedra server. The extension asks your browser for access to that
-          one address only.
+          Connect to your own Nedra server. The extension asks your browser for access to that one
+          address only.
         </p>
       )}
       <form onSubmit={connect}>
@@ -164,8 +166,7 @@ const Connection = ({ status, reload }: { status: Status; reload: () => void }) 
   );
 };
 
-const NEEDS_NATIVE_PERMISSION =
-  "Nedra needs your permission to talk to the app on this computer.";
+const NEEDS_NATIVE_PERMISSION = "Nedra needs your permission to talk to the app on this computer.";
 
 const DESKTOP_STATES: Partial<Record<Status["phase"], string>> = {
   unlocked: "Paired · Nedra is unlocked",
@@ -175,7 +176,6 @@ const DESKTOP_STATES: Partial<Record<Status["phase"], string>> = {
   offline: "Can't reach the Nedra app",
 };
 
-// "482913" -> "482 913", as the app's dialog shows it.
 const spacedCode = (code: string | null): string =>
   code && /^\d{6}$/.test(code) ? `${code.slice(0, 3)} ${code.slice(3)}` : "";
 
@@ -184,7 +184,6 @@ const DesktopConnection = ({ status, reload }: { status: Status; reload: () => v
   const [busy, setBusy] = useState(false);
   const pairing = status.phase === "pairing";
 
-  // The pairing is answered in the app; follow it here.
   useEffect(() => {
     if (!pairing) return;
     const timer = setInterval(reload, 1000);
@@ -205,15 +204,20 @@ const DesktopConnection = ({ status, reload }: { status: Status; reload: () => v
   };
 
   const disconnect = async () => {
-    await send({ type: "unpair" }).catch(() => {});
-    setMessage({
-      text: "Unpaired in this browser and in the app. Nothing of your vault is left in this browser.",
-      bad: false,
-    });
-    reload();
+    setBusy(true);
+    setMessage(null);
+    try {
+      await send({ type: "unpair" });
+      setMessage({ text: "Unpaired from the Nedra app.", bad: false });
+      reload();
+    } catch (err) {
+      setMessage({ text: err instanceof Error ? err.message : "Could not unpair.", bad: true });
+      reload();
+    } finally {
+      setBusy(false);
+    }
   };
 
-  // The permission was removed (in the browser's extension settings): ask again.
   const allow = async () => {
     setMessage(null);
     const granted = await ext.permissions
@@ -223,8 +227,15 @@ const DesktopConnection = ({ status, reload }: { status: Status; reload: () => v
       setMessage({ text: NEEDS_NATIVE_PERMISSION, bad: true });
       return;
     }
-    await send<Status>({ type: "use-desktop" }).catch(() => undefined);
-    reload();
+    try {
+      await send<Status>({ type: "use-desktop" });
+      reload();
+    } catch (err) {
+      setMessage({
+        text: err instanceof Error ? err.message : "Could not connect to the app.",
+        bad: true,
+      });
+    }
   };
 
   const state = DESKTOP_STATES[status.phase];
@@ -243,8 +254,7 @@ const DesktopConnection = ({ status, reload }: { status: Status; reload: () => v
       )}
       {status.phase === "unsupported" && (
         <p class="error" role="alert">
-          This browser can't pair with the Nedra app. Update to Chrome 133, Firefox 130 or
-          newer.
+          This browser can't pair with the Nedra app. Update to Chrome 133, Firefox 130 or newer.
         </p>
       )}
       {state && (
@@ -255,8 +265,8 @@ const DesktopConnection = ({ status, reload }: { status: Status; reload: () => v
       {status.phase === "unpaired" && (
         <>
           <p>
-            Pair this browser with Nedra on this computer. The app shows a code; check that it
-            is the one shown here, then allow it. Nedra must be unlocked.
+            Pair this browser with Nedra on this computer. The app shows a code; check that it is
+            the one shown here, then allow it. Nedra must be unlocked.
           </p>
           {status.error && (
             <p class="error" role="alert">
@@ -315,7 +325,6 @@ const DesktopConnection = ({ status, reload }: { status: Status; reload: () => v
   );
 };
 
-// Where this browser fills from (design decision 39): one at a time.
 const Mode = ({ status, reload }: { status: Status; reload: () => void }) => {
   const [chosen, setChosen] = useState<"server" | "desktop">(status.mode ?? "server");
   const [error, setError] = useState("");
@@ -324,7 +333,6 @@ const Mode = ({ status, reload }: { status: Status; reload: () => void }) => {
     setError("");
     setChosen(mode);
     if (mode !== "desktop" || status.mode === "desktop") return;
-    // Asked here, in the click, so the browser can show its prompt.
     const granted = await ext.permissions
       .request({ permissions: ["nativeMessaging"] })
       .catch(() => false);
@@ -391,13 +399,19 @@ const Mode = ({ status, reload }: { status: Status; reload: () => void }) => {
 };
 
 const Preferences = ({ status, reload }: { status: Status; reload: () => void }) => {
+  const [error, setError] = useState("");
   const save = async (patch: Partial<Pick<Status, "subdomains" | "strictClipboard">>) => {
-    await send({
-      type: "settings",
-      subdomains: patch.subdomains ?? status.subdomains,
-      strictClipboard: patch.strictClipboard ?? status.strictClipboard,
-    });
-    reload();
+    setError("");
+    try {
+      await send({
+        type: "settings",
+        subdomains: patch.subdomains ?? status.subdomains,
+        strictClipboard: patch.strictClipboard ?? status.strictClipboard,
+      });
+      reload();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save settings.");
+    }
   };
 
   const toggleStrict = async (on: boolean) => {
@@ -405,9 +419,18 @@ const Preferences = ({ status, reload }: { status: Status; reload: () => void })
       const granted = await ext.permissions
         .request({ permissions: ["clipboardRead"] })
         .catch(() => false);
-      if (!granted) return;
+      if (!granted) {
+        setError("Clipboard read permission is needed for this setting.");
+        return;
+      }
     } else {
-      await ext.permissions.remove({ permissions: ["clipboardRead"] }).catch(() => false);
+      const removed = await ext.permissions
+        .remove({ permissions: ["clipboardRead"] })
+        .catch(() => false);
+      if (!removed) {
+        setError("Could not remove clipboard read permission. Try again.");
+        return;
+      }
     }
     await save({ strictClipboard: on });
   };
@@ -419,6 +442,11 @@ const Preferences = ({ status, reload }: { status: Status; reload: () => void })
   return (
     <section aria-labelledby="filling">
       <h2 id="filling">Filling</h2>
+      {error && (
+        <p class="error" role="alert">
+          {error}
+        </p>
+      )}
       <div class="toggle">
         <label for="subdomains" style={{ margin: 0 }}>
           <span>Match subdomains</span>
@@ -483,10 +511,10 @@ const About = () => (
   <section aria-labelledby="about">
     <h2 id="about">About</h2>
     <p>
-      Nedra extension <code>{VERSION}</code>. No Nedra account, ever. The extension comes
-      from your browser's store, which sees the install like any extension. It only ever talks to
-      your own Nedra, and only when you ask it to fill. Only the page's origin is sent to find
-      matches, never its path or contents. No favicons, no analytics, no remote configuration.
+      Nedra extension <code>{VERSION}</code>. No Nedra account, ever. The extension comes from your
+      browser's store, which sees the install like any extension. It only ever talks to your own
+      Nedra, and only when you ask it to fill. Only the page's origin is sent to find matches, never
+      its path or contents. No favicons, no analytics, no remote configuration.
     </p>
     <p>
       Installed from a file? Check it against <code>SHA256SUMS</code> from the GitHub release:{" "}

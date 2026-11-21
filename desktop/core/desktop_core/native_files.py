@@ -1,9 +1,3 @@
-"""Shell-authorized files. Paths never originate in the renderer's API bridge.
-
-Requests still use production FastAPI validation, auth and transactions. Only
-ciphertext streams touch disk; 256 KiB chunks cross the in-process ASGI bridge.
-"""
-
 import errno
 import json
 import os
@@ -30,8 +24,10 @@ async def _call(app, header, body):
             return (
                 400,
                 [],
-                b'{"detail":"Choose a new .nedrabackup filename. '
-                b'Existing files are never replaced."}',
+                (
+                    b'{"detail":"Choose a new .nedrabackup filename. '
+                    b'Existing files are never replaced."}'
+                ),
             )
         fd, partial = tempfile.mkstemp(
             prefix=".nedra-", suffix=".partial", dir=path.parent
@@ -52,7 +48,7 @@ async def _call(app, header, body):
                     return result
                 output.flush()
                 os.fsync(output.fileno())
-            # link is atomic and fails if a file appeared after the dialog.
+
             os.link(partial, path)
             if os.name != "nt":
                 directory = os.open(path.parent, os.O_RDONLY)

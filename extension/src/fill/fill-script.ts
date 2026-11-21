@@ -1,15 +1,3 @@
-// The only code Nedra ever runs inside a web page. It is injected with
-// scripting.executeScript into the top frame's isolated world, only after the
-// user asked for a fill (popup click or keyboard shortcut), and gets the login
-// as its arguments. It must stay one self-contained function: the browser
-// serializes it, so it can use nothing from outside its own body.
-//
-// What it guarantees: nothing is filled unless this is the top frame of the
-// origin the popup matched (checked again here, after any navigation), and only
-// fields a person can see and use get a value. It never submits, never clicks,
-// never reads a field's value and returns no values. What it cannot guarantee:
-// a page on the right origin owns its own fields and can read what was filled.
-
 export interface FillRequest {
   origin: string;
   username: string | null;
@@ -40,8 +28,6 @@ export function fillLogin(request: FillRequest): FillResult {
   const tokens = (input: HTMLInputElement): string[] =>
     (input.getAttribute("autocomplete") || "").toLowerCase().split(/\s+/).filter(Boolean);
 
-  // Every <input> of the top document, including open shadow roots, in tree
-  // order. Closed shadow roots and frames are out of reach by design.
   const inputs: HTMLInputElement[] = [];
   const walk = (root: Document | ShadowRoot): void => {
     const elements = root.querySelectorAll("*");
@@ -52,7 +38,6 @@ export function fillLogin(request: FillRequest): FillResult {
   };
   walk(document);
 
-  // The element's ancestors across shadow boundaries.
   const ancestors = (element: Element): Element[] => {
     const chain: Element[] = [];
     let node: Node | null = element;
@@ -82,7 +67,7 @@ export function fillLogin(request: FillRequest): FillResult {
       if (style.display === "none") return false;
       if (style.visibility === "hidden" || style.visibility === "collapse") return false;
       if (style.contentVisibility === "hidden") return false;
-      // Masks and filters hide a field without changing what a click reaches.
+
       const mask = style.maskImage || style.getPropertyValue("-webkit-mask-image");
       if (mask && mask !== "none") return false;
       for (const match of (style.filter || "").matchAll(/opacity\(([\d.]+)(%?)\)/g)) {
@@ -103,8 +88,7 @@ export function fillLogin(request: FillRequest): FillResult {
       rect = input.getBoundingClientRect();
       if (!inViewport(rect)) return false;
     }
-    // Not covered or clipped at its centre: what a click there would reach must
-    // be the field itself. Clip paths, masks and overlays all fail here.
+
     const root = input.getRootNode() as Document | ShadowRoot;
     const x = rect.left + rect.width / 2;
     const y = rect.top + rect.height / 2;
@@ -139,9 +123,7 @@ export function fillLogin(request: FillRequest): FillResult {
           input.form === form &&
           passwordField.compareDocumentPosition(input) & Node.DOCUMENT_POSITION_PRECEDING
       );
-      // Without a form, every formless input on the page counts as "before":
-      // only a field that says it is a username may take it (never a header
-      // search box).
+
       const plausible = (input: HTMLInputElement): boolean =>
         form ? TEXT_TYPES.has(input.type) || input.type === "email" : isUsernameLike(input);
       usernameField =
@@ -152,9 +134,6 @@ export function fillLogin(request: FillRequest): FillResult {
         before.reverse().find((input) => plausible(input) && usable(input)) ??
         null;
     } else if (fresh.length === 0) {
-      // A username-first step of a multi-step login (Google, Amazon and others
-      // keep a hidden password field there for password managers). Never on a
-      // sign-up or password-change form, which has new-password fields.
       usernameField = inputs.find((input) => isUsernameLike(input) && usable(input)) ?? null;
     }
   }
@@ -163,8 +142,7 @@ export function fillLogin(request: FillRequest): FillResult {
     if (fresh.length) return { filled: [], reason: "new-password" };
     const anyLoginField = passwordFields.length > 0 || inputs.some(isUsernameLike);
     if (anyLoginField) return { filled: [], reason: "hidden" };
-    // Nothing to fill here; frames are never filled, so say so when there are
-    // some (the login form is probably in one, as on Apple ID).
+
     const framed = document.querySelector("iframe, frame") !== null;
     return { filled: [], reason: framed ? "frame" : "no-fields" };
   }

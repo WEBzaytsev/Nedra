@@ -1,9 +1,3 @@
-"""One security key operation for the desktop shell, over this process's stdin
-and stdout. The app's web view has no WebAuthn, so the shell runs the core in
-this mode to talk to the key over USB (``security_key_client``, shared with the
-CLI). The shell kills the process to cancel. The PIN arrives on stdin, never in
-the command line, and is never logged or echoed."""
-
 import json
 import sys
 

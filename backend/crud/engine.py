@@ -38,11 +38,6 @@ _BACKUP_FIXED_OVERHEAD = 4096
 
 
 async def _enforce_backup_capacity(session: AsyncSession) -> None:
-    """Keep every committed vault within the documented complete-backup cap.
-
-    Stored ciphertext lengths plus conservative per-record JSON/framing budgets
-    bound the largest portable backup without decrypting data on each write.
-    """
     entry_bytes, entry_count = (
         await session.execute(
             text("SELECT coalesce(sum(length(document)), 0), count(*) FROM entries")
@@ -97,14 +92,6 @@ def _tolerant_text(data: bytes) -> str:
 
 
 def _connect(dbapi_connection: Any, _record: object) -> None:
-    """
-    Every vault connection: the SQLite settings, and a text decoder that
-    cannot fail. Python's sqlite3 raises while fetching a TEXT value that is
-    not UTF-8 and leaves that statement un-reset, holding its snapshot (and
-    in a write, the write lock) until the garbage collector frees it. With
-    surrogate escapes the fetch completes, and the strict readers refuse the
-    value as damage instead.
-    """
     configure_connection(dbapi_connection)
     dbapi_connection._connection.text_factory = _tolerant_text
 
@@ -130,17 +117,10 @@ def is_busy(error: OperationalError) -> bool:
 
 
 def after_commit(session: AsyncSession, callback: Callable[[], object]) -> None:
-    """
-    Run ``callback`` once the request's transaction has committed, and never if
-    it rolls back. Used for in-memory state that must not get ahead of the
-    database, such as ending every vault session after a master password
-    change.
-    """
     session.info.setdefault(_AFTER_COMMIT, []).append(callback)
 
 
 def after_rollback(session: AsyncSession, callback: Callable[[], object]) -> None:
-    """Run ``callback`` if the request's transaction rolls back instead."""
     session.info.setdefault(_AFTER_ROLLBACK, []).append(callback)
 
 
@@ -153,22 +133,6 @@ def _run(session: AsyncSession, hooks: str) -> None:
 
 
 class Database:
-    """
-    The SQLite vault of one app instance. The engine is created on first use,
-    so building an app opens no file.
-
-    Read transactions are deferred and see one consistent WAL snapshot next to
-    a running writer. A connection that raised a database error is discarded
-    instead of returned to the pool, so a statement left un-reset by a failed
-    fetch can never keep its old snapshot open on a pooled connection (the
-    text decoder set in ``_connect`` removes the known cause). Write
-    transactions start with
-    BEGIN IMMEDIATE, which takes SQLite's single write lock before their first
-    read, so every write request checks its session key, reads and writes as
-    one serialized unit, and a master password change can never interleave with
-    another write.
-    """
-
     def __init__(
         self, data_dir: Path | None = None, *, engine: AsyncEngine | None = None
     ) -> None:
@@ -226,8 +190,6 @@ class Database:
             _run(session, _AFTER_COMMIT)
 
     async def prepare(self) -> None:
-        """Create or open the vault file: folder and file modes, a read-only
-        identity and integrity check of an existing file, then the schema."""
         await asyncio.to_thread(prepare_data_dir, self.data_dir)
         try:
             async with self.writer().begin() as connection:

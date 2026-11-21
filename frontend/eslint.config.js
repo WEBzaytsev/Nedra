@@ -23,11 +23,12 @@ export default [
       "react-refresh": reactRefresh,
     },
     rules: {
-      // Keep the classic hooks rules: this app does not use React Compiler.
+      "no-empty": ["error", { allowEmptyCatch: true }],
+
       "react-hooks/rules-of-hooks": "error",
       "react-hooks/exhaustive-deps": "warn",
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
-      // The app uses runtime prop shapes, not PropTypes.
+
       "react/prop-types": "off",
       "react/no-danger": "error",
       "no-eval": "error",
@@ -51,7 +52,6 @@ export default [
     },
   },
   {
-    // Build/tooling config files run in Node, not the browser.
     files: ["*.config.js"],
     languageOptions: { globals: globals.node },
   },

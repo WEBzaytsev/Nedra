@@ -25,13 +25,6 @@ class SessionToken:
 
 
 class VaultAccess(BaseCRUD):
-    """
-    Turns a master password into a vault session and a session back into the
-    vault key, for one request. Every use of a session still checks its key
-    against the vault's key check inside the request's transaction, so a session
-    can never outlive the key it was opened with, whichever process changed it.
-    """
-
     def __init__(self, session: AsyncSession, vault_sessions: VaultSessions) -> None:
         super().__init__(session)
         self.vault_sessions = vault_sessions

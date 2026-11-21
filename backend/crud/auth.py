@@ -205,7 +205,6 @@ async def hardware_factor_enabled(session: AsyncSession, user_id: int) -> bool:
 
 
 def _same_stored_material(left: KeyMaterial, right: KeyMaterial) -> bool:
-    """`second_factor` is wrapper semantics, not a vault-table column."""
     return (
         left.params == right.params
         and left.salt == right.salt
@@ -434,7 +433,6 @@ class AuthCRUD(BaseCRUD):
     async def login_extension(
         self, username: str, password: str, browser: str, client: str | None
     ) -> ExtensionSessionCreated | None:
-        """Mint only a fill-scoped token; a factor account must use web handoff."""
         response = await self.login(username, password)
         if response.security_key_required:
             raise UseHandoff(
@@ -916,9 +914,7 @@ class AuthCRUD(BaseCRUD):
             await self.session.commit()
             await create_key_material(supplied_code)
             return RecoveryAuthResponse(valid=False)
-        observed = user_key_material(
-            recovery
-        )  # Recovery storage uses KeyMaterial fields.
+        observed = user_key_material(recovery)
         user_id = user.id
         await self.session.commit()
         key = await open_material(normalized, observed)

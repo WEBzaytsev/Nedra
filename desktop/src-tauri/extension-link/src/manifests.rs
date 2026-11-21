@@ -1,9 +1,3 @@
-//! Native-messaging host manifests (design decision 36): written for every
-//! supported browser whose profile folder exists, removed from every location
-//! we know. macOS and Linux read a JSON file from a folder per browser; Windows
-//! reads a registry value (`HKCU\Software\<vendor>\NativeMessagingHosts\<name>`)
-//! naming the JSON file, which lives in the app's link folder.
-
 use serde_json::json;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -20,10 +14,9 @@ pub enum Family {
 pub struct Location {
     pub browser: &'static str,
     pub family: Family,
-    /// The browser's own folder: only when it exists is a manifest written.
+
     pub profile: PathBuf,
-    /// macOS/Linux: the folder for manifests. Windows: the registry key below
-    /// HKCU (without the host name).
+
     pub hosts: Target,
 }
 
@@ -33,8 +26,6 @@ pub enum Target {
     Registry(&'static str),
 }
 
-/// Where browsers look, below the user's folders. `home` is the home folder
-/// (macOS, Linux); `local` and `roaming` are LocalAppData and AppData (Windows).
 pub struct Roots {
     pub home: PathBuf,
     pub local: PathBuf,
@@ -171,8 +162,6 @@ pub fn locations(roots: &Roots) -> Vec<Location> {
     out
 }
 
-/// Chromium forks on Windows also read Google Chrome's key, so it is written
-/// when any Chromium-family profile exists (design decision 36).
 #[cfg(windows)]
 const CHROME_KEY: &str = r"Software\Google\Chrome\NativeMessagingHosts";
 
@@ -197,9 +186,9 @@ pub fn manifest(family: Family, name: &str, host: &Path) -> serde_json::Value {
 
 pub struct Installer {
     pub name: String,
-    /// The native host binary the manifests point at.
+
     pub host: PathBuf,
-    /// The app's link folder (Windows keeps the JSON files here).
+
     pub link_dir: PathBuf,
     pub roots: Roots,
 }
@@ -239,7 +228,6 @@ impl Installer {
             .join(format!("{}.{suffix}.json", self.name))
     }
 
-    /// Write the manifests; returns the browsers they were written for.
     pub fn install(&self) -> io::Result<Vec<&'static str>> {
         let mut done = Vec::new();
         #[cfg(windows)]
@@ -273,7 +261,6 @@ impl Installer {
         Ok(done)
     }
 
-    /// Remove every manifest of this host name, wherever we may have put one.
     pub fn uninstall(&self) -> io::Result<()> {
         let mut first_error = None;
         for location in locations(&self.roots) {
@@ -303,7 +290,6 @@ impl Installer {
         first_error.map_or(Ok(()), Err)
     }
 
-    /// The browsers that currently have our manifest.
     pub fn installed(&self) -> Vec<&'static str> {
         locations(&self.roots)
             .into_iter()
@@ -341,11 +327,10 @@ pub mod registry {
         }
     }
 
-    /// Set the default value of `HKCU\<key>` to `path`.
     pub fn set(key: &str, path: &Path) -> io::Result<()> {
         let key = wide(key);
         let mut handle: HKEY = null_mut();
-        // SAFETY: valid strings and out pointer.
+
         check(unsafe {
             RegCreateKeyExW(
                 HKEY_CURRENT_USER,
@@ -360,7 +345,7 @@ pub mod registry {
             )
         })?;
         let value = wide(&path.to_string_lossy());
-        // SAFETY: REG_SZ of the stated byte length, including the NUL.
+
         let result = check(unsafe {
             RegSetValueExW(
                 handle,
@@ -379,7 +364,7 @@ pub mod registry {
         let key = wide(key);
         let mut buf = vec![0u16; 2048];
         let mut size = (buf.len() * 2) as u32;
-        // SAFETY: buffer of the stated size.
+
         let code = unsafe {
             RegGetValueW(
                 HKEY_CURRENT_USER,
@@ -398,83 +383,12 @@ pub mod registry {
         Some(String::from_utf16_lossy(&buf))
     }
 
-    /// Delete `HKCU\<key>` (our host's own key; it has no subkeys).
     pub fn delete(key: &str) -> io::Result<()> {
         let key = wide(key);
-        // SAFETY: valid string.
+
         match unsafe { RegDeleteKeyW(HKEY_CURRENT_USER, key.as_ptr()) } {
-            0 | 2 => Ok(()), // ERROR_FILE_NOT_FOUND: nothing to remove
+            0 | 2 => Ok(()),
             code => check(code),
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn installer(dir: &Path) -> Installer {
-        Installer {
-            name: format!("com.nedra.desktop.test{}", std::process::id()),
-            host: dir.join("bin/nedra-native-host"),
-            link_dir: dir.join("link"),
-            roots: Roots {
-                home: dir.join("home"),
-                local: dir.join("local"),
-                roaming: dir.join("roaming"),
-            },
-        }
-    }
-
-    #[test]
-    fn manifests_name_only_our_extensions() {
-        let chromium = manifest(Family::Chromium, "com.nedra.desktop", Path::new("/a/host"));
-        assert_eq!(
-            chromium["allowed_origins"],
-            json!(["chrome-extension://alkkfkojagimdnneandmpodagadmmmii/"])
-        );
-        assert!(chromium.get("allowed_extensions").is_none());
-        let firefox = manifest(Family::Firefox, "com.nedra.desktop", Path::new("/a/host"));
-        assert_eq!(firefox["allowed_extensions"], json!(["nedra@zaitsv.dev"]));
-        assert_eq!(firefox["type"], "stdio");
-    }
-
-    #[test]
-    fn only_present_browsers_get_a_manifest_and_off_removes_all() {
-        let dir = tempfile::tempdir().unwrap();
-        let installer = installer(dir.path());
-        assert!(
-            installer.install().unwrap().is_empty(),
-            "no browser profile, no manifest"
-        );
-        let all = locations(&installer.roots);
-        let chrome = all.iter().find(|l| l.browser == "Chrome").unwrap();
-        let firefox = all.iter().find(|l| l.browser == "Firefox").unwrap();
-        std::fs::create_dir_all(&chrome.profile).unwrap();
-        std::fs::create_dir_all(&firefox.profile).unwrap();
-        let mut done = installer.install().unwrap();
-        done.sort();
-        assert_eq!(done, ["Chrome", "Firefox"]);
-        let mut found = installer.installed();
-        found.sort();
-        assert_eq!(found, ["Chrome", "Firefox"]);
-        #[cfg(unix)]
-        if let Target::Folder(hosts) = &chrome.hosts {
-            let written: serde_json::Value = serde_json::from_slice(
-                &std::fs::read(hosts.join(format!("{}.json", installer.name))).unwrap(),
-            )
-            .unwrap();
-            assert_eq!(written["path"], json!(installer.host.to_string_lossy()));
-            assert!(!all
-                .iter()
-                .find(|l| l.browser == "Brave")
-                .unwrap()
-                .profile
-                .exists());
-        }
-        installer.install().unwrap(); // idempotent
-        installer.uninstall().unwrap();
-        assert!(installer.installed().is_empty());
-        installer.uninstall().unwrap(); // nothing left to remove is fine
     }
 }

@@ -1,4 +1,3 @@
-//! Session and power notifications on the app's native window.
 use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
 use windows_sys::Win32::System::RemoteDesktop::WTSRegisterSessionNotification;
 use windows_sys::Win32::UI::Shell::{DefSubclassProc, SetWindowSubclass};
@@ -11,8 +10,6 @@ unsafe extern "system" fn notification(
     _: usize,
     _: usize,
 ) -> LRESULT {
-    // WM_WTSSESSION_CHANGE: WTS_SESSION_LOCK / LOGOFF / DISCONNECT
-    // WM_POWERBROADCAST: PBT_APMSUSPEND
     if (msg == 0x02b1 && [0x7, 0x6, 0x4, 0x2].contains(&wparam)) || (msg == 0x0218 && wparam == 4) {
         super::lock::lock();
     }

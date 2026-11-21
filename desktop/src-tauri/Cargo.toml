@@ -1,6 +1,6 @@
 [package]
 name = "nedra-desktop"
-version = "5.0.0"
+version = "5.0.1"
 edition = "2021"
 publish = false
 
@@ -45,13 +45,12 @@ zbus = "5.19"
 
 [features]
 default = []
-gui-test = []
 
 [profile.release]
 codegen-units = 1
 lto = true
 opt-level = "s"
-# Wry catches Objective-C exceptions when navigation cancels pending IPC.
-# Abort mode disables that recovery and can crash the app during locking.
+
+
 panic = "unwind"
 strip = true

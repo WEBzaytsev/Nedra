@@ -514,11 +514,6 @@ class PasswordCRUD(BaseCRUD):
         on_conflict: OnConflict,
         password: Imported,
     ) -> str:
-        """
-        Add one imported entry. An entry it overwrites is moved to the trash,
-        with its history and attachments, and the imported one takes its name,
-        so an import never destroys anything.
-        """
         index = key.name_index(password.password_name)
         current = existing.get(index)
         outcome = "imported"
@@ -555,13 +550,6 @@ class PasswordCRUD(BaseCRUD):
         label_for: Callable[[str], str],
         schema: type[Imported] = Password,
     ) -> tuple[list[tuple[str, Imported]], list[ImportRowReport]]:
-        """
-        Validate every row before anything is written, so an import either stores
-        data the vault can read back or stores nothing. CSV rows use the create
-        endpoint's schema; backups use RestoredPassword. Problems name the row and
-        column, never the value. Rows that hold no importable entry (blank rows
-        excepted) are returned as ignored, with the reason, for the report.
-        """
         valid: list[tuple[str, Imported]] = []
         ignored: list[ImportRowReport] = []
         problems: list[str] = []
@@ -596,11 +584,6 @@ class PasswordCRUD(BaseCRUD):
         key: VaultKey,
         on_conflict: OnConflict,
     ) -> PasswordImportResult:
-        """
-        Store validated rows. A name that appears again later in the same file is
-        imported under a unique name ('name (2)') and reported, so two exported
-        accounts for one site never collapse into one entry.
-        """
         existing = await self.load_active()
         taken = {
             bytes(index)

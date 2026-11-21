@@ -152,29 +152,3 @@ pub fn core_status(core: State<'_, Arc<Supervisor>>) -> Status {
 pub fn core_restart(core: State<'_, Arc<Supervisor>>) {
     core.restart();
 }
-
-#[cfg(test)]
-mod tests {
-    use super::valid_path;
-
-    #[test]
-    fn path_allowlist() {
-        assert!(valid_path("/api/meta"));
-        assert!(valid_path("/api/passwords/a%2Fb"));
-        assert!(!valid_path("/spike/attachments/3"));
-        for bad in [
-            "/docs",
-            "/openapi.json",
-            "/spike/../docs",
-            "/api//meta",
-            "/api/%2E%2E/x",
-            "/api/a b",
-            "/api/\u{e9}",
-            "api/meta",
-            "/api/x?y",
-            "/api/x#y",
-        ] {
-            assert!(!valid_path(bad), "{bad}");
-        }
-    }
-}

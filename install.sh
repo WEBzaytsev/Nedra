@@ -1,9 +1,9 @@
 #!/bin/sh
-# Install or update the self-hosted Nedra Docker stack.
-#
-#   curl -fsSL https://raw.githubusercontent.com/WEBzaytsev/Nedra/main/install.sh | sh
-#
-# Optional: NEDRA_REPO, NEDRA_REF, NEDRA_DIR, NEDRA_VERSION.
+
+
+
+
+
 set -eu
 
 REPO="${NEDRA_REPO:-WEBzaytsev/Nedra}"

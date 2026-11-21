@@ -1,6 +1,3 @@
-// Chromium's offscreen document: a hidden extension page whose only job is to
-// clear the clipboard for the service worker, which has none.
-
 import { clearClipboard } from "./clipboard-core";
 
 chrome.runtime.onMessage.addListener((message: unknown, sender, respond) => {

@@ -913,16 +913,6 @@ class StoredCustomField(BaseModel):
 
 
 class RestoredPassword(BaseModel):
-    """
-    An entry from a Nedra backup, restored exactly as the vault held it.
-
-    A backup must restore whatever the vault it came from could hold, and
-    vaults written by imports before v1.4.7 can hold values over the input
-    limits, untrimmed names, invalid 2FA secrets and names such as '.' that new
-    entries may not use, so only what the database cannot store is refused.
-    Reads tolerate the rest, and editing the entry applies the normal rules.
-    """
-
     password_name: str = Field(min_length=1)
     kind: str = "login"
     username: str | None = None

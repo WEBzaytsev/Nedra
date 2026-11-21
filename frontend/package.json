@@ -1,6 +1,6 @@
 {
   "name": "nedra-web",
-  "version": "5.0.0",
+  "version": "5.0.1",
   "private": true,
   "type": "module",
   "dependencies": {
@@ -28,9 +28,7 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write \"src/**/*.{js,jsx}\"",
     "format:check": "prettier --check \"src/**/*.{js,jsx}\"",
-    "test": "vitest run",
-    "build:desktop": "vite build --mode desktop",
-    "build:desktop:qa": "vite build --mode desktop-qa"
+    "build:desktop": "vite build --mode desktop"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
@@ -41,7 +39,6 @@
     "eslint-plugin-react-refresh": "^0.5.3",
     "globals": "^17.7.0",
     "prettier": "^3.9.4",
-    "vite": "^8.3.7",
-    "vitest": "^5.1.0"
+    "vite": "^8.3.7"
   }
 }

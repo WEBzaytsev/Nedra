@@ -24,6 +24,7 @@ const EntryCreatePage = () => {
   const [initialDraft, setInitialDraft] = useState(undefined);
   const [draftStore, setDraftStore] = useState(null);
   const [draftError, setDraftError] = useState(false);
+  const [initializationFailed, setInitializationFailed] = useState(false);
   const [draftAttempt, setDraftAttempt] = useState(0);
   const entryType = location.state?.entryType === "note" ? "note" : "password";
 
@@ -32,6 +33,7 @@ const EntryCreatePage = () => {
     setInitialDraft(undefined);
     setDraftStore(null);
     setDraftError(false);
+    setInitializationFailed(false);
     const initialize = async () => {
       let availableFolders = [];
       try {
@@ -58,6 +60,7 @@ const EntryCreatePage = () => {
       } catch {
         if (!active) return;
         setDraftError(true);
+        setInitializationFailed(true);
         setInitialDraft(null);
       }
     };
@@ -91,8 +94,12 @@ const EntryCreatePage = () => {
     else navigate("/passwords", { replace: true });
   };
   const cancel = () => {
-    draftStore?.clear();
-    close();
+    try {
+      draftStore?.clear();
+      close();
+    } catch {
+      setDraftError(true);
+    }
   };
 
   const submit = async (payload) => {
@@ -141,7 +148,7 @@ const EntryCreatePage = () => {
     );
   }
 
-  if (draftError) {
+  if (initializationFailed) {
     if (mobile)
       return (
         <TaskSurface

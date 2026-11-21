@@ -1,12 +1,3 @@
-// Clearing what the popup copied. The popup writes the clipboard itself (it has
-// the user's click) and tells us only a SHA-256 digest of the value, so no
-// secret waits here for the timer. When it fires, the clipboard is cleared,
-// unless the user turned on "only clear what Nedra copied" (it needs the
-// clipboardRead permission) and the clipboard now holds something else.
-//
-// Chromium's service worker has no clipboard: an offscreen document does the
-// work. Firefox's background page has one.
-
 import { getConfig, getPendingClear, setPendingClear } from "./storage";
 import { ext } from "../shared/browser";
 import { CLIPBOARD_CLEAR_MS, TARGET } from "../shared/constants";
@@ -24,7 +15,6 @@ export const scheduleClear = async (digest: string): Promise<void> => {
 const canRead = async (): Promise<boolean> =>
   ext.permissions.contains({ permissions: ["clipboardRead"] }).catch(() => false);
 
-// Chromium only (Firefox has no offscreen API and never reaches this).
 const ensureOffscreen = async (): Promise<void> => {
   const api = ext as unknown as {
     offscreen: { createDocument: (options: Record<string, unknown>) => Promise<void> };

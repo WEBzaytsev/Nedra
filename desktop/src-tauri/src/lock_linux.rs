@@ -1,4 +1,3 @@
-//! logind sleep/session-lock and common desktop screen saver notifications.
 use zbus::blocking::{Connection, Proxy};
 
 pub fn install() {

@@ -10,16 +10,8 @@ const EmptyVault = ({ onAdd, disabled }) => {
       size="s"
       direction="column"
       title={t("vault.emptyTitle")}
-      description={t("vault.emptyDescription")}
       actions={
-        <Button
-          type="button"
-          view="action"
-          size="xl"
-          onClick={onAdd}
-          disabled={disabled}
-          qa="empty-vault-add"
-        >
+        <Button type="button" view="action" size="xl" onClick={onAdd} disabled={disabled}>
           <Icon data={Plus} />
           {t("vault.addFirstPassword")}
         </Button>

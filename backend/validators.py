@@ -18,9 +18,6 @@ def _character_classes(password: str) -> int:
 
 
 def validate_master_password_strength(password: str) -> str:
-    """
-    Return the password unchanged, or raise ValueError if it is too weak.
-    """
     if len(password) < _MIN_MASTER_PASSWORD_LENGTH:
         raise ValueError(
             f"Master password must be at least {_MIN_MASTER_PASSWORD_LENGTH} "
@@ -37,11 +34,6 @@ def validate_master_password_strength(password: str) -> str:
 
 
 def require_unicode_text(value: object) -> object:
-    """
-    Reject strings that cannot be encoded as UTF-8. JSON allows unpaired
-    surrogate escapes such as ``"\\ud800"``, which decode to Python strings that
-    every encrypt, hash and database call would fail on.
-    """
     for text in value if isinstance(value, list) else (value,):
         if isinstance(text, str):
             try:
@@ -60,11 +52,6 @@ def reject_nul(value: str | None) -> str | None:
 
 
 def addressable_name(value: str | None) -> str | None:
-    """
-    Refuse names a URL cannot address. Browsers resolve '.' and '..' path
-    segments (also when percent-encoded) before sending a request, and
-    GET /passwords/trash is the trash listing, not an entry.
-    """
     if value in (".", ".."):
         raise ValueError("cannot be '.' or '..'")
     if value == "trash":
@@ -73,7 +60,6 @@ def addressable_name(value: str | None) -> str | None:
 
 
 def normalize_totp_secret_leniently(raw: str | None) -> str | None:
-    """Normalize a stored secret when possible, otherwise return it unchanged."""
     try:
         return normalize_totp_secret(raw)
     except ValueError:
@@ -81,14 +67,6 @@ def normalize_totp_secret_leniently(raw: str | None) -> str | None:
 
 
 def normalize_totp_secret(raw: str | None) -> str | None:
-    """
-    Normalize a two-factor secret to bare base32, or raise ValueError.
-
-    Accepts either a raw base32 secret (as shown next to most "enable 2FA" QR
-    codes) or a full ``otpauth://`` URI, since users commonly paste either.
-    Spaces and padding are stripped and the result is upper-cased so the same
-    secret always encrypts to a comparable value. Returns None for empty input.
-    """
     if not raw:
         return None
 

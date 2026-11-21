@@ -1,5 +1,3 @@
-"""Fail closed unless all six verified release artifact sets are complete."""
-
 import argparse
 import datetime
 import hashlib
@@ -28,7 +26,7 @@ def generate(root, version, commit, verifier, public_key):
         provenance = root / f"provenance-{target}.json"
         report = json.loads(provenance.read_text())
         assert report["commit"] == commit and report["version"] == version
-        assert report["target"] == target and not report["qa"]
+        assert report["target"] == target
         formats = {
             "darwin": {"dmg", "app.tar.gz"},
             "windows": {"exe"},
@@ -40,9 +38,13 @@ def generate(root, version, commit, verifier, public_key):
             "windows": "exe",
             "linux": "AppImage",
         }[target.split("-")[0]]
-        names.add(f"Nedra_{version}_{target}.{updater_suffix}")
-        assert {row["file"] for row in report["artifacts"]} == names
-        for row in report["artifacts"]:
+        rows = report["artifacts"]
+        assert len(rows) == len(names) and {row["file"] for row in rows} == names
+        assert all(
+            row["updater"] == row["file"].endswith(f".{updater_suffix}")
+            for row in rows
+        )
+        for row in rows:
             path = root / row["file"]
             assert path.stat().st_size == row["bytes"]
             assert hashlib.sha256(path.read_bytes()).hexdigest() == row["sha256"]

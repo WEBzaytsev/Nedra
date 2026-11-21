@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
-import { Alert, Button, Card, Divider, Flex, Grid, Select, Text } from "@gravity-ui/uikit";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Alert, Button, Divider, Flex, Grid, Select, Text } from "@gravity-ui/uikit";
 import Dialog from "../TaskSurface";
 import { useStoreActions } from "easy-peasy";
 import { useTranslation } from "react-i18next";
@@ -21,37 +21,60 @@ const ShareDialog = ({ entry, open, onClose }) => {
   const [expiryRejected, setExpiryRejected] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const generation = useRef(0);
   const expiryInvalid = expiryRejected || isInvalidExpiry(expiresAt);
 
   const load = useCallback(async () => {
     if (!entry) return;
-    const [nextShares, nextTargets] = await Promise.all([listShares(entry.id), shareTargets()]);
-    setShares(nextShares);
-    setTargets(nextTargets);
+    const current = generation.current;
+    setLoading(true);
+    setError("");
+    try {
+      const [nextShares, nextTargets] = await Promise.all([listShares(entry.id), shareTargets()]);
+      if (current !== generation.current) return;
+      setShares(nextShares);
+      setTargets(nextTargets);
+    } catch (requestError) {
+      if (current === generation.current) setError(requestError.message);
+    } finally {
+      if (current === generation.current) setLoading(false);
+    }
   }, [entry, listShares, shareTargets]);
 
   useEffect(() => {
     if (!open) return;
+    generation.current += 1;
+    setShares([]);
+    setTargets([]);
+    setBusy(false);
     setTargetId("");
     setPermission("read");
     setExpiresAt("");
     setExpiryRejected(false);
     setError("");
-    load().catch((requestError) => setError(requestError.message));
+    load();
+    return () => {
+      generation.current += 1;
+    };
   }, [open, load]);
 
   const run = async (operation) => {
+    if (busy || loading) return false;
+    const current = generation.current;
     setBusy(true);
     setError("");
     try {
       await operation();
+      if (current !== generation.current) return false;
       await load();
+      if (current !== generation.current) return false;
       return true;
     } catch (requestError) {
-      setError(requestError.message);
+      if (current === generation.current) setError(requestError.message);
       return false;
     } finally {
-      setBusy(false);
+      if (current === generation.current) setBusy(false);
     }
   };
 
@@ -104,73 +127,84 @@ const ShareDialog = ({ entry, open, onClose }) => {
           <Text as="div" color="secondary" wordBreak="break-word">
             {t("sharing.title", { name: entry?.password_name })}
           </Text>
-          {error && <Alert theme="danger" view="outlined" message={error} />}
+          {loading && <Text role="status">{t("common.labels.loading")}</Text>}
+          {error && (
+            <Alert
+              theme="danger"
+              view="outlined"
+              message={error}
+              actions={
+                <Button size="xl" disabled={busy || loading} onClick={load}>
+                  {t("common.actions.retry")}
+                </Button>
+              }
+            />
+          )}
 
           <Flex direction="column" gap="spacing-3" minWidth="0" as="section">
             <Text as="div" role="heading" aria-level={3} variant="subheader-2">
               {t("sharing.currentAccess")}
             </Text>
-            {shares.length === 0 ? (
+            {!loading && !error && shares.length === 0 ? (
               <Text as="div" color="secondary" wordBreak="break-word">
                 {t("sharing.ownerOnly")}
               </Text>
             ) : (
               <Flex direction="column" gap="spacing-2" minWidth="0">
                 {shares.map((share) => (
-                  <Card type="container" view="outlined" size="l" key={share.user_id}>
-                    <Grid
-                      columns={{
-                        xs: "minmax(0, 1fr)",
-                        l: "minmax(0, 1fr) minmax(180px, 220px) auto",
-                      }}
-                      gap="spacing-3"
-                      alignItems="center"
-                      padding="spacing-4"
-                      minWidth="0"
-                    >
-                      <Flex direction="column" gap="spacing-1" minWidth="0">
-                        <Text as="strong" wordBreak="break-word">
-                          {share.username}
-                        </Text>
-                        <Text as="small" variant="caption-2" color="secondary">
-                          {t(`users.roles.${share.role}`)}
-                        </Text>
-                      </Flex>
-                      <Flex minWidth="0">
-                        <Select
-                          size="xl"
-                          width="max"
-                          aria-label={`${share.username}: ${t("sharing.permission")}`}
-                          value={[share.permission]}
-                          disabled={busy}
-                          options={permissionOptions}
-                          onUpdate={([nextPermission = "read"]) =>
-                            run(() =>
-                              setShare({
-                                entryId: entry.id,
-                                userId: share.user_id,
-                                permission: nextPermission,
-                                expiresAt: share.expires_at ?? null,
-                              })
-                            )
-                          }
-                        />
-                      </Flex>
-                      <Flex alignItems="flex-end">
-                        <Button
-                          type="button"
-                          size="xl"
-                          view="flat-danger"
-                          disabled={busy}
-                          onClick={() =>
-                            run(() => revokeShare({ entryId: entry.id, userId: share.user_id }))
-                          }
-                        >
-                          {t("sharing.revoke")}
-                        </Button>
-                      </Flex>
-                    </Grid>
-                  </Card>
+                  <Grid
+                    key={share.user_id}
+                    columns={{
+                      xs: "minmax(0, 1fr)",
+                      l: "minmax(0, 1fr) minmax(180px, 220px) auto",
+                    }}
+                    gap="spacing-3"
+                    alignItems="center"
+                    paddingBlock="spacing-3"
+                    minWidth="0"
+                  >
+                    <Flex direction="column" gap="spacing-1" minWidth="0">
+                      <Text as="strong" wordBreak="break-word">
+                        {share.username}
+                      </Text>
+                      <Text as="small" variant="caption-2" color="secondary">
+                        {t(`users.roles.${share.role}`)}
+                      </Text>
+                    </Flex>
+                    <Flex minWidth="0">
+                      <Select
+                        size="xl"
+                        width="max"
+                        aria-label={`${share.username}: ${t("sharing.permission")}`}
+                        value={[share.permission]}
+                        disabled={busy}
+                        options={permissionOptions}
+                        onUpdate={([nextPermission = "read"]) =>
+                          run(() =>
+                            setShare({
+                              entryId: entry.id,
+                              userId: share.user_id,
+                              permission: nextPermission,
+                              expiresAt: share.expires_at ?? null,
+                            })
+                          )
+                        }
+                      />
+                    </Flex>
+                    <Flex alignItems="flex-end">
+                      <Button
+                        type="button"
+                        size="xl"
+                        view="flat-danger"
+                        disabled={busy}
+                        onClick={() =>
+                          run(() => revokeShare({ entryId: entry.id, userId: share.user_id }))
+                        }
+                      >
+                        {t("sharing.revoke")}
+                      </Button>
+                    </Flex>
+                  </Grid>
                 ))}
               </Flex>
             )}
@@ -190,14 +224,14 @@ const ShareDialog = ({ entry, open, onClose }) => {
                 aria-label={t("sharing.user")}
                 placeholder={t("sharing.selectTarget")}
                 value={targetId ? [targetId] : []}
-                disabled={busy || available.length === 0}
+                disabled={busy || loading || Boolean(error) || available.length === 0}
                 options={available.map((target) => ({
                   value: String(target.id),
                   content: `${target.username} · ${t(`users.roles.${target.role}`)}`,
                 }))}
                 onUpdate={([value = ""]) => setTargetId(value)}
               />
-              {available.length === 0 && (
+              {!loading && !error && available.length === 0 && (
                 <Text as="div" variant="caption-2" color="secondary">
                   {t("sharing.noAvailableTargets")}
                 </Text>
@@ -233,7 +267,10 @@ const ShareDialog = ({ entry, open, onClose }) => {
         textButtonCancel={t("common.actions.cancel")}
         textButtonApply={t("sharing.grant")}
         propsButtonCancel={{ disabled: busy }}
-        propsButtonApply={{ disabled: busy || !targetId || expiryInvalid, loading: busy }}
+        propsButtonApply={{
+          disabled: busy || loading || Boolean(error) || !targetId || expiryInvalid,
+          loading: busy,
+        }}
       />
     </Dialog>
   );

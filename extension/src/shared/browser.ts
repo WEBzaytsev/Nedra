@@ -1,4 +1,3 @@
-// Chromium exposes `chrome` (promise-based in MV3), Firefox also `browser`.
 export const ext: typeof chrome =
   (globalThis as unknown as { browser?: typeof chrome }).browser ?? globalThis.chrome;
 
@@ -14,7 +13,6 @@ export const sha256Hex = async (value: string): Promise<string> => {
   return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
 };
 
-// Constant-time comparison of two equal-length ASCII strings.
 export const sameSecret = (a: string, b: string): boolean => {
   if (a.length !== b.length) return false;
   let diff = 0;

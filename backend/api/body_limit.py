@@ -41,13 +41,6 @@ class RequestTooLarge(HTTPException):
 
 
 def keep_uploads_in_memory() -> None:
-    """
-    Starlette spools multipart file parts larger than 1 MB to a temporary file on
-    disk, which would put attachments and CSV imports there in plaintext. Raising
-    the spool threshold to the largest cap of every route that receives
-    plaintext keeps those parts in memory. Encrypted backups, which can be far
-    larger, may still be spooled: they hold only ciphertext.
-    """
     MultiPartParser.spool_max_size = max(
         DEFAULT_MAX_BODY_BYTES, *(limit for _, _, limit in _PLAINTEXT_ROUTE_LIMITS)
     )

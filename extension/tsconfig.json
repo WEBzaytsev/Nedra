@@ -18,5 +18,5 @@
     "noEmit": true,
     "resolveJsonModule": true
   },
-  "include": ["src", "tests/unit", "tests/e2e", "playwright.config.ts", "vitest.config.ts"]
+  "include": ["src"]
 }

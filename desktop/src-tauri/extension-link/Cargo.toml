@@ -1,6 +1,6 @@
 [package]
 name = "nedra-extension-link"
-version = "5.0.0"
+version = "5.0.1"
 edition = "2021"
 publish = false
 description = "The link between the Nedra browser extension and the desktop app: framing, the paired channel, local IPC and native-host manifests."
@@ -31,7 +31,3 @@ windows-sys = { version = "0.61", features = [
     "Win32_System_Registry",
     "Win32_System_Threading",
 ] }
-
-[dev-dependencies]
-proptest = "1"
-tempfile = "3"

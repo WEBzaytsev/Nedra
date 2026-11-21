@@ -87,10 +87,6 @@ _DAMAGED = "The backup file is damaged or incomplete. Nothing was imported."
 
 
 async def _work[T](function: Callable[..., T], *args: object) -> T:
-    """Offload bounded CPU/file work; cancellation waits for its file access to
-    finish before the caller closes the ciphertext spool or releases its row.
-    The worker never owns a database connection or transaction.
-    """
     task = asyncio.create_task(asyncio.to_thread(function, *args))
     try:
         return await asyncio.shield(task)
@@ -108,8 +104,6 @@ async def _work[T](function: Callable[..., T], *args: object) -> T:
 
 
 def _utc(value: datetime) -> datetime:
-    """Naive UTC, as the vault stores times. A time whose offset pushes it out
-    of the representable range is refused as invalid input."""
     if value.tzinfo is None:
         return value
     try:
@@ -316,12 +310,6 @@ class BackupCRUD(PasswordCRUD):
         *,
         verify_current: bool = True,
     ) -> IO[bytes]:
-        """
-        A complete backup of the vault (backup format 3) in a temporary file
-        that holds only ciphertext. Both KDFs (checking the master password and
-        deriving the backup key from a new salt) run before the read snapshot.
-        Generation never writes to the vault or claims the client saved a file.
-        """
         opened = (
             await self.master_password.check_master_password(master_password)
             if verify_current
@@ -466,11 +454,6 @@ class BackupCRUD(PasswordCRUD):
         *,
         session_token: str | None = None,
     ) -> PasswordImportResult:
-        """
-        Restore a complete authenticated backup (format 3). Everything is checked
-        before the import's single write transaction commits, so a wrong password, a
-        damaged, truncated or inconsistent file changes nothing.
-        """
         try:
             reader = BackupReader(upload)
         except BackupFormatError as error:

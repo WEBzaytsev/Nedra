@@ -2,7 +2,7 @@ import { render } from "preact";
 import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 
 import { ext, sha256Hex } from "../shared/browser";
-import { CLIPBOARD_CLEAR_MS, E2E } from "../shared/constants";
+import { CLIPBOARD_CLEAR_MS } from "../shared/constants";
 import type { FillOutcome, Login, PageInfo, Status } from "../shared/messages";
 import { unicodeHost } from "../shared/url";
 import { BackgroundError, Icon, NedraIcon, send } from "../ui/shared";
@@ -35,19 +35,14 @@ const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
 const MOD = isMac ? "⌘" : "Ctrl+";
 
 const targetTab = async (): Promise<number | null> => {
-  // Test build only: Playwright cannot click the toolbar button.
-  const forced = E2E ? new URLSearchParams(location.hash.slice(1)).get("tab") : null;
-  if (forced) return Number(forced);
   const [tab] = await ext.tabs.query({ active: true, currentWindow: true });
   return tab?.id ?? null;
 };
 
-// Preact sets the autofocus attribute, which browsers honour only for the first
-// element of a page; views that appear later focus themselves.
 const focusOnMount = (element: HTMLElement | null): void => element?.focus();
 
 const close = () => {
-  if (!E2E) window.close();
+  window.close();
 };
 
 const FILL_MESSAGES: Record<string, string> = {
@@ -62,16 +57,12 @@ const FILL_MESSAGES: Record<string, string> = {
   blocked: "This page can't be filled. Copy the password instead.",
 };
 
-// --- small pieces -------------------------------------------------------------
-
 const Header = ({ onLock, lockLabel = "Lock" }: { onLock?: () => void; lockLabel?: string }) => (
   <header class="top">
     <span class="brand-mark">
       <NedraIcon />
     </span>
-    <span class="wordmark">
-      Nedra
-    </span>
+    <span class="wordmark">Nedra</span>
     {onLock && (
       <button class="icon-button" title={lockLabel} aria-label={lockLabel} onClick={onLock}>
         <Icon name="lock" />
@@ -117,8 +108,6 @@ const Ring = ({ seconds }: { seconds: number }) => {
     </svg>
   );
 };
-
-// --- states ------------------------------------------------------------------
 
 const Setup = () => (
   <main class="centered">
@@ -253,14 +242,11 @@ const Locked = ({ status, onUnlocked }: { status: Status; onUnlocked: (s: Status
   );
 };
 
-// --- desktop mode -----------------------------------------------------------------
-
 const openSettings = () => {
   void ext.runtime.openOptionsPage();
   close();
 };
 
-// "482913" -> "482 913", as the app's dialog shows it.
 const spacedCode = (code: string | null): string =>
   code && /^\d{6}$/.test(code) ? `${code.slice(0, 3)} ${code.slice(3)}` : "";
 
@@ -354,11 +340,13 @@ const Pairing = ({ status, onCancel }: { status: Status; onCancel: () => void })
 
 const NoApp = () => {
   const [state, setState] = useState<"idle" | "starting" | "failed">("idle");
+  const [error, setError] = useState("");
   const start = async () => {
     setState("starting");
     try {
       await send({ type: "open-app" });
-    } catch {
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Nedra could not be started.");
       setState("failed");
     }
   };
@@ -379,7 +367,7 @@ const NoApp = () => {
       <p>Open the Nedra app on this computer to fill logins.</p>
       {state === "failed" && (
         <p class="error" role="alert">
-          Nedra could not be started. Open it yourself.
+          {error} Open it yourself.
         </p>
       )}
     </Notice>
@@ -412,8 +400,6 @@ const DesktopLocked = () => {
     </main>
   );
 };
-
-// --- the list ------------------------------------------------------------------
 
 const Unlocked = ({
   vault,
@@ -473,8 +459,6 @@ const Unlocked = ({
       setResults(null);
       return;
     }
-    // An answer for a query the user has since changed or cleared is dropped,
-    // so a slow or out-of-order reply never shows (or fills from) old results.
     let live = true;
     const timer = setTimeout(() => {
       send<{ logins: Login[] }>({ type: "search", query })
@@ -592,8 +576,12 @@ const Unlocked = ({
   };
 
   const lockNow = async () => {
-    await send({ type: "lock" }).catch(() => {});
-    onLocked();
+    try {
+      await send({ type: "lock" });
+      onLocked();
+    } catch (err) {
+      fail(err);
+    }
   };
 
   const onKeyDown = (event: KeyboardEvent) => {
@@ -605,15 +593,13 @@ const Unlocked = ({
       return;
     }
     if (prompt) return;
-    if (event.key === "ArrowDown") {
+    if (event.key === "ArrowDown" && document.activeElement === searchRef.current) {
       event.preventDefault();
       setSelected((s) => Math.min(s + 1, Math.max(rows.length - 1, 0)));
-    } else if (event.key === "ArrowUp") {
+    } else if (event.key === "ArrowUp" && document.activeElement === searchRef.current) {
       event.preventDefault();
       setSelected((s) => Math.max(s - 1, 0));
-    } else if (event.key === "Enter" && current) {
-      const target = event.target as HTMLElement;
-      if (target.tagName === "BUTTON") return;
+    } else if (event.key === "Enter" && current && document.activeElement === searchRef.current) {
       event.preventDefault();
       fill(current);
     } else if (mod && event.key.toLowerCase() === "c" && current) {
@@ -626,7 +612,6 @@ const Unlocked = ({
     }
   };
 
-  // Keys work wherever focus is in the popup (also before the search box has it).
   const keyHandler = useRef(onKeyDown);
   keyHandler.current = onKeyDown;
   useEffect(() => {
@@ -689,7 +674,7 @@ const Unlocked = ({
       </div>
 
       {prompt && (
-        <div class="panel" role="alertdialog" aria-live="assertive">
+        <div class="panel" role="alertdialog" aria-label="Confirm fill" aria-live="assertive">
           {prompt.kind === "mismatch" && (
             <>
               <p>
@@ -714,6 +699,9 @@ const Unlocked = ({
             <>
               <p>This page isn't secure (HTTP). Copy instead?</p>
               <div class="buttons">
+                <button class="button" onClick={() => setPrompt(null)}>
+                  Cancel
+                </button>
                 {prompt.canFill && (
                   <button class="button" onClick={() => void doFill(prompt.login, false)}>
                     Fill anyway
@@ -756,7 +744,10 @@ const Unlocked = ({
       )}
 
       {toast && (
-        <div class={`toast ${toast.tone === "ok" ? "" : toast.tone}`} role="status">
+        <div
+          class={`toast ${toast.tone === "ok" ? "" : toast.tone}`}
+          role={toast.tone === "bad" ? "alert" : "status"}
+        >
           {toast.text}
         </div>
       )}
@@ -873,11 +864,6 @@ const Unlocked = ({
   );
 };
 
-// --- root ------------------------------------------------------------------------
-
-// Desktop states that change without this popup doing anything are refreshed:
-// every second while a pairing or an unlock is awaited, every 3 s while the
-// app is not running or not set up (each check starts the native host).
 const WAITING: Partial<Record<Status["phase"], number>> = {
   pairing: 1000,
   locked: 1000,
@@ -952,8 +938,7 @@ const App = () => {
           <Header />
           <Notice title="This browser is too old for the Nedra app">
             <p>
-              Update to Chrome 133, Firefox 130 or newer, or connect to your Nedra server
-              instead.
+              Update to Chrome 133, Firefox 130 or newer, or connect to your Nedra server instead.
             </p>
           </Notice>
         </>

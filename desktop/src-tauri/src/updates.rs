@@ -1,4 +1,3 @@
-//! Fixed-source, opt-in installation. No updater plugin permissions reach JS.
 use base64::Engine;
 use serde::Serialize;
 use std::sync::{
@@ -16,7 +15,7 @@ const CHECK_ERROR: &str = "Could not check GitHub for updates. Your vault is sti
 pub struct Updates {
     pending: Mutex<Option<Update>>,
     operation: tokio::sync::Mutex<()>,
-    // 0 idle, 1 downloading (cancelable), 2 installing (not cancelable).
+
     phase: AtomicU8,
     cancel: tokio::sync::Notify,
 }
@@ -70,8 +69,7 @@ fn validate(update: &Update) -> Result<(), String> {
     let text = std::str::from_utf8(&decoded).map_err(|_| "Invalid update signature.")?;
     let signature =
         minisign_verify::Signature::decode(text).map_err(|_| "Invalid update signature.")?;
-    // This comment becomes trusted only after Update::download verifies its
-    // global signature. Repeat this check after download before installation.
+
     let signed_file = signature
         .trusted_comment()
         .split('\t')
@@ -132,12 +130,8 @@ pub async fn update_check(
                     }
                 }))
         });
-    #[cfg(feature = "gui-test")]
-    let builder = crate::qa::update_builder(builder)?;
     let updater = builder.build().map_err(|_| CHECK_ERROR)?;
     let update = updater.check().await.map_err(|error| {
-        #[cfg(feature = "gui-test")]
-        eprintln!("QA updater check: {error:?}");
         let _ = error;
         CHECK_ERROR
     })?;
@@ -194,7 +188,7 @@ pub async fn update_install(
         .clone()
         .ok_or("Check for updates first.")?;
     validate(&update)?;
-    // Consume a previous cancellation permit before starting another download.
+
     let _ = tokio::time::timeout(Duration::from_millis(1), state.cancel.notified()).await;
     state.phase.store(1, Ordering::SeqCst);
     let mut downloaded = 0u64;
@@ -222,22 +216,12 @@ pub async fn update_install(
         return Err("Update canceled. Your installed application is unchanged.".into());
     }
     let _ = app.emit("update-installing", ());
-    // Download/signature failures never disturb the active vault. Once verified,
-    // remove plaintext DOM/grants, clear owned clipboard and stop Python before
-    // replacing any files (Windows exits directly from the plugin installer).
+
     crate::lock::reset_renderer(&app);
     app.state::<Arc<crate::clipboard::Clipboard>>().clear();
     app.state::<Arc<crate::sidecar::Supervisor>>().shutdown();
     let result = update.install(bytes);
     if result.is_err() {
-        #[cfg(feature = "gui-test")]
-        if std::env::var_os("NEDRA_QA_UPDATE_ENDPOINT").is_some() {
-            // Report the real installer's failure without an unattended dialog.
-            if let Ok(root) = std::env::var("NEDRA_QA_ROOT") {
-                let _ = std::fs::write(std::path::Path::new(&root).join("install-failed"), b"true");
-            }
-            app.restart();
-        }
         let _ = rfd::AsyncMessageDialog::new().set_title("Nedra update")
             .set_description("The update could not be installed. Nedra will reopen. Your vault has not been replaced.")
             .set_level(rfd::MessageLevel::Error).show().await;
@@ -250,8 +234,6 @@ async fn download_update(
     app: &tauri::AppHandle,
     downloaded: &mut u64,
 ) -> Result<Vec<u8>, String> {
-    #[cfg(feature = "gui-test")]
-    let update = &crate::qa::update_download(update)?;
     update.download(|chunk, total| {
             *downloaded += chunk as u64;
             let _ = app.emit("update-progress", serde_json::json!({"downloaded":downloaded,"total":total}));

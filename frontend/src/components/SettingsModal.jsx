@@ -89,6 +89,8 @@ const SettingsModal = ({ open, onClose }) => {
   const [tab, setTab] = useState("general");
   const [sessions, setSessions] = useState([]);
   const [sessionsError, setSessionsError] = useState("");
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [sessionsAttempt, setSessionsAttempt] = useState(0);
   const [disconnecting, setDisconnecting] = useState("");
 
   useEffect(() => {
@@ -102,12 +104,26 @@ const SettingsModal = ({ open, onClose }) => {
   }, [open, settings]);
 
   useEffect(() => {
-    if (!open || tab !== "extension") return;
+    if (!open || tab !== "extension" || IS_DESKTOP) return;
+    let active = true;
+    setSessionsLoading(true);
+    setSessionsError("");
     apiClient
       .get("/extension/sessions")
-      .then(({ data }) => setSessions(data))
-      .catch(async (err) => setSessionsError(await errorDetail(err, t("extension.loadError"))));
-  }, [open, tab, t]);
+      .then(({ data }) => {
+        if (active) setSessions(data);
+      })
+      .catch(async (err) => {
+        const message = await errorDetail(err, t("extension.loadError"));
+        if (active) setSessionsError(message);
+      })
+      .finally(() => {
+        if (active) setSessionsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [open, tab, t, sessionsAttempt]);
 
   const disconnect = async (id) => {
     setDisconnecting(id);
@@ -145,6 +161,9 @@ const SettingsModal = ({ open, onClose }) => {
       setFormError(t("settings.warningValidation"));
       return;
     }
+    if (saving) return;
+    setInvalidKey("");
+    setFormError("");
     setSaving(true);
     try {
       await update({
@@ -179,7 +198,12 @@ const SettingsModal = ({ open, onClose }) => {
     >
       <Dialog.Header caption={t("settings.title")} id={titleId} />
       <Dialog.Body>
-        <TabProvider value={tab} onUpdate={setTab}>
+        <TabProvider
+          value={tab}
+          onUpdate={(value) => {
+            if (!saving) setTab(value);
+          }}
+        >
           <TabList contentOverflow="scroll" size="l">
             <Tab value="general">{t("settings.general")}</Tab>
             <Tab value="extension">{t("extension.title")}</Tab>
@@ -195,7 +219,7 @@ const SettingsModal = ({ open, onClose }) => {
                         <Text as="label" htmlFor={inputId} variant="subheader-1">
                           {t(labelKey)}
                         </Text>
-                        <Text color="secondary" variant="caption-2">
+                        <Text color="secondary" variant="caption-2" id={`${inputId}-help`}>
                           {t(tooltipKey)}
                         </Text>
                       </Flex>
@@ -206,6 +230,8 @@ const SettingsModal = ({ open, onClose }) => {
                           <Text color="secondary">{t("common.labels.secondsShort")}</Text>
                         }
                         id={inputId}
+                        disabled={saving}
+                        controlProps={{ "aria-describedby": `${inputId}-help` }}
                         validationState={invalidKey === key ? "invalid" : undefined}
                         errorMessage={invalidKey === key ? formError : undefined}
                         min={min}
@@ -235,6 +261,7 @@ const SettingsModal = ({ open, onClose }) => {
                 </Flex>
                 <Switch
                   checked={form.update_check_enabled}
+                  disabled={saving}
                   controlProps={{ "aria-labelledby": updatesLabelId }}
                   onUpdate={(checked) =>
                     setForm((prev) => ({ ...prev, update_check_enabled: checked }))
@@ -260,54 +287,68 @@ const SettingsModal = ({ open, onClose }) => {
                     {t("extension.description")}
                   </Text>
                 </Flex>
-                {sessionsError && <Alert message={sessionsError} size="s" theme="danger" />}
-                {sessions.length ? (
-                  <Flex
-                    aria-label={t("extension.connected")}
-                    direction="column"
-                    gap="spacing-3"
-                    role="list"
-                  >
-                    {sessions.map((session) => (
-                      <Row alignItems="center" gap="spacing-3" key={session.id} role="listitem">
-                        <Col minWidth="0" size={{ xs: 12, s: 8 }}>
-                          <Flex direction="column" gap="spacing-1">
-                            <Text variant="subheader-1" wordBreak="break-word">
-                              {session.browser}
-                            </Text>
-                            <Text color="secondary" variant="caption-2">
-                              {t("extension.connectedAt", {
-                                date: new Date(session.created).toLocaleString(
-                                  i18n.resolvedLanguage
-                                ),
-                              })}
-                            </Text>
-                            <Text color="secondary" variant="caption-2">
-                              {t("extension.lastUsed", {
-                                date: new Date(session.last_used).toLocaleString(
-                                  i18n.resolvedLanguage
-                                ),
-                              })}
-                            </Text>
-                          </Flex>
-                        </Col>
-                        <Col size={{ xs: 12, s: 4 }}>
-                          <Button
-                            disabled={disconnecting === session.id}
-                            loading={disconnecting === session.id}
-                            onClick={() => disconnect(session.id)}
-                            size="l"
-                            view="outlined-danger"
-                          >
-                            {t("extension.disconnect", { browser: session.browser })}
-                          </Button>
-                        </Col>
-                      </Row>
-                    ))}
-                  </Flex>
-                ) : (
-                  <Text color="secondary">{t("extension.empty")}</Text>
+                {sessionsLoading && <Text role="status">{t("common.labels.loading")}</Text>}
+                {sessionsError && (
+                  <Alert
+                    message={sessionsError}
+                    size="s"
+                    theme="danger"
+                    actions={
+                      <Button size="xl" onClick={() => setSessionsAttempt((value) => value + 1)}>
+                        {t("common.actions.retry")}
+                      </Button>
+                    }
+                  />
                 )}
+                {!sessionsLoading &&
+                  !sessionsError &&
+                  (sessions.length ? (
+                    <Flex
+                      aria-label={t("extension.connected")}
+                      direction="column"
+                      gap="spacing-3"
+                      role="list"
+                    >
+                      {sessions.map((session) => (
+                        <Row alignItems="center" gap="spacing-3" key={session.id} role="listitem">
+                          <Col minWidth="0" size={{ xs: 12, s: 8 }}>
+                            <Flex direction="column" gap="spacing-1">
+                              <Text variant="subheader-1" wordBreak="break-word">
+                                {session.browser}
+                              </Text>
+                              <Text color="secondary" variant="caption-2">
+                                {t("extension.connectedAt", {
+                                  date: new Date(session.created).toLocaleString(
+                                    i18n.resolvedLanguage
+                                  ),
+                                })}
+                              </Text>
+                              <Text color="secondary" variant="caption-2">
+                                {t("extension.lastUsed", {
+                                  date: new Date(session.last_used).toLocaleString(
+                                    i18n.resolvedLanguage
+                                  ),
+                                })}
+                              </Text>
+                            </Flex>
+                          </Col>
+                          <Col size={{ xs: 12, s: 4 }}>
+                            <Button
+                              disabled={disconnecting === session.id}
+                              loading={disconnecting === session.id}
+                              onClick={() => disconnect(session.id)}
+                              size="l"
+                              view="outlined-danger"
+                            >
+                              {t("extension.disconnect", { browser: session.browser })}
+                            </Button>
+                          </Col>
+                        </Row>
+                      ))}
+                    </Flex>
+                  ) : (
+                    <Text color="secondary">{t("extension.empty")}</Text>
+                  ))}
               </Flex>
             )}
           </TabPanel>
@@ -318,10 +359,11 @@ const SettingsModal = ({ open, onClose }) => {
         onClickButtonApply={tab === "general" ? handleSave : undefined}
         onClickButtonCancel={onClose}
         propsButtonApply={{
-          disabled: tab !== "general" || !dirty,
+          disabled: saving || tab !== "general" || !dirty,
           style: { display: tab === "general" ? undefined : "none" },
         }}
         textButtonApply={t("common.actions.save")}
+        propsButtonCancel={{ disabled: saving }}
         textButtonCancel={t("common.actions.cancel")}
       />
     </Dialog>

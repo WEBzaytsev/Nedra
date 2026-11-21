@@ -1,6 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
 
-// One build-time switch, shared by all platform-dependent functionality.
 export const IS_DESKTOP =
   import.meta.env.MODE === "desktop" || import.meta.env.VITE_DESKTOP === "1";
 export const copySecret = (value, timeoutMs) => invoke("clipboard_write", { value, timeoutMs });

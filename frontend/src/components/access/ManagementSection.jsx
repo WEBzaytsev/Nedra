@@ -1,7 +1,5 @@
 import { Disclosure, Flex, Text, useLayoutContext } from "@gravity-ui/uikit";
 
-// Secondary management tasks should not precede the selected folder/group's
-// current access on a phone. Keep the approved desktop sections expanded.
 export default function ManagementSection({ title, children, heading = true }) {
   const { isMediaActive } = useLayoutContext();
   const body = (

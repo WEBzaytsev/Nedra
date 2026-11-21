@@ -1,6 +1,6 @@
 # Contributing & running it your way
 
-This doc is for people who want to **hack on Nedra** or **self-host it their own way**, on a real server, behind a proxy, with custom ports. If you just want to run it on your machine, the [README quick start](./README.md#get-started) is all you need; come back here when you want more.
+This doc is for people who want to **hack on Nedra** or **self-host it their own way**, on a real server, behind a proxy, with custom ports. For a local installation, start with the [README quick start](./README.md#quick-start).
 
 ## Desktop development
 
@@ -46,45 +46,12 @@ All `make` commands run locally, not inside Docker.
 | `make typecheck` | `ty check` (backend) |
 | `make format` | Auto-format backend (ruff) and frontend (Prettier) |
 | `make check` | Lint + type check + format check, no writes, what CI runs |
-| `make test` | Backend tests on a throwaway SQLite vault (no Docker needed), then the frontend tests |
-| `make test-stress` | Every backend test, including fuzzing with many more examples, random process kills and scale tests |
-| `python3 docker/smoke/compose_smoke.py --tag <tag>` | Drives the production images (tagged `ghcr.io/webzaytsev/nedra-{backend,frontend}:<tag>`) through a real Compose install in throwaway `nedra-smoke-*` projects: fresh install, snapshot, restore, refusals, CLI, logs. CI runs it on every image build; after a release, the `Release smoke test` workflow (manual dispatch) runs it and `docker/smoke/published_installer.sh` against the published images on amd64 and arm64 |
 
 `make lint/typecheck/format/check` need [uv](https://docs.astral.sh/uv/) with dev deps (`uv sync --group dev` inside `backend/`) and Node.js with npm deps (`npm install` inside `frontend/`). The backend only runs on SQLite 3.51.3 or newer (older releases have the WAL-reset corruption bug), so `backend/pyproject.toml` tells uv to use its own managed Python builds, which bundle a current SQLite; a system Python with an older SQLite is refused at startup. If an old `backend/.venv` was made with another Python, recreate it: `rm -rf backend/.venv && uv sync --group dev`.
 
 ### Before you push
 
-Run `make check` and `make test`. Together they mirror CI: `ruff check` + `ruff format --check` + `ty check` and pytest on the backend, ESLint + Prettier + Vitest on the frontend. Keep them green.
-
-### Tests
-
-`make test` runs the backend suite on a throwaway SQLite vault in a fresh temporary folder (the suite never opens a vault you did not create for it), then the frontend tests. To iterate faster, run pytest directly:
-
-```shell
-cd backend
-uv run pytest -x
-```
-
-What the suite protects, and where:
-
-| Area | Tests |
-|---|---|
-| Every route rejects missing, forged, expired and locked sessions, and refuses the retired vault key header, alone or next to a valid session | `test_authz.py`, `test_vault_key.py`, `test_adversarial.py` |
-| Vault sessions expire, lock, end on rotation and survive races | `test_sessions.py` |
-| The CLI refuses servers older than v1.5.0, and the released v1.4.7 CLI is told to update without changing anything | `test_cli.py`, with that CLI frozen in `testdata/clients` |
-| The frontend image validates its API URL and renders its CSP | `docker/frontend/runtime-config.test.mjs` (part of `make test`) |
-| The CSP lets the UI reach its API and blocks every other destination; the vault list, entry details and trash fit mobile and desktop without losing copy or permission controls | `docker/frontend/browser/*.browser.test.mjs`, run with `make test-browser` (builds the image, drives Chromium with synthetic vault records) |
-| The vault file: initialization, file modes, identity and version checks, SQLite version, the one-process lock, snapshots, restores, corruption, busy handling, reads next to a writer | `test_storage.py` |
-| Cryptography is byte-compatible | `test_vectors.py` with [`testdata/vectors`](testdata/vectors/README.md), shared with `frontend/src/lib/totp.test.js` |
-| Imports cannot damage a vault | `test_imports.py` (including Hypothesis property tests), `test_hostile_files.py` |
-| Failed or interrupted writes change nothing, also when the server is killed right before a commit with megabytes of uncommitted pages in the WAL | `test_failures.py`, `test_process_kill.py` (with `tests/paused_server.py`) |
-| The CLI and `scripts/nedra` keep their contracts | `test_cli.py` |
-
-Tests authenticate the way clients do: `auth(token)` sends a session token from `create_vault()` or `unlock()`. `stored_vault_key()` derives the key from the database only when a test needs the key itself to check ciphertext or other storage invariants.
-
-`backend/tests/integrity.py` reads a vault and decrypts every field strictly, reporting what the application's lenient read path would hide. Use it whenever a change touches storage or encryption: `read_vault` before and after, then `assert_same_vault`. To hold SQLite's write lock from a test (a second process mid-write), use `write_lock_held()`; `wait_for_queued_requests(n)` waits until n requests are queued behind it.
-
-Property tests run 25 derandomized examples by default so the suite is fast and reproducible; `make test-stress` (or `HYPOTHESIS_PROFILE=stress`) runs hundreds of random ones. Tests marked `@pytest.mark.stress` only run under `make test-stress`.
+Run `make check` and review the affected production behavior before publishing. This repository does not maintain project tests; do not add test runners, fixtures or QA modes.
 
 ### The vault file and schema changes
 
@@ -196,6 +163,6 @@ docker compose -f docker-compose.prod.yml pull && \
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-`NEDRA_VERSION` in your `.env` (or `latest`) decides which release runs. Docker updates remain manual. The desktop edition uses the signed Tauri update flow described in [docs/UPDATING.md](docs/UPDATING.md#desktop-updates).
+`NEDRA_VERSION` in your `.env` (or `latest`) decides which release runs. Docker updates remain manual. The desktop edition uses the signed Tauri update flow described in [docs/UPDATING.md](docs/UPDATING.md#desktop).
 
-Details, snapshots, restores and moving from a PostgreSQL release: [docs/UPDATING.md](docs/UPDATING.md).
+Details, snapshots, restores and the incompatible Nedra 5 boundary: [docs/UPDATING.md](docs/UPDATING.md).

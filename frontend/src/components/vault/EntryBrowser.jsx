@@ -75,7 +75,6 @@ const EntryContextMenu = ({ menu, onClose, onCopy, onCopyTotp, ...actions }) => 
       open={Boolean(menu)}
       trigger={menu?.trigger ?? null}
       placement="bottom-start"
-      qa="entry-context-menu"
       onOpenChange={(open) => {
         if (!open) onClose();
       }}
@@ -393,7 +392,6 @@ const EntryBrowser = ({
             overflow={fixedViewport ? "auto" : undefined}
             as="section"
             aria-label={t("vault.browser.entries")}
-            qa="entry-scroll-region"
           >
             {selectedEntryIds.length > 0 && (
               <Flex
@@ -403,7 +401,6 @@ const EntryBrowser = ({
                 justifyContent="space-between"
                 paddingBlockEnd="spacing-3"
                 minWidth="0"
-                qa="entry-bulk-actions"
               >
                 <Text role="status">
                   {t("vault.bulk.selected", { count: selectedEntryIds.length })}
@@ -466,7 +463,6 @@ const EntryBrowser = ({
             ) : (
               <List
                 ref={listRef}
-                qa="entry-list"
                 aria-label={t("vault.browser.entries")}
                 role="grid"
                 size="xl"
@@ -537,8 +533,8 @@ const EntryBrowser = ({
                     }
                     description={
                       <Flex direction="column" gap="spacing-2" minWidth="0" width="100%">
-                        <Flex gap="spacing-2" wrap="wrap" alignItems="center" qa="entry-metadata">
-                          <Text wordBreak="break-all" ellipsis={phone} qa="entry-primary-value">
+                        <Flex gap="spacing-2" wrap="wrap" alignItems="center">
+                          <Text wordBreak="break-all" ellipsis={phone}>
                             {ctx.item.kind === "note"
                               ? t("entry.kind.note")
                               : ctx.item.username || ctx.item.url || t("entry.kind.login")}
@@ -558,13 +554,8 @@ const EntryBrowser = ({
                           )}
                         </Flex>
                         {revealedEntryId === ctx.item.id && (
-                          <Flex
-                            direction="column"
-                            gap="spacing-1"
-                            minWidth="0"
-                            qa="entry-revealed-value"
-                          >
-                            <Divider qa="entry-revealed-separator" />
+                          <Flex direction="column" gap="spacing-1" minWidth="0">
+                            <Divider />
                             <Text variant="caption-2" color="secondary">
                               {t(
                                 ctx.item.kind === "note"
@@ -605,7 +596,6 @@ const EntryBrowser = ({
                             view="flat-secondary"
                             size="xl"
                             aria-label={`${t("navigation.more")}: ${ctx.item.password_name}`}
-                            qa="entry-context-more"
                             onClick={(event) => openContextMenu(ctx.item, event.currentTarget)}
                           >
                             <Icon data={EllipsisVertical} />
@@ -615,11 +605,7 @@ const EntryBrowser = ({
                     }
                   >
                     <Flex {...getCellProps()} alignItems="center" gap="spacing-1" minWidth="0">
-                      <Text
-                        wordBreak="break-word"
-                        ellipsisLines={phone ? 2 : undefined}
-                        qa="entry-name"
-                      >
+                      <Text wordBreak="break-word" ellipsisLines={phone ? 2 : undefined}>
                         {ctx.item.password_name}
                       </Text>
                       {ctx.item.favorite && <Icon data={StarFill} size={12} />}
@@ -641,13 +627,7 @@ const EntryBrowser = ({
               overflow="auto"
             >
               <Flex>
-                <Button
-                  size="xl"
-                  ref={closeRef}
-                  view="outlined"
-                  onClick={closeDetails}
-                  qa="entry-details-back"
-                >
+                <Button size="xl" ref={closeRef} view="outlined" onClick={closeDetails}>
                   <Icon data={ArrowLeft} />
                   {t("vault.browser.back")}
                 </Button>

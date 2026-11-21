@@ -54,7 +54,7 @@ const IssueGroup = ({ icon, title, hint, color, entries, onSelect }) => {
   if (entries.length === 0) return null;
 
   return (
-    <Flex direction="column" gap="spacing-3" minWidth="0" as="section" qa="health-issue-group">
+    <Flex direction="column" gap="spacing-3" minWidth="0" as="section">
       <Flex gap="spacing-2" alignItems="baseline" minWidth="0" wrap="wrap">
         <Icon data={icon} />
         <Text as="strong" color={color === "error" ? "danger" : color}>

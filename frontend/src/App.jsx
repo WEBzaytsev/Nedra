@@ -1,11 +1,20 @@
 import { useEffect, useRef, useState } from "react";
-import { BrowserRouter as Router, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import {
+  BrowserRouter as Router,
+  Navigate,
+  Route,
+  Routes,
+  useLocation,
+  useNavigate,
+} from "react-router-dom";
 import { useStoreActions } from "easy-peasy";
 import {
   Box,
   Button,
   Container,
   Flex,
+  Text,
   ToasterComponent,
   useLayoutContext,
 } from "@gravity-ui/uikit";
@@ -26,9 +35,31 @@ import { VaultViewContext } from "./hooks/VaultViewContext";
 import { MobileTaskActionsContext } from "./hooks/MobileTaskActionsContext";
 import { captureHandoff, clearHandoff, deliverToken, pendingHandoff } from "./lib/extensionHandoff";
 
-const ExtensionHandoff = ({ handoff }) => {
+const ExtensionHandoff = ({ handoff, onLeave }) => {
+  const { t } = useTranslation();
   const [state, setState] = useState("ready");
+  const started = useRef(false);
+  const active = useRef(true);
+  const connectButton = useRef(null);
+  const leaveButton = useRef(null);
+  useEffect(() => {
+    active.current = true;
+    return () => {
+      active.current = false;
+    };
+  }, []);
+  useEffect(() => {
+    if (
+      state !== "ready" &&
+      state !== "connecting" &&
+      (document.activeElement === document.body || document.activeElement === connectButton.current)
+    ) {
+      leaveButton.current?.focus();
+    }
+  }, [state]);
   const connect = async () => {
+    if (started.current) return;
+    started.current = true;
     setState("connecting");
     try {
       const { data } = await apiClient.post("/extension/handoffs/approve", {
@@ -38,34 +69,51 @@ const ExtensionHandoff = ({ handoff }) => {
         client: handoff.client,
         origin: window.location.origin,
       });
+      if (!active.current) return;
       if (!(await deliverToken({ request: handoff.request, redeem: data.redeem }))) {
-        setState("waiting");
+        if (active.current) setState("waiting");
         return;
       }
+      if (!active.current) return;
       clearHandoff();
       setState("connected");
     } catch {
-      setState("error");
+      if (active.current) setState("error");
     }
   };
   return (
     <Container paddingBlock="spacing-6" gutters="spacing-6">
-      <Box maxWidth="480px">
-        <h1>Connect Nedra extension</h1>
-        <p>
-          The extension will receive a fill-only session. It cannot browse or change your vault.
-        </p>
-        {state === "ready" && (
-          <Button view="action" onClick={connect}>
-            Connect {handoff.browser}
+      <Box as="main" maxWidth="480px">
+        <Text as="h1" variant="header-1">
+          {t("extension.handoff.title")}
+        </Text>
+        <p>{t("extension.handoff.scope")}</p>
+        {(state === "ready" || state === "connecting") && (
+          <Button
+            ref={connectButton}
+            view="action"
+            size="xl"
+            disabled={state === "connecting"}
+            onClick={connect}
+          >
+            {t("extension.handoff.connect", { browser: handoff.browser })}
           </Button>
         )}
-        {state === "connecting" && <p>Connecting…</p>}
-        {state === "waiting" && (
-          <p>Extension did not confirm the connection. Open its popup and try again.</p>
-        )}
-        {state === "connected" && <p>Connected. Return to the extension.</p>}
-        {state === "error" && <p>Could not connect the extension. Unlock Nedra again and retry.</p>}
+        {state === "connecting" && <p role="status">{t("extension.handoff.connecting")}</p>}
+        {state === "waiting" && <p role="alert">{t("extension.handoff.waiting")}</p>}
+        {state === "connected" && <p role="status">{t("extension.handoff.connected")}</p>}
+        {state === "error" && <p role="alert">{t("extension.handoff.error")}</p>}
+        <Flex marginBlockStart="spacing-4">
+          <Button
+            ref={leaveButton}
+            view={state === "ready" || state === "connecting" ? "flat-secondary" : "normal"}
+            size="xl"
+            disabled={state === "connecting"}
+            onClick={onLeave}
+          >
+            {t("extension.handoff.leave")}
+          </Button>
+        </Flex>
       </Box>
     </Container>
   );
@@ -75,7 +123,15 @@ const AppContent = () => {
   useAutoLogout();
 
   const authed = isAuth();
-  const [handoff] = useState(() => captureHandoff() ?? pendingHandoff());
+  const navigate = useNavigate();
+  const workspace = useRef(null);
+  const [handoff, setHandoff] = useState(() => captureHandoff() ?? pendingHandoff());
+  const leaveHandoff = () => {
+    clearHandoff();
+    setHandoff(null);
+    navigate("/passwords", { replace: true });
+    window.requestAnimationFrame(() => workspace.current?.focus());
+  };
   const vaultView = useRef({});
   useEffect(() => {
     setMenuUnlocked(authed);
@@ -114,7 +170,7 @@ const AppContent = () => {
   );
 
   if (!authed) return appRoutes;
-  if (handoff) return <ExtensionHandoff handoff={handoff} />;
+  if (handoff) return <ExtensionHandoff handoff={handoff} onLeave={leaveHandoff} />;
 
   return (
     <VaultViewContext.Provider value={vaultView}>
@@ -127,6 +183,8 @@ const AppContent = () => {
         <TopMenu />
         <Box
           as="main"
+          ref={workspace}
+          tabIndex={-1}
           flexGrow={1}
           minWidth="0"
           height={desktopShell ? "100%" : undefined}
@@ -168,8 +226,7 @@ const AppFrame = () => {
   useEffect(() => {
     const viewport = window.visualViewport;
     if (!phone || !viewport) return undefined;
-    // The on-screen keyboard may resize only the visual viewport, not 100dvh.
-    // Leave pinch zoom to the browser rather than reflowing the magnified page.
+
     const resize = () =>
       setViewportHeight(
         viewport.scale === 1 ? `${viewport.height + viewport.offsetTop}px` : undefined
@@ -209,14 +266,13 @@ const AppFrame = () => {
             paddingInline="spacing-2"
             aria-live="polite"
             aria-relevant="additions text"
-            qa="notification-shelf"
           >
             <ToasterComponent hasPortal={false} mobile />
           </Box>
         ) : (
           <ToasterComponent />
         )}
-        {phone && <Box ref={setActionsTarget} flexShrink={0} qa="mobile-task-actions" />}
+        {phone && <Box ref={setActionsTarget} flexShrink={0} />}
       </Flex>
     </MobileTaskActionsContext.Provider>
   );

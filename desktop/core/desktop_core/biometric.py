@@ -1,5 +1,3 @@
-"""Touch ID operations reachable only through the Tauri-owned core pipe."""
-
 import base64
 import json
 

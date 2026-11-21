@@ -1,5 +1,3 @@
-"""Read-only, ACL-authorized data for Nedra's browser extension."""
-
 import logging
 import time
 from dataclasses import dataclass
@@ -55,8 +53,7 @@ class ExtensionCRUD(BaseCRUD):
         return page
 
     async def _logins(self, key: VaultKey, needle: str | None = None) -> list[_Login]:
-        # The client supplies neither IDs nor access selection: effective ACL is
-        # recomputed for every request, including direct, group, folder and expiry.
+
         ids = await self.acl.visible_ids(deleted=False)
         if not ids:
             return []

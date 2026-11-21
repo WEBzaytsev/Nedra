@@ -10,7 +10,6 @@ export class BackgroundError extends Error {
   }
 }
 
-// One request to the background; its answer, or a BackgroundError.
 export const send = async <T,>(message: Message): Promise<T> => {
   const reply = (await ext.runtime.sendMessage(message)) as Reply<T> | undefined;
   if (!reply) throw new BackgroundError("Nedra did not answer.", null);

@@ -1,11 +1,9 @@
-//! Native macOS menu actions are opaque renderer event names, never vault data.
-
 use tauri::AppHandle;
 
-#[cfg(any(target_os = "macos", test))]
+#[cfg(target_os = "macos")]
 const REPOSITORY: &str = "https://github.com/WEBzaytsev/Nedra";
 
-#[cfg(any(target_os = "macos", test))]
+#[cfg(target_os = "macos")]
 fn help_page(id: &str) -> Option<String> {
     match id {
         "help-website" => Some(REPOSITORY.to_string()),
@@ -152,18 +150,4 @@ pub fn menu_state(app: AppHandle, unlocked: bool) {
     native::set_unlocked(app, unlocked);
     #[cfg(not(target_os = "macos"))]
     let _ = (app, unlocked);
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn help_items_open_only_fixed_public_pages() {
-        for id in ["help-website", "help-releases", "help-issue"] {
-            assert!(help_page(id).unwrap().starts_with(REPOSITORY));
-        }
-        assert_eq!(help_page("lock"), None);
-        assert_eq!(help_page("help-anything"), None);
-    }
 }

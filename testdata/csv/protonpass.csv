@@ -1,5 +1,0 @@
-type,name,url,email,username,password,note,totp,createTime,modifyTime,vault
-login,Proton,https://account.proton.me,user@proton.me,,Pr-Pass-1,,JBSWY3DPEHPK3PXP,1700000000,1700000000,Personal
-login,Forum,https://forum.test,user@proton.me,userman,Pr-Pass-2,hello,,1700000000,1700000000,Personal
-note,Shopping list,,,,,eggs,,1700000000,1700000000,Personal
-alias,Shop alias,,alias@example.test,,,,,1700000000,1700000000,Personal

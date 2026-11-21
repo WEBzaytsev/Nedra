@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { ArrowLeft, EllipsisVertical, Persons, Plus } from "@gravity-ui/icons";
+import { EllipsisVertical, Persons, Plus } from "@gravity-ui/icons";
 import {
   Flex,
   Box,
@@ -20,7 +20,6 @@ import {
   useLayoutContext,
 } from "@gravity-ui/uikit";
 import { useStoreActions, useStoreState } from "easy-peasy";
-import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
 import GroupManagementDialog from "../components/access/GroupManagementDialog";
@@ -231,11 +230,6 @@ const UsersPage = () => {
             <Text as="div" role="heading" aria-level={1} variant="header-1">
               {t("users.title")}
             </Text>
-            {!mobile && (
-              <Text as="div" color="secondary" wordBreak="break-word">
-                {t("users.subtitle")}
-              </Text>
-            )}
           </Flex>
           <Flex
             direction="row"
@@ -260,12 +254,6 @@ const UsersPage = () => {
               <Icon data={Persons} />
               {t("groups.title")}
             </Button>
-            {!mobile && (
-              <Button component={Link} to="/passwords" view="flat-secondary">
-                <Icon data={ArrowLeft} />
-                {t("users.backToVault")}
-              </Button>
-            )}
           </Flex>
         </Flex>
       )}
@@ -318,7 +306,7 @@ const UsersPage = () => {
             {users.map((user) => {
               const isCurrent = user.id === currentUserId;
               return (
-                <Card type="container" view="outlined" size="l" qa="user-card" key={user.id}>
+                <Card type="container" view="outlined" size="l" key={user.id}>
                   <Flex
                     direction="column"
                     gap="spacing-4"
@@ -359,9 +347,8 @@ const UsersPage = () => {
                       alignItems={{ m: "center" }}
                       width="100%"
                       minWidth="0"
-                      qa="user-controls"
                     >
-                      <Flex width={{ xs: "100%", m: "220px" }} minWidth="0" qa="user-role-control">
+                      <Flex width={{ xs: "100%", m: "220px" }} minWidth="0">
                         <Select
                           width="max"
                           size="xl"
@@ -394,7 +381,6 @@ const UsersPage = () => {
                         minWidth="0"
                         alignItems="center"
                         justifyContent={{ xs: "space-between", m: "flex-end" }}
-                        qa="user-actions"
                       >
                         <Flex flexShrink={0}>
                           <Switch

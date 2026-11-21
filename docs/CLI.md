@@ -157,11 +157,11 @@ docker compose -f docker-compose.prod.yml exec backend nedra-admin snapshot   # 
 docker compose -f docker-compose.prod.yml exec backend nedra-admin check      # integrity check of the vault (or of a snapshot path)
 ```
 
-`restore` replaces the vault with a snapshot and runs only while Nedra is stopped. `set-aside` moves a vault this release cannot open (one from Nedra 2.0) into the snapshot folder so the next start creates a new one. A snapshot is a raw copy of this installation's vault file under the master password of the moment it was taken; a backup (`.nedrabackup`) is the complete, portable copy you can restore anywhere. See [UPDATING.md](UPDATING.md#snapshots).
+`restore` replaces the vault with a snapshot and runs only while Nedra is stopped. `set-aside` moves an incompatible vault into the snapshot folder so the next start creates a new one; it does not convert or recover the old data. A snapshot preserves the installation's accounts, groups, grants and encrypted entries. A portable `.nedrabackup` contains only entries visible to the exporting account plus folders and settings, not the installation's authorization graph. See [UPDATING.md](UPDATING.md#snapshots-backups-and-recovery).
 
 ## What the CLI does with your secrets
 
-It follows the same zero-trust rules as the web UI, and it's small enough to read in one sitting ([`backend/cli.py`](../backend/cli.py)).
+The CLI follows the web UI's server-trusted security model ([`backend/cli.py`](../backend/cli.py)).
 
 - **Nothing is stored.** There is no token cache and no config file. Each command prompts for the master password, opens a vault session on the server for that one command, and locks it again when the command ends, even if it fails. The CLI never sees the vault key. That's also why every command asks again. It needs a Nedra server from v1.5.0 on; against an older one (recognized by its missing unlock route) it stops with a message instead of asking that server for the key. Clients older than v1.5.0 are refused by servers from v1.6.0 on with a message to update.
 - **Secrets are never arguments.** Passwords and note bodies are typed at a hidden prompt, so they don't reach your shell history, `ps`, or `docker inspect`. Only entry names are arguments, so `nedra password get github` does reveal in your history that a `github` entry exists.

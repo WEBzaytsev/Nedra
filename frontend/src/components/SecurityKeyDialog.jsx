@@ -19,7 +19,9 @@ import PasswordField from "./PasswordField";
 import Dialog from "./TaskSurface";
 
 const dialogError = (error, fallback) =>
-  typeof error === "string" ? error : errorDetail(error, error?.message || fallback);
+  typeof error === "string"
+    ? error
+    : errorDetail(error, error?.isAxiosError ? fallback : error?.message || fallback);
 
 const SecurityKeyDialog = ({ open, onClose }) => {
   const { t } = useTranslation();

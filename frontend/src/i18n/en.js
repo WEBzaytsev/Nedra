@@ -126,7 +126,7 @@ const en = {
 
       enterUsername: "Enter your username.",
       enterPasswordChange: "Enter your current and new passwords.",
-      enterRecovery: "Enter your username, recovery code, and matching new passwords.",
+      enterRecovery: "Enter your recovery code.",
       enterNewMasterPassword: "Set an administrator password.",
       passwordsDoNotMatch: "The passwords do not match.",
       weakPassword: "Use at least 12 characters and a mix of character types.",
@@ -137,9 +137,22 @@ const en = {
   topMenu: {
     runningVersion: "Installed version",
     updateAvailable: "A Nedra update is available",
+    updateCheckError: "Could not check for updates. Try again from the app menu.",
     settings: "Settings",
   },
   extension: {
+    handoff: {
+      title: "Connect Nedra extension",
+      scope:
+        "The extension can find logins you can access and fill them when you ask. It cannot change your vault.",
+      connect: "Connect {{browser}}",
+      connecting: "Connecting…",
+      waiting:
+        "The extension did not confirm the connection. Check its popup; to try again, start a new connection there.",
+      connected: "Connected. Return to the extension.",
+      error: "Could not connect. Start a new connection from the extension popup.",
+      leave: "Return to vault",
+    },
     title: "Browser extension",
     connected: "Connected browsers",
     description: "Disconnect a browser to end its fill-only session.",
@@ -241,7 +254,6 @@ const en = {
     noQuickFilterResults: "No entries match these filters.",
     resetFilters: "Clear filters",
     emptyTitle: "No entries yet.",
-    emptyDescription: "Add a login or note to start using your vault.",
     addFirstPassword: "Add entry",
     messages: {
       noteUpdated: "Note changes saved.",
@@ -623,6 +635,8 @@ const en = {
     },
   },
   errors: {
+    load: "Could not load data. Try again.",
+    save: "Could not apply changes. Try again.",
     invalidMasterPassword: "Incorrect password. Try again.",
     tooManyAttempts: "Too many login attempts. Try again in an hour.",
     generic: "Could not complete the action. Try again.",

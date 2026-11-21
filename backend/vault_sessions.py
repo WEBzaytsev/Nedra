@@ -1,5 +1,3 @@
-"""In-memory full and browser-extension vault sessions."""
-
 import hashlib
 import re
 import secrets
@@ -149,7 +147,6 @@ class VaultSessions:
         )
 
     def open_desktop_extension(self, browser: str, client: str) -> tuple[str, str]:
-        """Open an extension session bound to the one current desktop user."""
         now = self._clock()
         with self._lock:
             self._drop_expired(now)
@@ -359,7 +356,6 @@ class VaultSessions:
             return session.credential_fingerprint
 
     def sole_full_session(self) -> tuple[VaultKey, int, bytes | None]:
-        """Return the one desktop-owned full session, never an extension token."""
         now = self._clock()
         with self._lock:
             self._drop_expired(now)
@@ -447,7 +443,6 @@ class VaultSessions:
         return False
 
     def revoke_extensions(self, client: str | None = None) -> int:
-        """End desktop browser sessions, optionally for one pairing client."""
         with self._lock:
             matching = [
                 digest

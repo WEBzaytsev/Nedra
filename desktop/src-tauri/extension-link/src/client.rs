@@ -1,8 +1,3 @@
-//! The extension's side of the protocol, in Rust: used by the tests and by the
-//! `ipc_probe` example. The real extension implements the same steps in
-//! TypeScript (extension/src/background/desktop.ts); both are checked against
-//! testdata/vectors/extension-channel.json.
-
 use serde_json::{json, Value};
 use std::io::{self, Read, Write};
 
@@ -22,7 +17,6 @@ pub fn receive<R: Read>(reader: &mut R) -> io::Result<Object> {
     framing::read_object(reader).map_err(|e| invalid(&e.to_string()))
 }
 
-/// The `refused` code of a message, if it is a refusal.
 pub fn refusal(message: &Object) -> Option<String> {
     (kind(message) == Some("refused")).then(|| message["code"].as_str().unwrap_or("").to_string())
 }
@@ -33,7 +27,6 @@ pub struct PairingStart {
     browser: String,
 }
 
-/// Step 1: commit to a fresh key.
 pub fn pair_commit<W: Write>(writer: &mut W, browser: &str) -> io::Result<PairingStart> {
     let exchange = Exchange::new();
     let nonce = channel::random::<16>();
@@ -54,7 +47,6 @@ pub struct Revealed {
     pub key: channel::Key,
 }
 
-/// Steps 2 and 3: read the app's key, reveal ours, compute the code to show.
 pub fn pair_reveal<S: Read + Write>(
     stream: &mut S,
     start: PairingStart,
@@ -89,7 +81,6 @@ pub fn pair_reveal<S: Read + Write>(
     }))
 }
 
-/// Step 4: wait for the user's answer in the app.
 pub fn pair_result<R: Read>(reader: &mut R) -> io::Result<Result<String, String>> {
     let answer = receive(reader)?;
     if let Some(code) = refusal(&answer) {
@@ -132,7 +123,6 @@ pub fn hello<S: Read + Write>(
 }
 
 impl Session {
-    /// Seal a request and return the frame (tests replay or tamper with it).
     pub fn seal(&mut self, mut request: Value) -> Value {
         request["id"] = json!(self.next_id);
         self.next_id += 1;

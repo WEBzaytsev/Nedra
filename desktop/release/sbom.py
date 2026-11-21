@@ -1,5 +1,3 @@
-"""Generate a deterministic CycloneDX SBOM from every locked dependency graph."""
-
 import argparse
 import hashlib
 import json

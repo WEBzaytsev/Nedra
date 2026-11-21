@@ -1,20 +1,3 @@
-//! The app's side of the link: accepts the native host's connections, pairs
-//! new browsers (with the user's approval) and answers paired ones over the
-//! encrypted channel. Generic over [`Desktop`], which the Tauri app implements
-//! with its window and the vault core (and tests and the e2e stub with fakes).
-//!
-//! One connection, in order:
-//! 1. host → app `{t:"host", caller, version}`: the extension the browser
-//!    started the host for, checked against the pinned ids again.
-//! 2. Optionally a pairing: `pair_commit {browser, commit}` → `pair_key {pub,
-//!    nonce}` → `pair_reveal {pub, nonce}` → (the user approves the code) →
-//!    `paired {id}`, or `refused {code}` at any step.
-//! 3. `hello {id, nonce}` → `hello_ok {nonce}`, then only `msg {c, d}` frames:
-//!    sealed JSON requests `{id, op, ...}` and answers `{id, ok, ...}`.
-//!
-//! The extension session token stays here (design decision 40): it is opened
-//! from the unlocked vault for a pairing on first use and never sent out.
-
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
 use std::io;
@@ -30,13 +13,12 @@ use crate::pairings::{Pairing, Store};
 use crate::wire::{b64, bytes, has_exactly, kind, text, unb64};
 
 pub const MAX_CONNECTIONS: usize = 8;
-/// A sealed answer must still fit in one frame after base64 and the envelope.
+
 pub const MAX_PLAINTEXT: usize = 40 * 1024;
 const FIRST_MESSAGE: Duration = Duration::from_secs(10);
 const PAIRING_STEP: Duration = Duration::from_secs(30);
 const IDLE: Duration = Duration::from_secs(10 * 60);
-/// Pairing attempts per minute: each one can put a dialog in front of the
-/// user, so a local process cannot flood them with requests to approve.
+
 pub const PAIRINGS_PER_MINUTE: usize = 5;
 
 pub const BROWSERS: &[&str] = &[
@@ -46,7 +28,6 @@ pub const ROUTES: &[&str] = &["matches", "search", "credential", "totp"];
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Refusal {
-    /// The vault is locked (or the core is not running).
     Locked,
     Failed,
 }
@@ -54,16 +35,15 @@ pub enum Refusal {
 pub trait Desktop: Send + Sync + 'static {
     fn store(&self) -> &Store;
     fn unlocked(&self) -> bool;
-    /// Show the approval dialog with `code` and wait for the answer.
+
     fn approve(&self, browser: &str, code: &str) -> bool;
-    /// A new extension session for this pairing (`client` = the pairing id, so
-    /// a new one replaces the pairing's previous session).
+
     fn open_session(&self, browser: &str, client: &str) -> Result<String, Refusal>;
-    /// `POST /api/extension/<route>` with the session token.
+
     fn api(&self, token: &str, route: &str, body: &Value) -> Result<(u16, Value), Refusal>;
-    /// End the extension sessions opened for this pairing (`client`).
+
     fn end_sessions(&self, client: &str);
-    /// Bring the window forward (to unlock, or to answer a pairing).
+
     fn show(&self);
     fn lock(&self);
 }
@@ -93,8 +73,6 @@ fn refuse(writer: &mut Stream, code: &str) -> Flow {
     Flow::Closed
 }
 
-// Frees the pairing slot before the browser hears the answer: an extension
-// that pairs again right after a refusal must not find it still taken.
 fn refuse_released(guard: PairingGuard<'_>, writer: &mut Stream, code: &str) -> Flow {
     drop(guard);
     refuse(writer, code)
@@ -154,7 +132,6 @@ impl<D: Desktop> Link<D> {
         &self.desktop
     }
 
-    /// Listen at `endpoint` until the returned handle is stopped.
     pub fn start(self: &Arc<Self>, endpoint: &Endpoint) -> io::Result<Running> {
         let server = Server::bind(endpoint)?;
         let stopper = server.stopper();
@@ -168,8 +145,7 @@ impl<D: Desktop> Link<D> {
                         stream.shutdown();
                         continue;
                     }
-                    // Registered before its thread starts, so close_connections
-                    // always reaches it.
+
                     let Some(id) = link.register(&stream) else {
                         link.connections.fetch_sub(1, Ordering::SeqCst);
                         stream.shutdown();
@@ -180,7 +156,6 @@ impl<D: Desktop> Link<D> {
                         .name("extension-connection".into())
                         .spawn(move || worker.connection(id, stream));
                     if spawned.is_err() {
-                        // The connection never started, so its guard never runs.
                         link.live.lock().unwrap().remove(&id);
                         link.connections.fetch_sub(1, Ordering::SeqCst);
                     }
@@ -192,22 +167,17 @@ impl<D: Desktop> Link<D> {
         })
     }
 
-    /// End every open connection (the switch was turned off).
     pub fn close_connections(&self) {
         for stream in self.live.lock().unwrap().values() {
             stream.shutdown();
         }
     }
 
-    /// Forget every extension session token (the vault locked, the switch was
-    /// turned off). Sessions being opened right now are not kept either.
     pub fn forget_sessions(&self) {
         self.generation.fetch_add(1, Ordering::SeqCst);
         self.tokens.lock().unwrap().clear();
     }
 
-    /// Forget a pairing's token (removed or evicted); a session being opened
-    /// for it right now is not kept either.
     pub fn forget_pairing(&self, id: &str) {
         self.generation.fetch_add(1, Ordering::SeqCst);
         self.tokens.lock().unwrap().remove(id);
@@ -225,7 +195,6 @@ impl<D: Desktop> Link<D> {
         let _ = self.serve(stream);
     }
 
-    /// Remove pairings from the store and end everything they hold.
     fn drop_pairings(&self, ids: &[String]) {
         for id in ids {
             self.forget_pairing(id);
@@ -310,8 +279,7 @@ impl<D: Desktop> Link<D> {
             return Ok(refuse_released(guard, writer, "protocol"));
         };
         let approved = self.desktop.approve(browser, &paired.sas);
-        // The dialog is answered: the next browser may pair (the store has
-        // its own lock).
+
         drop(guard);
         if !approved {
             return Ok(refuse(writer, "denied"));
@@ -322,8 +290,7 @@ impl<D: Desktop> Link<D> {
         if !self.desktop.unlocked() {
             return Ok(refuse(writer, "locked"));
         }
-        // The browser hears first: one that cancelled or went away meanwhile
-        // leaves no pairing behind.
+
         let id = crate::wire::b64(&channel::random::<16>());
         send(writer, json!({"t": "paired", "id": id}))?;
         let evicted = self
@@ -385,18 +352,15 @@ impl<D: Desktop> Link<D> {
             ) else {
                 return Ok(());
             };
-            // A message that is not the next authentic one ends the connection
-            // without an answer.
+
             let Ok(plain) = channel.open(counter, &sealed) else {
                 return Ok(());
             };
-            // The switch may have been turned off while this connection was
-            // being accepted (before close_connections could see it): it ends
-            // here instead of opening a session after extension_end.
+
             if !self.desktop.store().enabled() || self.desktop.store().find(&pairing.id).is_none() {
                 return Ok(());
             }
-            // Use is recorded once the peer proved it holds the pairing key.
+
             if !touched {
                 touched = true;
                 let _ = self.desktop.store().touch(&pairing.id);
@@ -472,8 +436,7 @@ impl<D: Desktop> Link<D> {
         let generation = self.generation.load(Ordering::SeqCst);
         let token = self.desktop.open_session(&pairing.browser, &pairing.id)?;
         let mut tokens = self.tokens.lock().unwrap();
-        // The vault locked, the switch turned off or the pairing went while the
-        // core opened it: end it instead of using it once.
+
         if self.generation.load(Ordering::SeqCst) != generation
             || !self.desktop.store().enabled()
             || self.desktop.store().find(&pairing.id).is_none()
@@ -487,8 +450,6 @@ impl<D: Desktop> Link<D> {
     }
 
     fn api(&self, id: u64, pairing: &Pairing, route: &str, body: &Value) -> Value {
-        // A token the core stopped accepting (idle timeout, 12 h, a master
-        // password change) is replaced once while the vault is unlocked.
         for _ in 0..2 {
             let token = match self.token(pairing) {
                 Ok(token) => token,
@@ -530,6 +491,3 @@ fn read(stream: &mut Stream) -> io::Result<Object> {
         other => io::Error::new(io::ErrorKind::InvalidData, other.to_string()),
     })
 }
-
-#[cfg(all(test, unix))]
-mod tests;

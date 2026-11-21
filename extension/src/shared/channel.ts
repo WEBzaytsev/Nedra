@@ -1,17 +1,3 @@
-// The paired channel to the Nedra desktop app, in WebCrypto (the same
-// construction as desktop/src-tauri/extension-link/src/channel.rs; both are
-// checked against testdata/vectors/extension-channel.json).
-//
-// Pairing: an X25519 exchange where this side commits to its key before it
-// learns the app's, so a process in the middle cannot pick keys that make both
-// sides show the same six digits. The pairing key is kept as a non-extractable
-// HKDF key; it never encrypts anything itself. Each connection derives a fresh
-// AES-256-GCM key (also non-extractable) from new nonces of both sides, and every
-// message carries the next counter of its direction in the nonce and the
-// associated data, so replayed, reordered or reflected messages fail.
-
-// Frozen authenticated protocol label. Renaming it would invalidate every
-// existing desktop pairing; it is not a public product name.
 export const LABEL = "nedra/extension/v1";
 export const TO_APP = 0x01;
 export const TO_EXTENSION = 0x02;
@@ -19,7 +5,6 @@ export const TO_EXTENSION = 0x02;
 const subtle = (): SubtleCrypto => globalThis.crypto.subtle;
 const encoder = new TextEncoder();
 
-// WebCrypto is typed for ArrayBuffer-backed views only.
 type Bytes = Uint8Array<ArrayBuffer>;
 
 export const bytes = (length: number): Bytes =>
@@ -53,7 +38,6 @@ export const toBase64Url = (data: Uint8Array): string => {
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 };
 
-// Unpadded base64url of exactly `length` bytes, or null.
 export const fromBase64Url = (value: unknown, length?: number): Bytes | null => {
   if (typeof value !== "string" || !/^[A-Za-z0-9_-]*$/.test(value) || value.length % 4 === 1)
     return null;
@@ -123,7 +107,7 @@ const hkdfBits = async (ikm: CryptoKey, salt: Bytes, info: string, bits: number)
 
 export interface Paired {
   sas: string;
-  // Non-extractable: it can only derive connection keys.
+
   pairingKey: CryptoKey;
 }
 
@@ -137,7 +121,6 @@ export const finish = async (own: CryptoKey, peerPublic: Bytes, salt: Bytes): Pr
       await subtle().deriveBits({ name: "X25519", public: peer } as EcdhKeyDeriveParams, own, 256)
     );
   } catch {
-    // WebCrypto refuses an all-zero result (a low-order point) itself.
     throw new WeakKey("weak key");
   }
   if (shared.every((b) => b === 0)) throw new WeakKey("weak key");
@@ -207,12 +190,10 @@ export const open = async (
 
 export class Refused extends Error {}
 
-// One connection, the extension's side: it sends toward the app and reads
-// only the app's next message.
 export class Channel {
   private sent = 0;
   private received = 0;
-  // Messages are sealed and opened one at a time, in order.
+
   private queue: Promise<unknown> = Promise.resolve();
 
   constructor(private readonly key: CryptoKey) {}

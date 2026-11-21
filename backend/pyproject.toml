@@ -1,6 +1,6 @@
 [project]
 name = "nedra-server"
-version = "5.0.0"
+version = "5.0.1"
 description = "Nedra Password Manager API"
 requires-python = ">=3.13,<3.15"
 dependencies = [
@@ -22,9 +22,6 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "hypothesis>=6.170.15",
-    "pytest>=9.2.0",
-    "pytest-asyncio>=1.5.0",
     "ruff>=0.17.5",
     "ty>=0.0.57",
 ]
@@ -46,11 +43,11 @@ packages = ["."]
 [tool.ruff]
 line-length = 88
 target-version = "py313"
-exclude = [".git", "__pycache__", ".mypy_cache", ".pytest_cache"]
+exclude = [".git", "__pycache__", ".mypy_cache"]
 
 [tool.ruff.lint]
 select = ["E", "W", "F", "I", "B", "UP"]
-ignore = ["B008"]  # FastAPI Depends() in function signatures is idiomatic
+ignore = ["B008"]
 
 [tool.ruff.lint.isort]
 split-on-trailing-comma = true
@@ -61,15 +58,3 @@ indent-style = "space"
 
 [tool.ty.environment]
 python-version = "3.13"
-
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-pythonpath = ["."]
-asyncio_mode = "auto"
-asyncio_default_fixture_loop_scope = "session"
-asyncio_default_test_loop_scope = "session"
-addopts = "-m 'not stress'"
-faulthandler_timeout = 300
-markers = [
-    "stress: long-running fuzz, fault-injection and scale tests (make test-stress)",
-]

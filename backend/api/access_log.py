@@ -17,11 +17,6 @@ _ENTRY_ROUTE = re.compile(
 
 
 def redact_path(method: str, path_with_query: str) -> str:
-    """
-    Replace entry names in a request path with ``{password_name}`` and drop the
-    query string. Unrecognised paths under ``/passwords/`` are redacted entirely,
-    since a name can itself contain a slash.
-    """
     path, has_query, _ = path_with_query.partition("?")
     match = _ENTRIES_PREFIX.match(path)
     if match and (method, match["rest"]) not in _LITERAL_ROUTES:

@@ -1,6 +1,6 @@
 # Nedra vault format 3 and backup format 3
 
-This is the specification of how Nedra stores a vault on disk (vault format 3, SQLite schema 10) and how it writes an encrypted portable backup (backup format 3 with payload version 3, `.nedrabackup`). It is written for reviewers and for anyone implementing a second reader. The desktop core runs this same Python code; cryptographic vectors remain in `testdata/vectors/vault-v3.json` and `backup-v3.json`.
+This is the specification of how Nedra stores a vault on disk (vault format 3, SQLite schema 10) and how it writes an encrypted portable backup (backup format 3 with payload version 3, `.nedrabackup`). It is written for reviewers and for anyone implementing a second reader. The desktop core runs this same Python code.
 
 The reference implementation is `backend/helpers.py` (primitives and associated data), `backend/crud/auth.py` (accounts, login and credential rewrapping), `backend/crud/access.py` (authorization), `backend/crud/password.py` and `backend/crud/attachment.py` (records), `backend/crud/backup.py` (backups) and `backend/storage.py` (file identity and exact-schema validation).
 

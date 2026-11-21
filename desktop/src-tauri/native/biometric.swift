@@ -1,5 +1,5 @@
-// Touch ID unlock through a Secure Enclave key. The key blob works only on
-// this Mac and is invalidated when the enrolled fingerprint set changes.
+
+
 import CryptoKit
 import Foundation
 import LocalAuthentication

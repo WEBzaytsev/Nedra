@@ -22,11 +22,6 @@ const render = () => {
       </ToasterProvider>
     </StoreProvider>
   );
-
-  if (import.meta.env.VITE_DESKTOP_QA === "1") {
-    if (import.meta.env.VITE_UPDATE_QA === "1") import("./platform/qaUpdates");
-    else import("./platform/qa");
-  }
 };
 
 Promise.allSettled([dateSettings.loadLocale("en"), dateSettings.loadLocale("ru")]).then(render);

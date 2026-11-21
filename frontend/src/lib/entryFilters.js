@@ -1,4 +1,3 @@
-// Quick filters stay React-free so their intersection and counts are testable.
 export const hasNotes = (entry) => entry.kind !== "note" && Boolean(entry.description?.trim());
 
 export const ENTRY_FILTERS = [

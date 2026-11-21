@@ -1,4 +1,3 @@
-//! Release gate using the same signature verifier as the official updater.
 use base64::Engine;
 use minisign_verify::{PublicKey, Signature};
 use std::{env, fs, path::Path};

@@ -576,9 +576,7 @@ class AuthorizedPasswordCRUD(PasswordCRUD):
                 raise Forbidden("Write access to the folder is required.")
         result = await super().create_password(password, key)
         model, _ = await find_entry(self.session, key, password.password_name)
-        # Entries in a shared folder belong to that folder's owner. This keeps
-        # folder ownership and entry-owner-only operations aligned when a writer
-        # adds a new item for the team.
+
         model.owner_id = (
             folder.owner_id if folder is not None else self.context.owner_id
         )
@@ -770,7 +768,6 @@ class AuthorizedPasswordCRUD(PasswordCRUD):
         targets: Sequence[tuple[int, int | None, int | None, bool]],
         key: VaultKey,
     ) -> BulkResult:
-        """Validate every ACL and folder link before changing any entry."""
         folders = FolderCRUD(self.session, self.context)
         prepared: list[tuple[EntryModel, FolderModel | None, str | None]] = []
         for entry_id, folder_id, expected_folder_id, check_current_folder in targets:

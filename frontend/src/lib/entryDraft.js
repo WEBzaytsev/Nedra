@@ -48,8 +48,6 @@ export const createEntryDraftStore = ({ user_id, key: encodedKey }) => {
       return decodeDraft(stored, storageKey);
     },
     write(form) {
-      // Native lock can destroy the renderer without a JS callback. Persist in
-      // this input event, not in an async encryption or a later React effect.
       writeDraft(form);
     },
     clear() {

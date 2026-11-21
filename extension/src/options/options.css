@@ -118,7 +118,6 @@ code {
   flex-wrap: wrap;
 }
 
-/* Fill from: the desktop app or a server. */
 .choices {
   display: grid;
   gap: 8px;

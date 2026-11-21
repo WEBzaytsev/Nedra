@@ -437,7 +437,6 @@ const PasswordFormDialog = ({
         selected={form.favorite}
         onClick={() => setForm((previous) => ({ ...previous, favorite: !previous.favorite }))}
         aria-pressed={form.favorite}
-        qa="entry-favorite-toggle"
         aria-label={t(
           form.favorite ? "vault.columns.removeFavorite" : "vault.columns.markFavorite"
         )}
@@ -785,7 +784,7 @@ const PasswordFormDialog = ({
         open
         aria-label={t(titleKey)}
         onOpenChange={(nextOpen) => {
-          if (!nextOpen && !submitting) onClose();
+          if (!nextOpen && !submitting) (onBack ?? onClose)();
         }}
         disableEscapeKeyDown={submitting}
       >

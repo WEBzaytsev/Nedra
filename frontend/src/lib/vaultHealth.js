@@ -1,8 +1,3 @@
-// Local, offline vault health analysis. Runs entirely on the already-decrypted
-// rows the vault holds in memory, so it never sends anything anywhere (no
-// breach-check API, no third party). Flags the three things individual users
-// actually care about: weak, reused, and stale passwords.
-
 import { getPasswordStrength } from "./passwordStrength";
 
 const STALE_DAYS = 365;

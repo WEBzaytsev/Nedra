@@ -76,7 +76,6 @@ def _binding(user_id: int) -> bytes:
 def step_up_context(
     token: str, action: SecurityAction, fields: dict[str, object]
 ) -> bytes:
-    """A session-keyed digest binds exact request fields without retaining them."""
     encoded = json.dumps(
         fields, ensure_ascii=False, separators=(",", ":"), sort_keys=True
     ).encode()

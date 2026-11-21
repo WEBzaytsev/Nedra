@@ -42,8 +42,6 @@ class ProtocolWriter:
         try:
             self.queue.put_nowait(f.encode(kind, request_id, header, body))
         except queue.Full:
-            # A shell that stopped reading must not retain unbounded secrets
-            # or block the event loop (including cancellation and expiry).
             os._exit(3)
 
     def close(self, timeout: float = 2.0) -> None:
@@ -300,11 +298,6 @@ class CoreServer:
         )
 
     def _session_info(self, request, status, body):
-        """Authoritative native idle deadline, without a key or session token.
-
-        Reading this metadata never refreshes a session. The shell can enforce
-        expiry even when the renderer is suspended.
-        """
         if isinstance(request, dict):
             token = request.get("session")
         else:

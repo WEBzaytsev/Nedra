@@ -1,15 +1,3 @@
-// Desktop mode: the Nedra app on this computer, reached through its
-// native-messaging host (docs/EXTENSION.md, design 4.3). No network: the
-// browser starts the host, which relays to the running app over a same-user
-// local socket or pipe.
-//
-// Everything after the handshake is end-to-end encrypted between this
-// background and the app (shared/channel.ts); the host only relays. There is
-// no session token on this side at all: the app opens the extension session
-// for the pairing and keeps its token (design decision 40). What this side
-// holds is the pairing key (non-extractable, IndexedDB) and, while a port is
-// open, that connection's key (non-extractable, memory).
-
 import { ApiError } from "./api";
 import { type Pairing, deletePairing, loadPairing, savePairing } from "./pairing-store";
 import { reportUnexpected } from "./report";
@@ -29,15 +17,13 @@ import {
 } from "../shared/channel";
 import { NATIVE_HOST } from "../shared/constants";
 
-// The test build talks to the QA app's host and a --desktop-dev build to the
-// development app's; a real build only ever to the real app's.
 export const HOST = NATIVE_HOST;
 
 const STEP_MS = 10_000;
 const REQUEST_MS = 20_000;
-// The user compares codes and answers in the app (which waits 120 s).
+
 const APPROVAL_MS = 150_000;
-// A port keeps the background alive; close it when nothing happens.
+
 const IDLE_MS = 30_000;
 
 export const NO_HOST = "no_host";
@@ -63,8 +49,7 @@ export const MESSAGES: Record<string, string> = {
   busy: "Nedra is pairing another browser. Try again in a moment.",
   disabled: "Browser extensions are turned off in the Nedra app.",
   caller: "Nedra doesn't trust this copy of the extension.",
-  // Every code the app or the host can send needs an entry: failure() turns
-  // unknown codes into "protocol".
+
   unknown_pairing: "This browser isn't paired with the Nedra app any more.",
   launch_failed: "Nedra could not be started. Open it yourself.",
   timeout: "Nedra didn't answer in time.",
@@ -81,7 +66,6 @@ const isEnvelope = (value: unknown): value is Envelope =>
   !Array.isArray(value) &&
   typeof (value as Envelope).t === "string";
 
-// One native-messaging port, read as a queue of messages.
 class Port {
   private readonly port: chrome.runtime.Port;
   private readonly inbox: Envelope[] = [];
@@ -105,8 +89,6 @@ class Port {
       }
     });
     this.port.onDisconnect.addListener((port) => {
-      // Chromium: runtime.lastError; Firefox: port.error. A host that never
-      // answered was not found or not allowed: the switch in the app is off.
       const reason =
         ext.runtime.lastError?.message ?? (port as { error?: { message?: string } }).error?.message;
       this.fail(failure(this.heard || !reason ? APP_CLOSED : NO_HOST));
@@ -118,9 +100,7 @@ class Port {
     this.closed = error;
     try {
       this.port.disconnect();
-    } catch {
-      // already gone
-    }
+    } catch {}
     this.waiting?.reject(error);
     this.waiting = null;
   }
@@ -130,7 +110,6 @@ class Port {
     try {
       this.port.postMessage(message);
     } catch {
-      // Disconnected before the event arrived.
       this.fail(failure(this.heard ? APP_CLOSED : NO_HOST));
       throw this.closed;
     }
@@ -164,7 +143,6 @@ class Port {
   }
 }
 
-// A port to the host, once the browser lets this worker open one (see restart.ts).
 const openPort = async (): Promise<Port> => {
   if (nativeMessagingReady()) return new Port();
   if (!(await hasNativePermission())) throw failure(NO_PERMISSION);
@@ -172,8 +150,6 @@ const openPort = async (): Promise<Port> => {
   throw failure(RESTARTING);
 };
 
-// An answer that is not part of the protocol: the host's own errors and the
-// app's refusals become errors with their code.
 const answerOf = (message: Envelope, type: string): Envelope => {
   if (message.t === type) return message;
   if (message.t === "error" || message.t === "refused") {
@@ -208,7 +184,6 @@ const hello = async (port: Port, pairing: Pairing): Promise<Channel> => {
   try {
     answer = answerOf(await port.next(STEP_MS), "hello_ok");
   } catch (error) {
-    // The app no longer knows this pairing (removed in its Settings).
     if (error instanceof ApiError && error.code === "unknown_pairing") {
       await deletePairing();
       throw failure(UNPAIRED);
@@ -255,8 +230,6 @@ const request = async (link: Live, op: string, extra: Record<string, unknown>) =
   throw new ApiError(detail ?? MESSAGES[code] ?? "Nedra refused the request.", status, code);
 };
 
-// One request to the app, in order. A connection the app closed in the
-// meantime (idle, restart, lock) is replaced once.
 export const call = (op: string, extra: Record<string, unknown> = {}): Promise<unknown> => {
   const run = async () => {
     for (let attempt = 0; ; attempt++) {
@@ -272,7 +245,7 @@ export const call = (op: string, extra: Record<string, unknown> = {}): Promise<u
         const transport =
           !(error instanceof ApiError) || closed || link.port.closed || error.code === PROTOCOL;
         if (transport) drop();
-        // The app ended a connection we had kept open: try once on a new one.
+
         if (closed && reused && attempt === 0) continue;
         throw error;
       }
@@ -285,8 +258,6 @@ export const call = (op: string, extra: Record<string, unknown> = {}): Promise<u
 
 export const api = (route: "matches" | "search" | "credential" | "totp", body: unknown) =>
   call("api", { route, body });
-
-// --- pairing ---------------------------------------------------------------------
 
 interface PairingState {
   code: string | null;
@@ -312,8 +283,6 @@ const pairingFailed = (state: PairingState, error: unknown): void => {
   state.error = error instanceof ApiError ? error.message : MESSAGES[PROTOCOL]!;
 };
 
-// Wait for the user's answer in the app, then prove the new key works before
-// keeping it.
 const awaitApproval = async (state: PairingState, port: Port, pairingKey: CryptoKey) => {
   try {
     const answer = answerOf(await port.next(APPROVAL_MS), "paired");
@@ -331,8 +300,6 @@ const awaitApproval = async (state: PairingState, port: Port, pairingKey: Crypto
   }
 };
 
-// Start pairing: returns once the code is known (the popup shows it while the
-// user compares it with the app's dialog); approval is awaited in the background.
 export const startPairing = async (browser: string): Promise<void> => {
   cancelPairing();
   drop();
@@ -361,24 +328,18 @@ export const startPairing = async (browser: string): Promise<void> => {
     state.code = paired.sas;
     void awaitApproval(state, port, paired.pairingKey);
   } catch (error) {
-    // The caller reports it; keeping it for the next status too showed it
-    // twice in the settings, and again after the app was unlocked.
     state.port?.close();
     if (pairing === state) pairing = null;
     throw error;
   }
 };
 
-// Unpair on both sides: the app forgets this browser (and ends its session)
-// when it can be reached; this side forgets the pairing either way.
 export const unpair = async (): Promise<void> => {
   cancelPairing();
   if (await loadPairing()) await call("unpair").catch(() => undefined);
   drop();
   await deletePairing();
 };
-
-// --- the app --------------------------------------------------------------------
 
 export const hasNativePermission = (): Promise<boolean> =>
   ext.permissions.contains({ permissions: ["nativeMessaging"] }).catch(() => false);
@@ -403,8 +364,6 @@ export const desktopPhase = async (): Promise<{
   if (!(await hasNativePermission())) return { phase: "setup", ...none };
   if (!(await supportsX25519())) return { phase: "unsupported", ...none };
   if (pairing?.error) {
-    // A failed pairing is reported once; the next look starts fresh (the app
-    // may be unlocked by then).
     const error = pairing.error;
     pairing = null;
     return { phase: "unpaired", code: null, error };
@@ -428,7 +387,6 @@ export const desktopPhase = async (): Promise<{
   }
 };
 
-// "Open Nedra": the host starts the app.
 export const launchApp = async (): Promise<void> => {
   drop();
   const port = await openPort();
@@ -440,12 +398,10 @@ export const launchApp = async (): Promise<void> => {
   }
 };
 
-// "Unlock Nedra": bring the app's window forward.
 export const showApp = async (): Promise<void> => {
   await call("show");
 };
 
-// Locking in desktop mode locks the app (which ends every extension session).
 export const lockApp = async (): Promise<void> => {
   await call("lock").catch(() => undefined);
   drop();

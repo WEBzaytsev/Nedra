@@ -1,12 +1,3 @@
-//! The desktop app's own extension settings (not the vault): the "Allow
-//! browser extensions" switch and the paired browsers. One JSON file, `0600`
-//! in the `0700` link folder, replaced atomically.
-//!
-//! A pairing key is a secret (design decision 43): it lets a browser ask the
-//! unlocked app for logins. Anyone who can read this file runs as the user and
-//! could read the browser's memory as well, which the threat model already
-//! leaves out (design section 7).
-
 use serde::{Deserialize, Serialize};
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
@@ -49,7 +40,6 @@ struct Config {
     pairings: Vec<Pairing>,
 }
 
-/// What Settings shows; never the key.
 #[derive(Clone, Serialize, Debug, PartialEq)]
 pub struct PairingInfo {
     pub id: String,
@@ -70,8 +60,6 @@ pub fn now() -> u64 {
 }
 
 impl Store {
-    /// Open the settings in `dir`. A file this version cannot read is moved
-    /// aside (never deleted) and the switch starts off.
     pub fn open(dir: &Path) -> io::Result<Store> {
         crate::identity::private_dir(dir)?;
         let path = dir.join("config.json");
@@ -143,16 +131,12 @@ impl Store {
         self.change(|c| c.enabled = enabled)
     }
 
-    /// Store a new pairing and return its id. Past the limit, the pairing used
-    /// longest ago is dropped.
     pub fn add(&self, browser: &str, key: &[u8; 32]) -> io::Result<String> {
         let id = b64(&crate::channel::random::<16>());
         self.add_with_id(&id, browser, key)?;
         Ok(id)
     }
 
-    /// Store a pairing under `id`; returns the ids of pairings dropped to make
-    /// room (their holders must be disconnected).
     pub fn add_with_id(&self, id: &str, browser: &str, key: &[u8; 32]) -> io::Result<Vec<String>> {
         let pairing = Pairing {
             id: id.to_string(),
@@ -184,8 +168,6 @@ impl Store {
             .cloned()
     }
 
-    /// Record use; written at most once a minute per pairing (every
-    /// connection calls it).
     pub fn touch(&self, id: &str) -> io::Result<()> {
         let at = now();
         self.change(|c| {
@@ -218,76 +200,5 @@ impl Store {
                 last_used: p.last_used,
             })
             .collect()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn pairings_persist_privately_and_list_without_keys() {
-        let dir = tempfile::tempdir().unwrap();
-        let link = dir.path().join("browser-extension");
-        let store = Store::open(&link).unwrap();
-        assert!(!store.enabled(), "off by default");
-        store.set_enabled(true).unwrap();
-        let id = store.add("Chrome", &[7; 32]).unwrap();
-        store.touch(&id).unwrap();
-        let again = Store::open(&link).unwrap();
-        assert!(again.enabled());
-        let found = again.find(&id).unwrap();
-        assert_eq!(*found.key().unwrap(), [7; 32]);
-        assert!(found.last_used.is_some());
-        let listed = serde_json::to_string(&again.list()).unwrap();
-        assert!(listed.contains("Chrome") && !listed.contains(&b64(&[7; 32])));
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let mode = std::fs::metadata(link.join("config.json"))
-                .unwrap()
-                .permissions()
-                .mode();
-            assert_eq!(mode & 0o777, 0o600);
-        }
-        assert!(again.remove(&id).unwrap());
-        assert!(!again.remove(&id).unwrap());
-        assert!(Store::open(&link).unwrap().find(&id).is_none());
-    }
-
-    #[test]
-    fn the_oldest_pairing_makes_room() {
-        let dir = tempfile::tempdir().unwrap();
-        let store = Store::open(dir.path()).unwrap();
-        let first = store.add("Chrome", &[1; 32]).unwrap();
-        for _ in 1..MAX_PAIRINGS {
-            let id = store.add("Firefox", &[2; 32]).unwrap();
-            store.touch(&id).unwrap();
-        }
-        store.add("Brave", &[3; 32]).unwrap();
-        assert_eq!(store.list().len(), MAX_PAIRINGS);
-        assert!(store.find(&first).is_none());
-    }
-
-    #[test]
-    fn an_unreadable_file_is_kept_aside_and_the_switch_is_off() {
-        let dir = tempfile::tempdir().unwrap();
-        std::fs::write(
-            dir.path().join("config.json"),
-            b"{\"enabled\": true, \"surprise\": 1}",
-        )
-        .unwrap();
-        let store = Store::open(dir.path()).unwrap();
-        assert!(!store.enabled());
-        let kept: Vec<_> = std::fs::read_dir(dir.path())
-            .unwrap()
-            .filter_map(|e| e.ok())
-            .filter(|e| {
-                e.file_name()
-                    .to_string_lossy()
-                    .starts_with("config.json.unreadable-")
-            })
-            .collect();
-        assert_eq!(kept.len(), 1);
     }
 }

@@ -1,8 +1,3 @@
-// The background: the only part that talks to Nedra and the only part that
-// can inject the fill script. It answers messages from the extension's own
-// pages (popup, options) and from the vault bridge, nothing else: there is no
-// onMessageExternal and externally_connectable is empty.
-
 import { ApiError } from "./api";
 import { CLIPBOARD_ALARM, runClear, scheduleClear } from "./clipboard";
 import { credential, fill, pageInfo, totp } from "./fill";
@@ -32,11 +27,8 @@ import {
 import { resumeAfterRestart } from "./restart";
 import { getConfig, getHandoff, restrictSessionStorage, setConfig } from "./storage";
 import { ext } from "../shared/browser";
-import { E2E } from "../shared/constants";
 import { type Message, type Reply, parseMessage } from "../shared/messages";
 
-// The popup or the options page: one of our own pages, never a content script
-// (whose sender URL is the web page's).
 const extensionPage = (sender: chrome.runtime.MessageSender): boolean =>
   sender.id === ext.runtime.id &&
   typeof sender.url === "string" &&
@@ -54,7 +46,6 @@ const handle = async (
   sender: chrome.runtime.MessageSender
 ): Promise<Reply<unknown>> => {
   if (message.type === "handoff-token") {
-    // Only from a content script (the bridge) in a tab, never from our pages.
     if (sender.tab === undefined) return failed(new Error("Refused."));
     return ok(await receiveToken(message, sender));
   }
@@ -107,7 +98,6 @@ const handle = async (
       cancelPairing();
       return ok(null);
     case "unpair":
-      // Stays in desktop mode, ready to pair again.
       await unpair();
       return ok(await currentStatus());
     case "open-app":
@@ -144,15 +134,11 @@ const openPopup = async (tabId?: number): Promise<void> => {
   try {
     await ext.action.openPopup();
   } catch {
-    // Not allowed here: point at the button instead.
     await ext.action.setBadgeBackgroundColor({ color: "#e0982f", ...(tabId ? { tabId } : {}) });
     await ext.action.setBadgeText({ text: "…", ...(tabId ? { tabId } : {}) });
   }
 };
 
-// The fill shortcut: a browser-level command (a page cannot synthesize it),
-// which also grants activeTab. With exactly one match on a secure page it fills
-// directly; otherwise it opens the popup on the list.
 export const fillCommand = async (tab: chrome.tabs.Tab | undefined): Promise<string> => {
   const tabId = tab?.id;
   if (tabId === undefined) return "no-tab";
@@ -191,16 +177,8 @@ ext.alarms.onAlarm.addListener((alarm) => {
 });
 
 ext.runtime.onInstalled.addListener((details) => {
-  if (details.reason === "install" && !E2E) void ext.runtime.openOptionsPage();
+  if (details.reason === "install") void ext.runtime.openOptionsPage();
 });
 
 void restrictSessionStorage();
 void resumeAfterRestart();
-
-if (E2E) {
-  // Test build only (scripts/build.mjs --test): lets Playwright press the
-  // shortcut, which it cannot do at the browser level.
-  (globalThis as unknown as Record<string, unknown>).__nedraE2E = {
-    fillCommand: async (tabId: number) => fillCommand(await ext.tabs.get(tabId)),
-  };
-}

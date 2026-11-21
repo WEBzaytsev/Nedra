@@ -1,5 +1,3 @@
-"""One version across both editions; --check never modifies the checkout."""
-
 import argparse
 import json
 import re

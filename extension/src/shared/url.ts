@@ -1,14 +1,9 @@
-/* eslint-disable no-control-regex -- refusing control characters is the point of these patterns */
-// Origins for display and for the popup's own decisions (which page is open,
-// whether it is plain HTTP, which host a login is saved for). The server decides
-// which logins match (backend/url_match.py); this mirrors its normalization so
-// both agree on every case in testdata/vectors/url-matching.json, and refuses
-// rather than guesses wherever a browser and Python could read a URL apart.
-
 const SCHEME = /^([A-Za-z][A-Za-z0-9+.-]*):([\s\S]*)$/;
 const PORT_ONLY = /^\d+(?:[/?#]|$)/;
-const CONTROL = /[\x00-\x1f\x7f]/;
-const AUTHORITY_FORBIDDEN = /[\x00-\x20\x7f]/;
+const hasControl = (value: string): boolean =>
+  [...value].some(
+    (char) => char.charCodeAt(0) < 32 || (char.charCodeAt(0) >= 127 && char.charCodeAt(0) <= 159)
+  );
 const ASCII_LABEL = /^[a-z0-9_](?:[a-z0-9_-]{0,61}[a-z0-9_])?$/;
 const NUMERIC_LABEL = /^(?:0x[0-9a-f]*|[0-9]+)$/;
 const IPV4 = /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/;
@@ -37,23 +32,20 @@ const canonicalHost = (raw: string): string | null => {
   if (!host || host.includes("..")) return null;
   const labels = host.split(".");
   if (NUMERIC_LABEL.test(labels[labels.length - 1] ?? "")) return isIpv4(host) ? host : null;
-  const ascii = /^[\x00-\x7f]*$/.test(host);
+  const ascii = [...host].every((char) => char.charCodeAt(0) < 128);
   if (ascii && !labels.some((label) => label.startsWith("xn--"))) {
     return labels.every((label) => ASCII_LABEL.test(label)) && host.length < 254 ? host : null;
   }
   let parsed: string;
   try {
-    // The URL parser applies UTS-46 (non-transitional) exactly as navigation does.
     parsed = new URL(`https://${host}/`).hostname.replace(/\.+$/, "");
   } catch {
     return null;
   }
-  // Some URL parsers (Node 26) accept any "xn--" label; the server's IDNA check
-  // does not. Every punycode label must decode and encode back to itself.
   for (const label of parsed.split(".")) {
     if (!label.startsWith("xn--")) continue;
     const decoded = decodePunycode(label.slice(4));
-    if (!decoded || /^[\x00-\x7f]*$/.test(decoded)) return null;
+    if (!decoded || [...decoded].every((char) => char.charCodeAt(0) < 128)) return null;
     try {
       if (new URL(`https://${decoded}/`).hostname !== label) return null;
     } catch {
@@ -77,11 +69,11 @@ export const normalizeOrigin = (input: unknown): Origin | null => {
     scheme = "https";
     value = `https://${value}`;
   }
-  if (value.includes("\\") || CONTROL.test(value)) return null;
+  if (value.includes("\\") || hasControl(value)) return null;
   const rest = value.slice(scheme.length + 3);
   const end = rest.search(/[/?#]/);
   const authority = end === -1 ? rest : rest.slice(0, end);
-  if (AUTHORITY_FORBIDDEN.test(authority)) return null;
+  if (hasControl(authority) || authority.includes(" ")) return null;
   const hostPort = authority.slice(authority.lastIndexOf("@") + 1);
   if (!hostPort || hostPort.includes("%")) return null;
   let rawHost = hostPort;
@@ -118,22 +110,16 @@ export const normalize = (input: unknown): string | null => {
   return origin ? originString(origin) : null;
 };
 
-// The exact rule (same scheme, host and port). Subdomain matches need the
-// Public Suffix List and are decided by the server only.
 export const sameOrigin = (page: unknown, saved: unknown): boolean => {
   const a = normalize(page);
   return a !== null && a === normalize(saved);
 };
 
-// "github.com" for https, "http://intranet.test" for plain HTTP, like the server's
-// `host` field.
 export const displayHost = (origin: Origin): string => {
   const text = originString(origin);
   return origin.scheme === "http" ? text : text.slice("https://".length);
 };
 
-// Unicode form of a punycode host, for the tooltip next to it. Shown only as
-// extra information: the punycode form is what the popup prints.
 export const unicodeHost = (host: string): string | null => {
   const labels = host.split(".");
   if (!labels.some((label) => label.startsWith("xn--"))) return null;
@@ -143,7 +129,6 @@ export const unicodeHost = (host: string): string | null => {
   return decoded.every((label) => label !== null) ? decoded.join(".") : null;
 };
 
-// RFC 3492 decoding, for display only (browsers expose no decoder).
 const decodePunycode = (input: string): string | null => {
   const base = 36;
   const tMin = 1;
@@ -192,8 +177,6 @@ const decodePunycode = (input: string): string | null => {
   }
 };
 
-// Server addresses the extension accepts: https anywhere, plain http only on
-// this computer.
 export const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
 export const serverOrigin = (input: string): Origin | null => {

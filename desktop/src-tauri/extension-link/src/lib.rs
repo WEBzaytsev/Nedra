@@ -1,6 +1,3 @@
-//! The browser extension's desktop mode (docs/EXTENSION.md, design section
-//! 4.3): shared by the native host (`nedra-native-host`) and the app.
-
 pub mod channel;
 pub mod client;
 pub mod framing;

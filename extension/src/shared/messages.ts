@@ -1,9 +1,3 @@
-// Every message between the extension's own pages (popup, options), the vault
-// bridge content script and the background, with strict validation: a message
-// with an unknown type, a missing field, an extra field or a field of the wrong
-// type is dropped. Nothing outside the extension can send these at all
-// (externally_connectable is empty and there is no onMessageExternal).
-
 import { BROWSERS, HANDOFF_REDEEM_PATTERN, type BrowserName, TOKEN_PATTERN } from "./constants";
 
 type Shape = Record<string, "string" | "number" | "boolean" | "string?" | "id" | "tab">;
@@ -24,7 +18,7 @@ const SHAPES = {
   copied: { digest: "string" },
   settings: { subdomains: "boolean", strictClipboard: "boolean" },
   "handoff-token": { request: "string", redeem: "string" },
-  // Desktop mode.
+
   "use-desktop": {},
   pair: {},
   "cancel-pair": {},
@@ -98,8 +92,6 @@ export const parseMessage = (raw: unknown): Message | null => {
 export const isBrowserName = (value: unknown): value is BrowserName =>
   typeof value === "string" && (BROWSERS as readonly string[]).includes(value);
 
-// What the background answers.
-
 export interface Login {
   id: number;
   name: string;
@@ -109,9 +101,6 @@ export interface Login {
   has_totp: boolean;
 }
 
-// Desktop mode adds: unsupported (no X25519 in this browser), unpaired,
-// pairing (a code is shown), no-host (the app's switch is off or the app is
-// not installed), no-app (installed, not running).
 export type Phase =
   | "setup"
   | "locked"
@@ -134,7 +123,7 @@ export interface Status {
   subdomains: boolean;
   strictClipboard: boolean;
   handoffPending: boolean;
-  // Desktop mode: the six digits to compare with the app's dialog.
+
   pairingCode: string | null;
   error: string | null;
 }

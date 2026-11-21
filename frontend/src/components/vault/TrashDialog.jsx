@@ -42,7 +42,6 @@ const TrashDialog = ({ open, trash, onClose, onRestore, onPurge, onBulkRestore, 
     try {
       await onRestore({ passwordName: entry.password_name, entryId: entry.id });
     } catch {
-      // The parent reports the request error; keep this dialog open for retry.
     } finally {
       setPendingId(null);
     }
@@ -72,7 +71,6 @@ const TrashDialog = ({ open, trash, onClose, onRestore, onPurge, onBulkRestore, 
       await onBulkRestore(selectedEntries);
       setSelectedIds([]);
     } catch {
-      // The parent reports the error; retain the selection for retry.
     } finally {
       setPendingId(null);
     }
@@ -107,7 +105,6 @@ const TrashDialog = ({ open, trash, onClose, onRestore, onPurge, onBulkRestore, 
                 alignItems={{ s: "center" }}
                 justifyContent="space-between"
                 minWidth="0"
-                qa="trash-bulk-actions"
               >
                 <Text role="status">
                   {t("vault.bulk.selected", { count: selectedEntries.length })}

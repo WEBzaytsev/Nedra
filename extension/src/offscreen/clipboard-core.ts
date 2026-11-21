@@ -1,6 +1,3 @@
-// Clipboard clearing, shared by Chromium's offscreen document and Firefox's
-// background page (both have a DOM).
-
 import { sha256Hex } from "../shared/browser";
 
 export interface ClearRequest {
@@ -11,9 +8,7 @@ export interface ClearRequest {
 const readClipboard = async (): Promise<string | null> => {
   try {
     if (navigator.clipboard?.readText) return await navigator.clipboard.readText();
-  } catch {
-    // Fall back to the paste command below.
-  }
+  } catch {}
   const area = document.createElement("textarea");
   document.body.append(area);
   area.focus();
@@ -41,7 +36,7 @@ const writeEmpty = async (): Promise<void> => {
 export const clearClipboard = async ({ digest, onlyOurs }: ClearRequest): Promise<boolean> => {
   if (onlyOurs) {
     const current = await readClipboard();
-    // Unreadable, or the user copied something else since: leave it alone.
+
     if (current === null || (await sha256Hex(current)) !== digest) return false;
   }
   await writeEmpty();

@@ -18,7 +18,7 @@ Nedra uses the production identity `com.nedra.desktop`. Tauri resolves its OS ap
 - Windows: the user's Local AppData directory under that identity.
 - Linux: `$XDG_DATA_HOME/com.nedra.desktop/data/vault.db`, normally `~/.local/share/...`.
 
-Debug builds use a separate `development/` subdirectory. QA builds require an explicit absolute synthetic-data root and use `com.nedra.desktop.qa`. Release builds ignore environment overrides for the core executable and vault path. Nedra does not scan or import another application identity's directory. Reinstalling the bundle leaves Nedra data untouched. Never delete the data directory to fix a startup failure.
+Debug builds use a separate `development/` subdirectory. Release builds ignore environment overrides for the core executable and vault path. Nedra does not scan or import another application identity's directory. Reinstalling the bundle leaves Nedra data untouched. Never delete the data directory to fix a startup failure.
 
 The production storage layer creates POSIX directories `0700` and files `0600`, takes the existing single-process vault lock, checks an existing file read-only before opening it, and uses SQLite WAL, FULL synchronous writes, and the production schema/format identity. Unsupported or damaged vaults are refused, not migrated or replaced. Windows uses the current user's application-local directory and inherited OS ACLs; the installer does not grant other users access.
 
@@ -29,7 +29,6 @@ Prerequisites: uv, Node 22+, Rust 1.99 (rustup), and native Tauri build prerequi
 ```sh
 make desktop-setup
 make desktop-dev
-make desktop-test
 make desktop-check
 make check
 ```
@@ -44,7 +43,7 @@ This freezes Python 3.13.15 as PyInstaller **onedir**, then builds the real app.
 
 ## Boundaries
 
-- `backend/`: unchanged crypto, vault documents, backup format, SQL transactions, validation and endpoint behavior. One small app-factory fix preserves an explicitly injected empty session store.
+- `backend/`: shared crypto, vault documents, backup format, SQL transactions, validation and endpoint behavior.
 - `desktop/core/desktop_core/`: framed pipe server and in-process ASGI adapter. It runs the actual app lifespan. Diagnostics use stderr; stdout is reserved using duplicated descriptors. Header/body lengths are checked before allocation (64 KiB / 24 MiB). Requests, queues and concurrent operations are bounded. Cancellation acknowledges even a task cancelled before it starts.
 - `desktop/src-tauri/`: supervisor, capabilities, native dialogs, clipboard and OS lock events. The ready handshake checks both protocol and core version. At most three crash restarts per minute; startup failures show a retry screen. Windows Job Objects fail closed, Linux uses parent-death signals, and macOS uses pipe EOF plus parent monitoring.
 - `frontend/src/platform/`: the only platform switch. Axios uses normal HTTP for web builds and binary native IPC for desktop. Desktop sessions stay in memory. No vault key enters Rust or React. Native file paths never enter React; selected backups use expiring, single-use opaque grants.
@@ -61,7 +60,7 @@ Backups use Nedra backup format 3 (`.nedrabackup`). Export streams the response 
 
 An abrupt OS kill can leave a hidden `.nedra-*.partial` file containing ciphertext in the selected export folder. It is never presented as a completed backup and may be removed manually. No plaintext vault staging is used. Exported attachments and CSV source files are plaintext files explicitly chosen by the user.
 
-Atomic backup publication requires a filesystem that supports hard links (for example APFS, NTFS or ext4). Export fails safely on filesystems without this support; choose a local supported folder and then copy the completed encrypted backup elsewhere. A full 1 GiB file has not been exercised locally; the regression test exceeds 25 MiB.
+Atomic backup publication requires a filesystem that supports hard links (for example APFS, NTFS or ext4). Export fails safely on filesystems without this support; choose a local supported folder and then copy the completed encrypted backup elsewhere.
 
 ## Native security limits
 
@@ -71,40 +70,8 @@ macOS observes workspace sleep, screen sleep and session resignation, plus the u
 
 The native window requests content protection. It cannot guarantee capture prevention on Linux/Wayland or against every modern macOS capture API. Python cannot zeroize all key copies, and the renderer necessarily holds displayed plaintext while unlocked. OS compromise, same-user process memory access and malicious clipboard managers remain outside the vault encryption guarantee.
 
-## Native validation
-
-The production core tests can run from source or against a packaged binary:
-
-```sh
-CORE_BIN="$PWD/desktop/core/dist/nedra-core/nedra-core" \
-  desktop/core/build/venv/bin/python -m pytest desktop/core/tests
-
-desktop/core/dist/nedra-core/nedra-core --check-vectors testdata/vectors
-```
-
-The separate `gui-test` Rust feature and `desktop-qa` frontend build run the existing UI inside the real native webview. The QA report command and Cocoa notification injection are **absent from default production builds**. No synthetic core routes are present in either build. Never distribute a QA build.
-
-```sh
-cd desktop
-npm run tauri build -- --features gui-test --config tauri.qa.json --bundles app
-cd ..
-desktop/core/build/venv/bin/python desktop/harness/native.py \
-  --app "$PWD/desktop/src-tauri/target/release/bundle/macos/Nedra QA.app/Contents/MacOS/nedra-desktop" \
-  --root /private/tmp/nedra-native-test-UNIQUE
-```
-
-Use a new synthetic root. Do not rebuild an app bundle while a test is using it; copying it to a temporary install folder first is preferable. The CI installer adapter does that on macOS. On Linux it installs the `.deb`; Windows installs the NSIS package on its disposable runner. PR builds use disposable signing keys and retain only evidence. Trusted release builds retain verified production packages; the release workflow publishes them only after all desktop and Docker gates pass.
-
-An optional macOS dialog walkthrough is enabled by building QA with `VITE_DESKTOP_DIALOG_QA=1` and running `native.py --dialogs`. It drives the real Save/Open panels and restores through an opaque grant. It requires macOS Accessibility permission for the automation host; local automation was blocked by that permission. The maintainer completed the equivalent manual Save/Open and backup restoration walkthrough. The standard native suite does not require keystroke automation and verifies a large backup through the same Rust file workflow with a fixed QA destination.
-
-## Provenance
-
-Ported from `experiment/desktop-feasibility` at `9d3a4ea`: binary framing, ASGI adapter, stdout isolation, supervisor, platform process cleanup, onedir packaging, native CI matrix and harness structure. Synthetic storage/routes and the spike's production self-test mode were removed. The experimental branch/worktree and its evidence remain unchanged.
-
-See [VALIDATION.md](VALIDATION.md) for measured results and documented acceptance limits.
-
 ## Updater boundary
 
 The official Tauri updater runs only in Rust. Renderer capabilities expose `update_check`, `update_install` and `update_cancel`, with no endpoint, key, URL or installer arguments. The compiled configuration fixes the HTTPS GitHub endpoint and public key; there are no general updater plugin permissions. `requireSignedVersion` rejects version substitution, and a verified trusted-comment filename binds the artifact to its native target. Release collection renames artifacts before signing those canonical filenames. The plugin verifies before installation as well as after downloading.
 
-The user confirms installation in the existing Update dialog. Only after verification does Rust invalidate native grants, remove decrypted UI, clear the owned clipboard and stop the core. Windows installs per user; macOS/Linux restart after replacement. Debian users receive manual package instructions. The QA-only HTTPS endpoint and host-controlled test commands are absent from production binaries.
+The user confirms installation in the existing Update dialog. Only after verification does Rust invalidate native grants, remove decrypted UI, clear the owned clipboard and stop the core. Windows installs per user; macOS/Linux restart after replacement. Debian users receive manual package instructions.

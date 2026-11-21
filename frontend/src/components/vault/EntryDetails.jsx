@@ -116,7 +116,7 @@ const EntryDetails = ({
   };
   return (
     <Flex direction="column" gap="spacing-5" minWidth="0">
-      <Flex direction="column" gap="spacing-3" minWidth="0" as="header" qa="entry-details-header">
+      <Flex direction="column" gap="spacing-3" minWidth="0" as="header">
         {showTitle && (
           <Text as="div" role="heading" aria-level={2} variant="header-1" wordBreak="break-word">
             {entry.password_name}

@@ -25,14 +25,7 @@ const EntryFilterMenu = ({ active, counts, onChange }) => {
       placement="bottom-start"
       size="xl"
       trigger={
-        <Button
-          type="button"
-          view="outlined"
-          size="xl"
-          width="max"
-          selected={active.size > 0}
-          qa="entry-filters"
-        >
+        <Button type="button" view="outlined" size="xl" width="max" selected={active.size > 0}>
           {label}
         </Button>
       }
@@ -43,7 +36,6 @@ const EntryFilterMenu = ({ active, counts, onChange }) => {
         return (
           <MenuItem
             key={filter.key}
-            qa={`entry-filter-${filter.key}`}
             selected={selected}
             disabled={count === 0 && !selected}
             onClick={() => toggle(filter.key)}
@@ -57,7 +49,6 @@ const EntryFilterMenu = ({ active, counts, onChange }) => {
       })}
       <MenuDivider />
       <MenuItem
-        qa="entry-filters-clear"
         disabled={active.size === 0}
         onClick={() => {
           onChange(new Set());

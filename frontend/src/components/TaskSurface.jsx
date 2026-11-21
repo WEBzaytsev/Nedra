@@ -18,8 +18,6 @@ import { getPageScrollTarget, getPageScrollTop } from "../lib/pageScroll";
 
 const PageContext = createContext(null);
 
-// Reuse task bodies and handlers. Only routed phone tasks use document flow;
-// short contextual menus and destructive confirmations still use UIKit Dialog.
 const TaskSurface = ({
   open,
   children,
@@ -62,8 +60,6 @@ const TaskSurface = ({
     target.addEventListener("scroll", rememberScroll);
     section?.addEventListener("focusin", rememberFocus);
     return () => {
-      // A parent task remains mounted while its child owns the route. Keep its
-      // own position/focus separately from the position to restore on dismissal.
       previousView.current = view;
       target.removeEventListener("scroll", rememberScroll);
       section?.removeEventListener("focusin", rememberFocus);
@@ -89,7 +85,6 @@ const TaskSurface = ({
         minWidth="0"
         aria-label={props["aria-label"]}
         aria-labelledby={props["aria-labelledby"]}
-        qa="task-page"
       >
         {children}
       </Flex>
@@ -105,7 +100,7 @@ const Header = ({ caption, id, insertAfter }) => {
     <Flex as="header" direction="column" gap="spacing-3" minWidth="0">
       {page.canDismiss && !page.footerTarget && (
         <Flex>
-          <Button size="xl" view="flat-secondary" onClick={page.dismiss} qa="task-back">
+          <Button size="xl" view="flat-secondary" onClick={page.dismiss}>
             <Icon data={ArrowLeft} />
             {t("navigation.back")}
           </Button>
@@ -128,9 +123,7 @@ const Header = ({ caption, id, insertAfter }) => {
 const Body = ({ children, ...props }) => {
   const page = useContext(PageContext);
   return page ? (
-    <Box minWidth="0" qa="task-body">
-      {children}
-    </Box>
+    <Box minWidth="0">{children}</Box>
   ) : (
     <Dialog.Body {...props}>{children}</Dialog.Body>
   );
@@ -174,7 +167,6 @@ const Footer = ({
       paddingBlockEnd={
         page.footerTarget ? "max(var(--g-spacing-3), env(safe-area-inset-bottom))" : "spacing-6"
       }
-      qa="task-actions"
     >
       <Divider />
       {textButtonApply && (
@@ -218,7 +210,6 @@ const SecondaryActions = ({
           width="max"
           disabled={loading || !page.canDismiss}
           onClick={onBack}
-          qa="task-back"
         >
           <Icon data={ArrowLeft} />
           {t("navigation.back")}

@@ -1,12 +1,3 @@
-"""WebAuthn verification for personal FIDO2 factors.
-
-A WebAuthn signature proves the authenticator is present for one fresh challenge.
-The PRF output is a separate secret used only to unwrap that user's factor key.
-It is supplied by the client and is not authenticated by the assertion, so this
-protocol makes no anti-exfiltration or hardware-derived-secret claim for a
-compromised browser client.
-"""
-
 import hashlib
 import logging
 import os
@@ -43,7 +34,7 @@ USER_VERIFICATION = UserVerificationRequirement.REQUIRED
 
 
 class VerificationFailed(Exception):
-    """A WebAuthn response that is safe to report to the client."""
+    pass
 
 
 @dataclass(frozen=True, slots=True)
@@ -55,8 +46,6 @@ class _Pending:
 
 
 class Challenges:
-    """Bounded in-memory, one-use challenges. Server restart invalidates them."""
-
     def __init__(self, clock: Callable[[], float] = time.monotonic) -> None:
         self._clock = clock
         self._pending: OrderedDict[bytes, _Pending] = OrderedDict()

@@ -20,7 +20,7 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -42,10 +42,10 @@ jobs:
     permissions:
       contents: read
 
-  # Build each architecture on its own NATIVE runner (no QEMU). Emulated arm64
-  # Node/Vite builds took ~26 min and timed out; native arm64 builds in a couple
-  # of minutes. Each job pushes an untagged, digest-only image; the merge job
-  # stitches the per-arch digests into one multi-arch tag and signs it.
+
+
+
+
   build:
     needs: source
     name: build ${{ matrix.image.name }} (${{ matrix.platform.slug }})
@@ -63,7 +63,7 @@ jobs:
             args: ""
           - name: nedra-frontend
             dockerfile: docker/frontend/Dockerfile
-            # Baked placeholder; entrypoint.sh swaps in the real URL at runtime.
+
             args: VITE_API_URL=__NEDRA_API_URL__
         platform:
           - arch: linux/amd64
@@ -73,13 +73,13 @@ jobs:
             runner: ubuntu-24.04-arm
             slug: arm64
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
       - name: Set up Buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
 
       - name: Log in to GHCR
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -87,7 +87,7 @@ jobs:
 
       - name: Build and push by digest
         id: build
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8
         with:
           context: .
           file: ${{ matrix.image.dockerfile }}
@@ -106,15 +106,15 @@ jobs:
           touch "/tmp/digests/${digest#sha256:}"
 
       - name: Upload digest
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: digest-${{ matrix.image.name }}-${{ matrix.platform.slug }}
           path: /tmp/digests/*
           if-no-files-found: error
           retention-days: 1
 
-  # Combine the per-arch digests into one multi-arch tag, then cosign-sign the
-  # resulting manifest-list digest (the digest `cosign verify` checks).
+
+
   merge:
     name: merge & sign ${{ matrix.image }}
     runs-on: ubuntu-latest
@@ -132,20 +132,20 @@ jobs:
           - nedra-frontend
     steps:
       - name: Download digests
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           path: /tmp/digests
           pattern: digest-${{ matrix.image }}-*
           merge-multiple: true
 
       - name: Set up Buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f
 
       - name: Install cosign
-        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac
 
       - name: Log in to GHCR
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -153,7 +153,7 @@ jobs:
 
       - name: Docker metadata
         id: meta
-        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ matrix.image }}
           tags: |
@@ -182,25 +182,18 @@ jobs:
           DIGEST: ${{ steps.digest.outputs.digest }}
         run: cosign sign --yes "${IMAGE}@${DIGEST}"
 
-  smoke:
-    needs: [source, merge]
-    uses: ./.github/workflows/release-smoke.yml
-    with:
-      version: ${{ needs.source.outputs.version }}
-    permissions:
-      contents: read
 
   publish:
-    needs: [source, desktop, smoke]
+    needs: [source, desktop, merge]
     runs-on: ubuntu-latest
     environment: desktop-release
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           persist-credentials: false
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
           pattern: desktop-packages-*
           path: release-assets

@@ -39,6 +39,7 @@ import { useTranslation } from "react-i18next";
 import { endSession } from "../api/session";
 import { useColorMode } from "../hooks/useColorMode";
 import useMenuAction from "../hooks/useMenuAction";
+import { useNotify } from "../hooks/useNotify";
 import { getCurrentUser } from "../utils";
 
 import BrandMark from "./BrandMark";
@@ -52,12 +53,8 @@ const Brand = ({ version, onClick }) => {
   const name = "Nedra";
   return (
     <Button component={Link} to="/passwords" onClick={onClick} view="flat" size="xl">
-      <Button.Icon>
-        {({ size }) => <BrandMark width={size} height={size} data-qa="brand-mark" />}
-      </Button.Icon>
-      <Text variant="subheader-2" qa="brand-title">
-        {name}
-      </Text>
+      <Button.Icon>{({ size }) => <BrandMark width={size} height={size} />}</Button.Icon>
+      <Text variant="subheader-2">{name}</Text>
       {version && (
         <Box as="span" marginInlineStart="spacing-2">
           <Text color="secondary" variant="caption-2">
@@ -74,6 +71,7 @@ const TopMenu = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { mode, setMode } = useColorMode();
+  const { notify, dismiss } = useNotify();
 
   const { isMediaActive } = useLayoutContext();
   const desktop = isMediaActive("l");
@@ -159,9 +157,17 @@ const TopMenu = () => {
     closeMobileNav();
     endSession();
   };
+  const checkUpdatesManually = async () => {
+    if (await checkForUpdates({ manual: true })) dismiss("update-check-error");
+    else
+      notify(t("topMenu.updateCheckError"), {
+        name: "update-check-error",
+        theme: "danger",
+      });
+  };
   useMenuAction("settings", openSettings);
   useMenuAction("lock", logOut);
-  useMenuAction("check-updates", checkForUpdates);
+  useMenuAction("check-updates", checkUpdatesManually);
   useMenuAction("toggle-theme", () => setMode(mode === "dark" ? "light" : "dark"));
 
   const navItems = [
@@ -175,7 +181,7 @@ const TopMenu = () => {
   ];
   const navigation = (
     <Box as="nav" aria-label={t("navigation.workspace")}>
-      <Flex direction="column" qa="navigation-items">
+      <Flex direction="column">
         {navItems.map((item) => {
           const selected = `${location.pathname}${location.search}` === item.id;
           return (
@@ -235,15 +241,8 @@ const TopMenu = () => {
     </Flex>
   );
   const profile = (
-    <Flex
-      as="footer"
-      direction="column"
-      gap="spacing-2"
-      padding="spacing-3"
-      flexShrink={0}
-      qa="navigation-footer"
-    >
-      <Flex alignItems="center" gap="spacing-3" minWidth="0" qa="navigation-account">
+    <Flex as="footer" direction="column" gap="spacing-2" padding="spacing-3" flexShrink={0}>
+      <Flex alignItems="center" gap="spacing-3" minWidth="0">
         <Avatar text={currentUser?.username ?? "?"} size="m" aria-label={currentUser?.username} />
         <Flex direction="column" gap="spacing-1" minWidth="0">
           <Text variant="subheader-1" wordBreak="break-word">
@@ -254,7 +253,7 @@ const TopMenu = () => {
           </Text>
         </Flex>
       </Flex>
-      <Flex direction="column" qa="navigation-preferences">
+      <Flex direction="column">
         <Menu
           placement="top-end"
           trigger={(triggerProps, triggerRef) => (
@@ -337,7 +336,6 @@ const TopMenu = () => {
       minHeight="0"
       width={mobile ? "100vw" : undefined}
       maxWidth={mobile ? "360px" : undefined}
-      qa="navigation-shell"
     >
       <Flex
         alignItems="center"
@@ -345,7 +343,6 @@ const TopMenu = () => {
         gap="spacing-2"
         padding="spacing-4"
         flexShrink={0}
-        qa="navigation-header"
       >
         <Brand version={version} onClick={closeMobileNav} />
         {mobile && (
@@ -368,7 +365,6 @@ const TopMenu = () => {
         flexGrow={1}
         minHeight="0"
         overflow="auto"
-        qa="navigation-body"
       >
         {navigation}
         <Divider />
@@ -407,7 +403,7 @@ const TopMenu = () => {
           <Divider orientation="vertical" />
         </Flex>
       ) : (
-        <Flex as="header" direction="column" qa="mobile-header">
+        <Flex as="header" direction="column">
           <Flex
             alignItems="center"
             gap="spacing-3"
@@ -416,7 +412,6 @@ const TopMenu = () => {
           >
             <Button
               ref={mobileMenuButton}
-              qa="burger"
               type="button"
               view="flat-secondary"
               size="xl"

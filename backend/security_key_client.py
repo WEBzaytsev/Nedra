@@ -1,15 +1,3 @@
-"""
-A FIDO2 client for the CLI and the desktop app, which talk to the security key
-over USB (CTAP2) instead of through a browser. It returns exactly what a
-browser's WebAuthn API returns, built with the origin ``https://<rp id>``, plus
-the key's PRF output (CTAP2 hmac-secret), so the server checks every client the
-same way (``webauthn.py``).
-
-The key always verifies its user (its PIN, or a fingerprint on keys that have
-one), like browsers do: its PRF output differs between uses with and without
-verification, so every client must ask the same way.
-"""
-
 import base64
 import os
 import sys
@@ -40,14 +28,13 @@ from fido2.webauthn import (
     UserVerificationRequirement,
 )
 
-# The desktop app has no web origin; use the vault's configured, trusted RP.
 DESKTOP_RP_ID = os.environ.get("NEDRA_SECURITY_KEY_RP_ID", "localhost")
 _WAIT_FOR_KEY_SECONDS = 60
 _POLL_SECONDS = 0.25
 
 
 class SecurityKeyError(Exception):
-    """A message meant for the user."""
+    pass
 
 
 class SecurityKeyCancelled(SecurityKeyError):
@@ -84,8 +71,6 @@ class _Prompt(UserInteraction):
 
 
 def _windows_client(origin: str, prompt: _Prompt):
-    """Windows only lets administrators talk to FIDO keys directly; everyone
-    else goes through the system's WebAuthn API, which supports PRF."""
     if sys.platform != "win32":
         return None
     from fido2.client.windows import WindowsClient
@@ -154,8 +139,6 @@ def register(
     get_pin: Callable[[], str | None] = lambda: None,
     event: Event | None = None,
 ) -> dict:
-    """Create a credential from the server's registration options; returns
-    ``{"credential_id", "registration"}``."""
     event = event or Event()
     origin = f"https://{rp_id}"
     creation = PublicKeyCredentialCreationOptions(
@@ -222,8 +205,6 @@ def answer(
     get_pin: Callable[[], str | None] = lambda: None,
     event: Event | None = None,
 ) -> dict:
-    """Answer a challenge from the server (``SecurityKeyChallenge``) with any
-    registered key that is plugged in; returns a ``SecurityKeyAssertion``."""
     event = event or Event()
     keys = challenge["keys"]
     if not keys:

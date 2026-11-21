@@ -48,8 +48,7 @@ async def fetch_vault(session: AsyncSession) -> VaultModel | None:
 
 
 def key_material(model: VaultModel) -> KeyMaterial:
-    # SQLite affinity is not a type check. In particular bytes(integer) allocates
-    # that many zeroes; never coerce hostile scalar values from the file.
+
     for value, length in (
         (model.kdf_salt, 16),
         (model.password_check, 32),
@@ -111,13 +110,6 @@ class MasterPasswordCRUD(BaseCRUD):
             raise InvalidRequest(_DAMAGED) from None
 
     async def verify_vault_key(self, key: VaultKey | None) -> VaultKey:
-        """
-        Check that ``key`` belongs to the current vault key, inside the
-        request's transaction. Write requests run under SQLite's write lock from
-        their first statement (BEGIN IMMEDIATE), so a master password change can
-        never commit between this check and their writes; read requests see the
-        key check and the rows of one snapshot.
-        """
         if key is None:
             raise InvalidKey("Vault key is missing.")
         model = await fetch_vault(self.session)
@@ -128,14 +120,6 @@ class MasterPasswordCRUD(BaseCRUD):
         return key
 
     async def unlock(self, master_password: str) -> VaultKey | None:
-        """
-        Return the vault key for ``master_password``, or None if it is wrong.
-
-        The transaction is ended before the slow KDF so a queue of unlocks holds
-        no connection and no lock. The key is then confirmed against the current
-        key check, so a password that a concurrent change has just replaced is
-        refused instead of opening a session every route would reject.
-        """
         material = key_material(await self._get_model())
         await self.session.commit()
         key = await self._open(master_password, material)
@@ -172,11 +156,6 @@ class MasterPasswordCRUD(BaseCRUD):
         return key
 
     async def check_master_password(self, master_password: str) -> VaultKey:
-        """
-        Check the master password a backup asks for and return the key it
-        opens. The transaction is ended first, so the KDF never holds the write
-        lock; ``confirm_same_key`` must run afterwards, in the new transaction.
-        """
         material = key_material(await self._get_model())
         await self.session.commit()
         opened = await self._open(master_password, material)
@@ -185,9 +164,6 @@ class MasterPasswordCRUD(BaseCRUD):
         return opened
 
     async def confirm_same_key(self, opened: VaultKey, key: VaultKey) -> None:
-        """Check, in the request's new transaction, that the session's key is
-        still the vault's and is the one the master password opened, so a
-        master password change that committed meanwhile stops the request."""
         await self.verify_vault_key(key)
         if not opened.matches(key.check):
             raise InvalidKey(_INVALID_KEY)
@@ -195,13 +171,6 @@ class MasterPasswordCRUD(BaseCRUD):
     async def update_master_password(
         self, master_password: str, new_master_password: str
     ) -> MasterPasswordUpdate:
-        """
-        Re-key the vault: a new random vault key and salt, every entry and
-        attachment decrypted with the old keys and sealed again with the new
-        ones, every name index recomputed. The KDFs run before the write lock
-        is taken; the re-encryption then runs in one write transaction that
-        first confirms the vault still holds the key record the KDFs used.
-        """
         observed = key_material(await self._get_model())
         await self.session.commit()
         old_key = await self._open(master_password, observed)

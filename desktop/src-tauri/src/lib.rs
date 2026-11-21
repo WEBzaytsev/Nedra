@@ -12,8 +12,6 @@ mod lock_windows;
 mod menu;
 mod native;
 mod protocol;
-#[cfg(feature = "gui-test")]
-mod qa;
 mod security_key;
 mod sidecar;
 mod updates;
@@ -24,17 +22,11 @@ use std::time::Instant;
 use tauri::{Emitter, Manager, RunEvent};
 
 fn core_config(app: &tauri::AppHandle) -> Result<CoreConfig, Box<dyn std::error::Error>> {
-    #[cfg(all(feature = "gui-test", debug_assertions))]
-    let _ = app;
-    #[cfg(not(feature = "gui-test"))]
     let base = app.path().app_local_data_dir()?;
-    #[cfg(feature = "gui-test")]
-    let base = std::path::PathBuf::from(std::env::var("NEDRA_QA_ROOT")?);
     if !base.is_absolute() {
         return Err("Application data location must be absolute".into());
     }
 
-    // Development has a separate identity and never opens an alpha user vault.
     let base = if cfg!(debug_assertions) {
         base.join("development")
     } else {
@@ -111,13 +103,10 @@ fn core_config(app: &tauri::AppHandle) -> Result<CoreConfig, Box<dyn std::error:
 }
 
 pub fn run() {
-    #[cfg(feature = "gui-test")]
-    qa::restore_launch_environment();
     let launched = Instant::now();
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(updates::Updates::default());
-    #[cfg(not(feature = "gui-test"))]
     let builder = builder.invoke_handler(tauri::generate_handler![
         commands::core_request,
         commands::core_cancel,
@@ -149,48 +138,8 @@ pub fn run() {
         extension::extension_unpair,
         extension::extension_pairing_answer
     ]);
-    #[cfg(feature = "gui-test")]
-    let builder = builder.invoke_handler(tauri::generate_handler![
-        commands::core_request,
-        commands::core_cancel,
-        commands::core_status,
-        commands::core_restart,
-        lock::vault_lock,
-        menu::menu_state,
-        clipboard::clipboard_write,
-        clipboard::clipboard_clear,
-        native::choose_backup,
-        native::backup_export,
-        native::backup_import,
-        native::save_file,
-        native::open_external,
-        biometric::biometric_available,
-        biometric::biometric_status,
-        biometric::biometric_login_options,
-        biometric::biometric_enroll,
-        biometric::biometric_login,
-        biometric::biometric_remove,
-        updates::update_check,
-        updates::update_install,
-        updates::update_cancel,
-        security_key::security_key_register,
-        security_key::security_key_answer,
-        security_key::security_key_cancel,
-        extension::extension_status,
-        extension::extension_set_enabled,
-        extension::extension_unpair,
-        extension::extension_pairing_answer,
-        qa::qa_report,
-        qa::qa_backup,
-        qa::qa_lock,
-        qa::qa_update_step
-    ]);
     let app = builder
         .setup(move |app| {
-            #[cfg(feature = "gui-test")]
-            app.add_capability(
-                r#"{"identifier":"qa","windows":["main"],"permissions":["allow-qa-report","allow-qa-lock","allow-qa-backup","allow-qa-update-step"]}"#,
-            )?;
             let handle = app.handle().clone();
             let emitter = handle.clone();
             let supervisor = Supervisor::start(core_config(&handle)?, launched, move |status| {
@@ -205,7 +154,7 @@ pub fn run() {
             app.manage(supervisor);
             app.manage(native::Files::default());
             app.manage(security_key::SecurityKeys::new(core_config(&handle)?));
-            // Browser extensions are optional: a local host failure never blocks the vault.
+
             match extension::Extension::start(&handle) {
                 Ok(extension) => {
                     app.manage(extension);
@@ -227,9 +176,11 @@ pub fn run() {
                                 && url.port() == Some(3000))
                     })
                     .on_new_window(|_, _| tauri::webview::NewWindowResponse::Deny)
-                .on_page_load(|window, payload| {
-                    if payload.event() == tauri::webview::PageLoadEvent::Finished { let _ = window.show(); }
-                })
+                    .on_page_load(|window, payload| {
+                        if payload.event() == tauri::webview::PageLoadEvent::Finished {
+                            let _ = window.show();
+                        }
+                    })
                     .build()?;
             #[cfg(windows)]
             lock_windows::install(&window)?;

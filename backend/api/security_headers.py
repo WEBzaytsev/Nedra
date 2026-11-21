@@ -5,13 +5,6 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 
 class SecurityHeaders:
-    """
-    Set the security headers on every HTTP response. A pure ASGI middleware, not
-    Starlette's BaseHTTPMiddleware: that one runs the app inside an anyio cancel
-    scope, and a request cancelled there also cancels SQLAlchemy's cleanup, so
-    its pooled connection is never returned.
-    """
-
     def __init__(self, app: ASGIApp, headers: Mapping[str, str]) -> None:
         self.app = app
         self.headers = dict(headers)

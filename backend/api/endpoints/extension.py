@@ -1,5 +1,3 @@
-"""Fill-only browser-extension routes with server-enforced session scope."""
-
 from datetime import UTC, datetime
 from urllib.parse import urlsplit
 

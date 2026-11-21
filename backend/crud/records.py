@@ -29,9 +29,6 @@ _TIMESTAMP = TypeAdapter(datetime)
 
 
 def history_timestamp(value: str) -> str:
-    """A history time the API's response model can read back: validated with
-    the same parser (``PasswordHistoryEntry.changed_at``), so a value Python's
-    ``fromisoformat`` accepts but pydantic does not can never be stored."""
     _TIMESTAMP.validate_python(value)
     return value
 
@@ -61,12 +58,6 @@ class HistoryItem(_Strict):
 
 
 class EntryDocument(_Strict):
-    """
-    The encrypted content of one entry, exactly as vault format 3 stores it
-    (docs/VAULT_FORMAT.md). Every key is required and nothing else is allowed,
-    so a document this release did not write is refused instead of guessed at.
-    """
-
     name: str
     kind: Literal["login", "note"]
     username: str | None
@@ -104,9 +95,6 @@ def _decode[T: BaseModel](model: type[T], raw: bytes) -> T:
 
 
 def open_entry(key: VaultKey, entry: EntryModel) -> EntryDocument:
-    """Decrypt and check one entry. Its name must hash to the row's name index,
-    so a document copied into another row, or an index pointed at another
-    entry, is refused."""
     if not (
         isinstance(entry.created, datetime)
         and isinstance(entry.updated, datetime)
@@ -230,10 +218,6 @@ async def find_entry(
     deleted: bool = False,
     entry_id: int | None = None,
 ) -> tuple[EntryModel, EntryDocument]:
-    """
-    The active entry named ``name`` (or, with ``deleted``, the most recently
-    trashed one), found through its name index and checked after decryption.
-    """
     trashed = (
         EntryModel.deleted.is_not(None) if deleted else EntryModel.deleted.is_(None)
     )

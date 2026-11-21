@@ -37,16 +37,12 @@ const fetchLatestRelease = async () => {
 };
 
 export const getUpdateStatus = async () => {
-  try {
-    const [current, release] = await Promise.all([fetchCurrentVersion(), fetchLatestRelease()]);
-    if (!current || !release?.tag) return null;
-    return {
-      current,
-      latest: release.tag,
-      releaseUrl: release.releaseUrl,
-      updateAvailable: compareVersions(release.tag, current) > 0,
-    };
-  } catch {
-    return null;
-  }
+  const [current, release] = await Promise.all([fetchCurrentVersion(), fetchLatestRelease()]);
+  if (!current || !release?.tag) throw new Error("Update version unavailable");
+  return {
+    current,
+    latest: release.tag,
+    releaseUrl: release.releaseUrl,
+    updateAvailable: compareVersions(release.tag, current) > 0,
+  };
 };

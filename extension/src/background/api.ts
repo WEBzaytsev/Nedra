@@ -1,10 +1,3 @@
-// The only network code in the extension: requests to the user's own Nedra
-// API, nowhere else. Every request refuses redirects (the session token must
-// never follow one to another host), sends no cookies, is never cached, times
-// out, and reads at most MAX_RESPONSE_BYTES of a JSON answer whose shape is
-// checked before anything uses it. TLS errors fail closed: fetch has no way to
-// accept a certificate the browser does not trust.
-
 import {
   MAX_RESPONSE_BYTES,
   REQUEST_TIMEOUT_MS,
@@ -102,8 +95,6 @@ export const request = async (
   }
   return data;
 };
-
-// Shape checks for every answer the extension reads.
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);

@@ -33,6 +33,7 @@ const LoginPage = () => {
   const usernameRef = useRef(null);
   const passwordRef = useRef(null);
   const confirmRef = useRef(null);
+  const recoveryRef = useRef(null);
   const [invalidField, setInvalidField] = useState("");
   const reportError = (message, field, ref) => {
     setError(message);
@@ -70,7 +71,7 @@ const LoginPage = () => {
     }
   }, [fetchStatus, t]);
 
-  const strength = initialized === false ? getMasterPasswordStrength(value) : null;
+  const strength = initialized === false || recovering ? getMasterPasswordStrength(value) : null;
 
   const handleLogin = () => {
     if (!username.trim()) {
@@ -119,8 +120,20 @@ const LoginPage = () => {
   };
 
   const handleRecovery = () => {
-    if (!username.trim() || !recoveryCode.trim() || !value || value !== confirm) {
-      reportError(t("auth.validation.enterRecovery"), "recovery", passwordRef);
+    if (!username.trim()) {
+      reportError(t("auth.validation.enterUsername"), "username", usernameRef);
+      return;
+    }
+    if (!recoveryCode.trim()) {
+      reportError(t("auth.validation.enterRecovery"), "recovery", recoveryRef);
+      return;
+    }
+    if (!value) {
+      reportError(t("auth.validation.enterMasterPassword"), "password", passwordRef);
+      return;
+    }
+    if (value !== confirm) {
+      reportError(t("auth.validation.passwordsDoNotMatch"), "confirm", confirmRef);
       return;
     }
     if (getMasterPasswordStrength(value).value < 70) {
@@ -180,7 +193,7 @@ const LoginPage = () => {
               (recovering ? handleRecovery : initialized ? handleLogin : handleCreate)();
           }}
         >
-          <Flex alignItems="center" justifyContent="space-between" gap="spacing-2">
+          <Flex alignItems="center" justifyContent="space-between" wrap gap="spacing-2">
             <Flex alignItems="center" gap="spacing-2">
               <BrandMark />
               <Text variant="subheader-3">Nedra</Text>
@@ -242,10 +255,17 @@ const LoginPage = () => {
           {recovering && (
             <PasswordField
               label={t("auth.recoveryCode")}
+              controlRef={recoveryRef}
+              validationState={error && invalidField === "recovery" ? "invalid" : undefined}
+              errorMessage={invalidField === "recovery" ? error : undefined}
               required
               value={recoveryCode}
               disabled={loading}
-              onUpdate={setRecoveryCode}
+              onUpdate={(next) => {
+                setRecoveryCode(next);
+                setError(null);
+                setInvalidField("");
+              }}
               autoComplete="off"
               controlProps={{ "aria-label": t("auth.recoveryCode") }}
             />
@@ -257,19 +277,27 @@ const LoginPage = () => {
             errorMessage={invalidField === "password" ? error : undefined}
             required
             value={value}
-            onGenerate={initialized ? undefined : setValue}
+            onGenerate={
+              initialized && !recovering
+                ? undefined
+                : (next) => {
+                    setValue(next);
+                    setError(null);
+                    setInvalidField("");
+                  }
+            }
             disabled={loading}
             onUpdate={(next) => {
               setValue(next);
               setError(null);
               setInvalidField("");
             }}
-            autoComplete={initialized ? "current-password" : "new-password"}
+            autoComplete={initialized && !recovering ? "current-password" : "new-password"}
             controlProps={{
               "aria-label": t(recovering ? "auth.newPassword" : "auth.masterPassword"),
             }}
           />
-          {!initialized && value && strength && (
+          {value && strength && (
             <Flex direction="column" gap="spacing-2" aria-live="polite">
               <Progress value={strength.value} theme={strength.theme} size="s" />
               <Text color="secondary">{t(strength.labelKey)}</Text>
@@ -293,6 +321,10 @@ const LoginPage = () => {
                 autoComplete="new-password"
                 controlProps={{ "aria-label": t("auth.confirmMasterPassword") }}
               />
+            </>
+          )}
+          {!initialized && (
+            <>
               <Alert theme="warning" message={t("auth.noRecoveryWarning")} />
               <Checkbox
                 checked={acknowledged}
@@ -331,8 +363,12 @@ const LoginPage = () => {
               disabled={loading}
               onClick={() => {
                 setRecovering(!recovering);
+                setValue("");
+                setConfirm("");
+                setRecoveryCode("");
                 setError(null);
                 setInvalidField("");
+                usernameRef.current?.focus();
               }}
               view="flat"
             >

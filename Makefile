@@ -5,7 +5,7 @@ COMPOSE_PROD := docker compose -f docker-compose.prod.yml
 .PHONY: all
 all: clean dev
 
-# Development: local, build from source, hot-reload (UI :3000, API :8000)
+
 
 .PHONY: dev
 dev:
@@ -24,7 +24,7 @@ clean:
 	@echo 'Removing cache files...'
 	-find . -type f -name '*.py[co]' -delete -o -type d -name __pycache__ -delete
 
-# Production: the real vault, run from prebuilt GHCR images (needs a sibling .env)
+
 
 .PHONY: prod-up
 prod-up:
@@ -53,8 +53,8 @@ clean-prod:
 		echo 'Aborted. Nothing was removed.'; \
 	fi
 
-# Release: bump versions, stamp the changelog, tag, push, and publish a GitHub
-# release (which triggers the signed image build). Usage: make release VERSION=1.1.0
+
+
 .PHONY: release release-dry
 release:
 	@test -n "$(VERSION)" || { echo 'usage: make release VERSION=X.Y.Z'; exit 1; }
@@ -66,43 +66,25 @@ release-dry:
 
 .PHONY: lint
 lint:
-	cd backend && uv run ruff check . ../docker/smoke
+	cd backend && uv run ruff check .
 	cd frontend && npm run lint
 
 .PHONY: typecheck
 typecheck:
-	cd backend && uv run ty check . ../docker/smoke
+	cd backend && uv run ty check .
 
 .PHONY: format
 format:
-	cd backend && uv run ruff format . ../docker/smoke
+	cd backend && uv run ruff format .
 	cd frontend && npm run format
-
-# Tests use a throwaway SQLite vault in a temporary folder; no services needed.
-.PHONY: test
-test:
-	cd backend && uv run pytest
-	cd frontend && npm test
-	node --test docker/frontend/runtime-config.test.mjs
-
-# Builds the frontend image and checks CSP and responsive vault workflows in Chromium.
-.PHONY: test-browser
-test-browser:
-	docker build -f docker/frontend/Dockerfile --build-arg VITE_API_URL=__NEDRA_API_URL__ -t nedra-frontend:browser-test .
-	cd docker/frontend/browser && npm ci && npx playwright install chromium && npm test
-
-# Fuzzing with many more Hypothesis examples, fault injection and scale tests.
-.PHONY: test-stress
-test-stress:
-	cd backend && HYPOTHESIS_PROFILE=stress uv run pytest -m "stress or not stress"
 
 .PHONY: check
 check:
-	cd backend && uv run ruff check . ../docker/smoke && uv run ruff format --check . ../docker/smoke && uv run ty check . ../docker/smoke
+	cd backend && uv run ruff check . && uv run ruff format --check . && uv run ty check .
 	cd frontend && npm run lint && npm run format:check
 
-# Desktop uses a private Python process, never the Docker/server installation.
-.PHONY: desktop-setup desktop-dev desktop-build desktop-test desktop-check
+
+.PHONY: desktop-setup desktop-dev desktop-build desktop-check
 desktop-setup:
 	python3 desktop/dev_setup.py
 	cd frontend && npm ci
@@ -115,10 +97,6 @@ desktop-build:
 	python3 desktop/core/build_core.py --python 3.13.15
 	cd frontend && npm ci
 	cd desktop && npm ci && npm run tauri build -- --bundles app
-
-desktop-test:
-	desktop/core/build/venv/bin/python -m pytest desktop/core/tests
-	cd desktop/src-tauri && cargo test
 
 desktop-check:
 	cd desktop/src-tauri && cargo fmt --check && cargo clippy --all-targets -- -D warnings

@@ -1,7 +1,3 @@
-// All password-strength scoring lives here. Two scales share one character-class
-// core: a 5-level scale for stored vault entries (getPasswordStrength) and a
-// 4-level scale for the master password on the login screen (getMasterPasswordStrength).
-
 const charClasses = (password) => ({
   lower: /[a-z]/.test(password),
   upper: /[A-Z]/.test(password),
@@ -17,7 +13,6 @@ const STRENGTH_LEVELS = [
   { labelKey: "strength.veryStrong", recommend: false },
 ];
 
-// 5-level scale used across the vault (strength bar + row icons).
 export const getPasswordStrength = (password) => {
   if (!password) return null;
 
@@ -30,7 +25,6 @@ export const getPasswordStrength = (password) => {
   if (number) score++;
   if (special) score++;
 
-  // Short passwords are capped regardless of character variety.
   if (password.length < 6) score = Math.min(score, 0);
   else if (password.length < 8) score = Math.min(score, 1);
 
@@ -38,8 +32,6 @@ export const getPasswordStrength = (password) => {
   return { level, ...STRENGTH_LEVELS[level] };
 };
 
-// 4-level scale for the master password. `value` drives Gravity Progress and
-// the create-vault threshold; `theme` is a native Gravity severity.
 export const getMasterPasswordStrength = (password) => {
   if (!password) return null;
 

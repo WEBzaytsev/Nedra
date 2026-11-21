@@ -553,7 +553,6 @@ const PasswordsPage = () => {
   };
 
   const handlePurge = async (name) => {
-    // TrashDialog keeps a failed purge inline, alongside Retry and Cancel.
     await purge(name);
     notify(t("vault.messages.permanentlyDeleted", { count: 1 }), { theme: "success" });
   };
@@ -640,7 +639,6 @@ const PasswordsPage = () => {
       height={desktopShell ? "calc(100dvh - var(--g-spacing-6) - var(--g-spacing-6))" : undefined}
       overflow={desktopShell ? "hidden" : undefined}
       as="section"
-      qa="vault-page"
     >
       <Box
         hidden={
@@ -818,7 +816,6 @@ const PasswordsPage = () => {
                       value={search}
                       onUpdate={setSearch}
                       hasClear
-                      qa="vault-search"
                       controlProps={{ "aria-label": t("vault.searchPlaceholder") }}
                     />
                   </Col>

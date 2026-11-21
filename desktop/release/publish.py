@@ -1,5 +1,3 @@
-"""Publish only a fully verified draft; never overwrite an existing release."""
-
 import hashlib
 import json
 import subprocess
@@ -42,8 +40,8 @@ notes.write_text(
     "AppImage supports built-in updates; Debian uses package updates. SHA256SUMS and "
     "per-target source/build provenance are attached.\n"
 )
-# If this fails because a draft already exists, inspect it before resuming;
-# an automatic retry must not replace previously staged artifacts.
+
+
 gh(
     "release",
     "create",

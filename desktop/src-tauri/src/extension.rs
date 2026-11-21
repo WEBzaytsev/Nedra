@@ -1,18 +1,3 @@
-//! Browser extensions in desktop mode (docs/EXTENSION.md, design 4.3).
-//!
-//! Settings → Browser extension → "Allow browser extensions" (off by default,
-//! stored in the app's own folder, not the vault). On: the app records how to
-//! start it (`launch.json`), writes the native-host manifests for the browsers
-//! it finds and listens on its local endpoint. Off: it stops listening, closes
-//! every connection, ends every extension session in the core and removes the
-//! manifests. Pairings stay until the user removes them.
-//!
-//! The link itself (pairing, channel, requests) is in the
-//! `nedra-extension-link` crate; this module gives it the window (approval
-//! dialog, bring to front, lock) and the core (unlocked?, open a session, call
-//! `/api/extension/*`). Locking ends every extension session because it stops
-//! the core; the tokens kept here are forgotten at the same moment.
-
 use std::io;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -38,9 +23,6 @@ const HOST: &str = if cfg!(windows) {
 };
 
 fn identity() -> io::Result<Identity> {
-    #[cfg(feature = "gui-test")]
-    return Identity::qa_from_env();
-    #[cfg(not(feature = "gui-test"))]
     Ok(if cfg!(debug_assertions) {
         Identity::Development
     } else {
@@ -48,17 +30,8 @@ fn identity() -> io::Result<Identity> {
     })
 }
 
-/// QA builds find browsers below their own root (the harness creates the
-/// profile folders), so they never write into the runner's real profiles.
-fn roots(identity: &Identity) -> io::Result<Roots> {
-    match identity {
-        Identity::Qa(root) => Ok(Roots {
-            home: root.join("home"),
-            local: root.join("local"),
-            roaming: root.join("roaming"),
-        }),
-        _ => Roots::of_user(),
-    }
+fn roots(_: &Identity) -> io::Result<Roots> {
+    Roots::of_user()
 }
 
 struct Pending {
@@ -186,8 +159,7 @@ pub struct Extension {
     link: Arc<Link<AppDesktop>>,
     running: Mutex<Option<Running>>,
     error: Mutex<Option<String>>,
-    /// The browsers with a manifest, as of the last enable/disable (Settings
-    /// polls the status; the locations are not scanned each time).
+
     browsers: Mutex<Vec<&'static str>>,
 }
 
@@ -218,7 +190,6 @@ impl Extension {
             error: Mutex::new(None),
         });
         if extension.link.desktop().store.enabled() {
-            // Rewritten on every start: a browser installed since, a moved app.
             if let Err(error) = extension.enable() {
                 *extension.error.lock().unwrap() = Some(message(error));
             }
@@ -235,8 +206,6 @@ impl Extension {
         })
     }
 
-    /// The host next to the app's executable; an AppImage's mount path changes
-    /// on every start, so it gets a copy in the app's folder (decision 42).
     fn host(&self) -> io::Result<PathBuf> {
         let bundled = std::env::current_exe()?
             .parent()
@@ -263,16 +232,12 @@ impl Extension {
         Ok(bundled)
     }
 
-    /// How the host starts this app ("Open Nedra" in the popup).
     fn write_launch(&self) -> io::Result<()> {
         let program = std::env::var_os("APPIMAGE")
             .filter(|_| cfg!(target_os = "linux"))
             .map(PathBuf::from)
             .map_or_else(std::env::current_exe, Ok)?;
-        let args: Vec<String> = match &self.identity {
-            Identity::Qa(root) => vec!["--qa-root".into(), root.to_string_lossy().into_owned()],
-            _ => Vec::new(),
-        };
+        let args: Vec<String> = Vec::new();
         let dir = self.identity.link_dir()?;
         private_dir(&dir)?;
         let partial = dir.join(".launch.json.partial");
@@ -314,13 +279,11 @@ impl Extension {
         removed
     }
 
-    /// The vault locked (or the core stopped): every token is dead already.
     pub fn on_lock(&self) {
         self.link.forget_sessions();
         self.link.desktop().cancel_approval();
     }
 
-    /// The app quits: stop listening (removes the socket), keep the switch.
     pub fn shutdown(&self) {
         if let Some(running) = self.running.lock().unwrap().take() {
             running.stop();
@@ -371,7 +334,7 @@ pub async fn extension_unpair(
     extension: State<'_, Arc<Extension>>,
 ) -> Result<Value, String> {
     let extension = extension.inner().clone();
-    // Off the main thread: it waits for the core.
+
     tauri::async_runtime::spawn_blocking(move || {
         let desktop = extension.link.desktop();
         desktop
@@ -379,8 +342,7 @@ pub async fn extension_unpair(
             .remove(&id)
             .map_err(|_| "The browser could not be removed.".to_string())?;
         extension.link.forget_pairing(&id);
-        // Its open connection still holds the pairing: close them all (the
-        // others reconnect on their next request) and end its session.
+
         extension.link.close_connections();
         let _ = desktop.core(json!({"native": "extension_end", "client": id}), Vec::new());
         Ok(extension.status())

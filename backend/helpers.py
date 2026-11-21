@@ -1,12 +1,3 @@
-"""
-Every cryptographic construction of vault format 3 and backup format 3, in one
-place so it can be reviewed as a whole. The specification is
-docs/VAULT_FORMAT.md; the known-answer vectors are in testdata/vectors.
-
-Primitives come from ``cryptography`` only: Argon2id, HKDF-SHA256,
-AES-256-GCM and HMAC-SHA256.
-"""
-
 import asyncio
 import base64
 import hashlib
@@ -36,8 +27,8 @@ SEALED_OVERHEAD = 1 + NONCE_BYTES + TAG_BYTES
 
 _SEALED_VERSION = b"\x02"
 _DOCUMENT_BLOCK = 64
-# Nedra 5 authenticated domain separators. Changing these bytes requires an
-# explicit data migration because every sealed value authenticates them.
+
+
 _FORMAT_LABEL = b"nedra/v3"
 _WRAP_LABEL = b"nedra/v3/wrapped-vault-key"
 _PASSWORD_COMMITMENT = "nedra/v3/password-commitment"
@@ -60,12 +51,11 @@ _ARGON2_ALONE = threading.Lock()
 
 
 class DecryptionFailed(Exception):
-    """Authenticated decryption failed: the value was altered, moved to another
-    record or role, truncated, or belongs to another key."""
+    pass
 
 
 class UnsupportedKdf(Exception):
-    """KDF parameters outside the range this release accepts."""
+    pass
 
 
 @dataclass(frozen=True, slots=True)
@@ -80,10 +70,6 @@ class KdfParams:
     MAX_LANES = 8
 
     def require_supported(self) -> None:
-        """
-        Refuse parameters before running the KDF, so a hostile vault or backup
-        file cannot make the process allocate gigabytes or spin for minutes.
-        """
         if not (
             all(
                 type(value) is int
@@ -118,13 +104,6 @@ def argon2id(password: str, salt: bytes, params: KdfParams = DEFAULT_KDF) -> byt
 
 
 async def _off_the_event_loop[T](function: Callable[..., T], *args: object) -> T:
-    """
-    Run a deliberately slow KDF in a small dedicated pool, so other requests
-    keep being served while it runs. Argon2id derivations still run one at a
-    time (``_ARGON2_ALONE``): two at once deadlocked inside OpenSSL on x86_64
-    Linux, and one at a time also keeps their memory bounded however many
-    unlocks arrive together.
-    """
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(_KDF_POOL, function, *args)
 
@@ -177,13 +156,6 @@ def _padded(document: bytes) -> bytes:
 
 
 class VaultKey:
-    """
-    The keys derived from one vault key. The raw vault key remains private to
-    this object so it can be wrapped for another explicitly provisioned account;
-    callers can only encrypt, decrypt, index, wrap account material and prove
-    which vault key it came from (``check``).
-    """
-
     __slots__ = ("_raw", "_records", "_index", "check")
 
     def __init__(self, raw: bytes) -> None:
@@ -216,8 +188,7 @@ class VaultKey:
         return hmac.new(self._index, f"group\0{name}".encode(), hashlib.sha256).digest()
 
     def entry_draft_key(self, user_id: int) -> bytes:
-        """A browser-only draft key, separated from vault keys and other users."""
-        # Frozen because browser draft ciphertext authenticates this label.
+
         return _hkdf(self._raw, f"nedra/browser-entry-draft/v1/{user_id}")
 
     def seal_entry(self, uid: bytes, document: bytes) -> bytes:
@@ -285,8 +256,6 @@ class VaultKey:
 
 @dataclass(frozen=True, slots=True)
 class KeyMaterial:
-    """What the vault row stores to turn a master password into the vault key."""
-
     params: KdfParams
     salt: bytes
     password_check: bytes
@@ -347,13 +316,6 @@ def seal_key_material(
 def open_key_material(
     derived: bytes, material: KeyMaterial, factor_key: bytes | None = None
 ) -> VaultKey | None:
-    """
-    The vault key, or None if ``derived`` comes from a wrong password. The
-    password commitment is compared first, so a crafted wrapped key cannot
-    turn one unlock into a test of many passwords (AES-GCM is not
-    key-committing). A matching commitment with a wrapped key or key check
-    that does not verify raises DecryptionFailed: the row is damaged.
-    """
     if material.second_factor != (factor_key is not None):
         return None
     commitment, cipher = _password_keys(derived, factor_key)
@@ -375,7 +337,6 @@ def open_key_material(
 async def create_key_material(
     password: str, params: KdfParams = DEFAULT_KDF, factor_key: bytes | None = None
 ) -> tuple[KeyMaterial, VaultKey]:
-    """A new random vault key and salt, wrapped under ``password``."""
     salt = os.urandom(SALT_BYTES)
     raw_key = os.urandom(KEY_BYTES)
     derived = await derive(password, salt, params)
@@ -390,7 +351,6 @@ async def wrap_key_material(
     params: KdfParams = DEFAULT_KDF,
     factor_key: bytes | None = None,
 ) -> KeyMaterial:
-    """Wrap an existing vault key for another account credential."""
     salt = os.urandom(SALT_BYTES)
     derived = await derive(password, salt, params)
     return seal_key_material(derived, key._raw, params, salt, factor_key)
@@ -579,7 +539,7 @@ BACKUP_HEADER_BYTES = _BACKUP_HEADER.size
 
 
 class BackupFormatError(Exception):
-    """A file that is not a backup this release can read."""
+    pass
 
 
 @dataclass(frozen=True, slots=True)
@@ -629,8 +589,6 @@ class BackupHeader:
 
 
 class BackupKey:
-    """The keys of one backup, derived from its password and its own salt."""
-
     __slots__ = ("_frames", "commitment")
 
     def __init__(self, derived: bytes) -> None:
@@ -680,13 +638,6 @@ async def backup_key_for(password: str, header: BackupHeader) -> BackupKey:
 def generate_totp(
     secret: str, *, digits: int = 6, period: int = 30, now: int | None = None
 ) -> str:
-    """
-    Return the current TOTP code for a base32 secret (RFC 6238, HMAC-SHA1).
-
-    Used by the CLI so `password get` can show the live code. The web UI has its
-    own Web Crypto implementation; both stay small and dependency-free so the
-    two-factor path is easy to audit.
-    """
     key = base64.b32decode(secret + "=" * (-len(secret) % 8), casefold=True)
     counter = (int(time.time()) if now is None else now) // period
     digest = hmac.new(key, struct.pack(">Q", counter), hashlib.sha1).digest()

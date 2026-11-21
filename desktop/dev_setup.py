@@ -1,5 +1,3 @@
-"""Install the dedicated source-mode runtime; no freezing on the edit/run loop."""
-
 import subprocess
 import sys
 from pathlib import Path
@@ -18,8 +16,6 @@ subprocess.run(
         str(python),
         "-r",
         str(root / "core/requirements-desktop.lock"),
-        "-r",
-        str(root / "core/requirements-test.txt"),
     ],
     check=True,
 )

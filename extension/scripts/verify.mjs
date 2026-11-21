@@ -1,16 +1,3 @@
-// Checks that the release packages were built from this source.
-//
-//   git checkout vX.Y.Z && cd extension && npm ci
-//   node scripts/verify.mjs path/to/SHA256SUMS
-//
-// Rebuilds the packages reproducibly (same toolchain from package-lock.json,
-// SOURCE_DATE_EPOCH defaulting to the value the release used) and compares
-// every checksum. A store package can be checked the same way: download it
-// (Chrome: the .crx is a zip with a header; unzip it and compare the files with
-// dist/chromium), or compare the zip from the GitHub release, which is what is
-// uploaded to the stores. The signed Firefox XPI adds Mozilla's signature
-// files (META-INF/); everything else must equal dist/firefox.
-
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";

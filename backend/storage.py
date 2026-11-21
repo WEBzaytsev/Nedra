@@ -39,8 +39,7 @@ _PRAGMAS = (
 
 
 class StorageError(Exception):
-    """A vault file that cannot be opened, checked, copied or restored safely.
-    The message is meant for the operator."""
+    pass
 
 
 def require_supported_sqlite(
@@ -65,8 +64,6 @@ def snapshot_dir(data_dir: Path) -> Path:
 
 
 def prepare_data_dir(data_dir: Path) -> Path:
-    """Create the data folder (0700) and an empty vault file (0600) if they are
-    missing, so SQLite never creates the vault or its WAL with looser modes."""
     try:
         data_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
     except OSError as error:
@@ -95,10 +92,6 @@ def refuse_pending_set_aside(data_dir: Path) -> None:
 
 
 def refuse_orphaned_journals(path: Path) -> None:
-    """A write-ahead log or rollback journal next to a missing or empty vault
-    file belongs to a vault that was moved away (an interrupted set-aside, a
-    copy gone wrong). Creating a new vault there would make SQLite discard it,
-    and with it commits that exist nowhere else."""
     if path.is_file() and path.stat().st_size > 0:
         return
     for suffix in ("-wal", "-journal"):
@@ -126,10 +119,6 @@ def _unwritable(data_dir: Path, error: OSError) -> str:
 
 
 def configure_connection(dbapi_connection: Any) -> None:
-    """Connection settings every vault connection uses. Python's sqlite3 module
-    must not open transactions on its own (the engine emits BEGIN), WAL lets
-    readers run next to the single writer, and FULL sync keeps an acknowledged
-    write through a power cut."""
     dbapi_connection.isolation_level = None
     cursor = dbapi_connection.cursor()
     try:
@@ -165,9 +154,6 @@ _VAULT_FORMATS = "SELECT format_version FROM vault"
 
 
 def format_problem(formats: Sequence[object]) -> str | None:
-    """Whether the vault row (if the vault is set up) has a cryptographic format
-    this release reads. Kept apart from the schema version: the same tables
-    could one day hold a newer format."""
     if len(formats) > 1:
         return "has more than one vault key row"
     if formats and not isinstance(formats[0], int):
@@ -183,9 +169,6 @@ def format_problem(formats: Sequence[object]) -> str | None:
 
 
 def ensure_schema(connection: Connection) -> None:
-    """Create the schema in an empty vault file, or check that an existing file is
-    a vault this release understands. Runs inside one write transaction, so an
-    interrupted first start leaves an empty file that the next start fills."""
     application_id = connection.exec_driver_sql("PRAGMA application_id").scalar()
     user_version = connection.exec_driver_sql("PRAGMA user_version").scalar()
     objects = connection.exec_driver_sql("SELECT count(*) FROM sqlite_schema").scalar()
@@ -203,10 +186,6 @@ def ensure_schema(connection: Connection) -> None:
 
 
 def refuse_unusable_file(path: Path) -> None:
-    """Check an existing, non-empty file through a read-only connection before
-    anything opens it for writing: a file that is not a vault of this release,
-    or that fails SQLite's quick check, is refused exactly as it is, WAL
-    included."""
     if not path.is_file() or path.stat().st_size == 0:
         return
     try:
@@ -244,8 +223,6 @@ def refuse_unusable_file(path: Path) -> None:
 def check_connection(
     connection: sqlite3.Connection, *, expected_schema: int = SCHEMA_VERSION
 ) -> list[str]:
-    """Every problem SQLite finds in a vault: page and index integrity, foreign
-    keys, and whether the file is a vault of this release at all."""
     problems = [
         str(row[0])
         for row in connection.execute("PRAGMA integrity_check")
@@ -272,9 +249,6 @@ def _formats(connection: sqlite3.Connection) -> list[int]:
 
 
 def _connect_existing(path: Path, *, writable: bool = False) -> sqlite3.Connection:
-    """A connection to an existing file. Read-only unless asked otherwise: a
-    read-only connection never checkpoints or deletes the WAL, so reading a vault
-    (to check, copy or keep it) changes none of its files."""
     if not path.is_file():
         raise StorageError(f"{path} does not exist.")
     mode = "rw" if writable else "ro"
@@ -308,8 +282,6 @@ def _fsync_dir(path: Path) -> None:
 
 
 def _discard(path: Path) -> None:
-    """Remove a file this module wrote (a partial copy or a staged restore) and
-    any journal SQLite left next to it."""
     for suffix in ("", *_SIDECARS):
         path.with_name(path.name + suffix).unlink(missing_ok=True)
 
@@ -321,10 +293,6 @@ def _copy(
     journal_mode: str = "DELETE",
     expected_schema: int = SCHEMA_VERSION,
 ) -> None:
-    """A consistent, self-contained copy of the vault through SQLite's online
-    backup API, so committed transactions still in the WAL are included and
-    concurrent writers are no problem. The copy is checked before it gets its
-    final name."""
     partial = destination.with_name(destination.name + ".partial")
     _discard(partial)
     os.close(os.open(partial, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600))
@@ -354,8 +322,6 @@ def timestamped(prefix: str) -> str:
 
 
 def snapshot(data_dir: Path, destination: Path | None = None) -> Path:
-    """Copy the live vault to ``destination`` (by default a new file in the
-    snapshot folder). Safe while Nedra is running."""
     require_supported_sqlite()
     folder = snapshot_dir(data_dir)
     try:
@@ -381,9 +347,6 @@ def snapshot(data_dir: Path, destination: Path | None = None) -> Path:
 
 
 def reset_settings(data_dir: Path) -> Path:
-    """Discard only administrator settings overrides, with a checked rollback
-    snapshot. The backend must be stopped so no process retains the old policy.
-    """
     require_supported_sqlite()
     with VaultLock(data_dir):
         saved = snapshot(data_dir)
@@ -405,10 +368,6 @@ def reset_settings(data_dir: Path) -> Path:
 
 
 class VaultLock:
-    """An exclusive lock on the data folder: one Nedra process serves a
-    vault (vault sessions live in its memory), and a restore runs only while
-    none does."""
-
     def __init__(self, data_dir: Path) -> None:
         self.path = data_dir / LOCK_FILE
         self._fd: int | None = None
@@ -458,11 +417,6 @@ def _primary_code(error: sqlite3.Error) -> int | None:
 
 
 def _take_exclusively(live: Path) -> sqlite3.Connection | None:
-    """Open the live vault and keep every other connection out until this one
-    closes (exclusive locking mode). The connection never checkpoints on close,
-    so closing it after a failure changes nothing. None if the file is not a
-    database SQLite can read at all, in which case nothing else can use it
-    either; any other problem stops the restore."""
     try:
         connection = _connect_existing(live, writable=True)
     except sqlite3.DatabaseError as error:
@@ -498,8 +452,6 @@ def _kept_folder(folder: Path) -> Path:
 
 
 def _keep_raw(live: Path, kept: Path) -> None:
-    """Copy the vault's files byte for byte, WAL included, into ``kept``. Called
-    while nothing else can write them."""
     for suffix in ("", "-wal"):
         source = live.with_name(live.name + suffix)
         if source.exists():
@@ -512,8 +464,6 @@ def _keep_raw(live: Path, kept: Path) -> None:
 
 
 def _move_sidecars(live: Path, kept: Path) -> None:
-    """Move whatever journal files remain next to the vault into ``kept``, so
-    they can never be replayed into the restored file. Never deleted."""
     for suffix in _SIDECARS:
         sidecar = live.with_name(live.name + suffix)
         if sidecar.exists():
@@ -523,10 +473,6 @@ def _move_sidecars(live: Path, kept: Path) -> None:
 
 
 def _retire(live: Path, folder: Path) -> Path | None:
-    """Keep the vault a restore replaces and make sure no journal of it can be
-    replayed into the restored file. A vault is kept byte for byte with its WAL,
-    then its WAL is folded in by SQLite; journal files SQLite cannot fold, or
-    left next to a missing or empty vault, are moved into the kept folder."""
     sidecars = [live.with_name(live.name + suffix) for suffix in _SIDECARS]
     has_vault = live.exists() and live.stat().st_size > 0
     if not has_vault and not any(path.exists() for path in sidecars):
@@ -552,11 +498,6 @@ def _retire(live: Path, folder: Path) -> Path | None:
 
 
 def restore(data_dir: Path, source: Path) -> Path | None:
-    """Replace the vault with the snapshot ``source``. Nedra must not be
-    running. The replaced vault is kept, byte for byte, in a folder in the
-    snapshot folder, and that folder is returned. If a restore is interrupted,
-    the vault file is the old vault (complete, its WAL folded by SQLite or kept)
-    or the restored one, and running the restore again completes it."""
     require_supported_sqlite()
     live = vault_file(data_dir)
     folder = snapshot_dir(data_dir)
@@ -587,14 +528,6 @@ def restore(data_dir: Path, source: Path) -> Path | None:
 
 
 def set_aside(data_dir: Path) -> Path | None:
-    """
-    Move the vault file and its journal files, unchanged and together, into a
-    new folder in the snapshot folder, so that the next start creates a new,
-    empty vault. Nothing is deleted or rewritten: moving the files back (with
-    Nedra stopped) restores the vault exactly. Works on any file, also one
-    this release refuses to open. Nedra must not be running. Returns the
-    folder, or None if there was nothing to move.
-    """
     require_supported_sqlite()
     live = vault_file(data_dir)
     files = [live.with_name(live.name + suffix) for suffix in ("", *_SIDECARS)]
@@ -610,8 +543,7 @@ def set_aside(data_dir: Path) -> Path | None:
                     connection.close()
             folder.mkdir(mode=0o700, parents=True, exist_ok=True)
             pending.mkdir(mode=0o700, exist_ok=True)
-            # Publish a durable recovery marker before moving any vault file.
-            # Its fixed name lets a retry reunite a DB and WAL split by a kill.
+
             _fsync_dir(folder)
             _fsync_dir(data_dir)
             for path in files:

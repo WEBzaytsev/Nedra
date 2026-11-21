@@ -1,13 +1,4 @@
 #!/bin/sh
-# Nedra CLI shortcut: runs the `nedra` command inside the backend
-# container, so a Docker-only install never needs Python or a repo clone.
-#
-#   ./nedra password list
-#
-# Symlink it onto your PATH to use it from anywhere:
-#   sudo ln -s "$(pwd)/nedra" /usr/local/bin/nedra
-#
-# Override the compose file with NEDRA_COMPOSE_FILE.
 set -eu
 
 RED='\033[31m'

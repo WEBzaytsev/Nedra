@@ -24,14 +24,6 @@ def entry_is_damaged(key: VaultKey, entry: EntryModel) -> bool:
 
 
 class DamageCRUD(BaseCRUD):
-    """
-    Rows that fail authenticated decryption or their format check. Listings
-    skip them so the rest of the vault stays usable; this finds them and
-    removes one only after checking, under the write lock, that it really
-    cannot be read. Backups and master password changes refuse to run while
-    any remain.
-    """
-
     def __init__(
         self,
         session,

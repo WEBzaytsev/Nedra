@@ -296,7 +296,6 @@ body {
   }
 }
 
-/* Desktop mode: the code to compare with the app's pairing dialog. */
 .pairing-code {
   font-family: var(--mono);
   font-size: 30px;

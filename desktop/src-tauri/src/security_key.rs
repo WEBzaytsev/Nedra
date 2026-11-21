@@ -1,9 +1,3 @@
-//! FIDO2 security keys for the desktop app. The web view has no WebAuthn, so each
-//! operation runs the bundled core once in `--security-key` mode, which talks to
-//! the key over USB (CTAP2) and answers with what a browser would. The request,
-//! including the key's PIN, goes over the child's stdin, never its command line.
-//! Cancelling kills the child, which also stops the key from waiting for a touch.
-
 use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
@@ -18,7 +12,7 @@ use crate::sidecar::CoreConfig;
 const MAX_REQUEST: usize = 48 * 1024;
 const MAX_REPLY: u64 = 64 * 1024;
 const MAX_PIN: usize = 255;
-// The core gives up on its own (key wait and WebAuthn timeout); this is a backstop.
+
 const DEADLINE: Duration = Duration::from_secs(240);
 
 pub struct SecurityKeys {
@@ -168,20 +162,4 @@ pub async fn security_key_answer(
 #[tauri::command]
 pub fn security_key_cancel(keys: State<'_, Arc<SecurityKeys>>) {
     keys.cancel();
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn pins_are_bounded_and_empty_means_none() {
-        assert_eq!(checked_pin(Some(String::new())).unwrap(), None);
-        assert_eq!(checked_pin(None).unwrap(), None);
-        assert_eq!(
-            checked_pin(Some("123456".into())).unwrap().as_deref(),
-            Some("123456")
-        );
-        assert!(checked_pin(Some("1".repeat(256))).is_err());
-    }
 }

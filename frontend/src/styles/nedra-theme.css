@@ -23,7 +23,7 @@ body.nedra-theme {
   --g-color-text-hint: var(--g-color-text-secondary);
 }
 
-/* A type selector also beats the stock root's single-class specificity. */
+
 body.nedra-theme,
 html[data-theme="light"] body {
   --g-color-base-brand: #b5f602;

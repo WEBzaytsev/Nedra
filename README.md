@@ -65,13 +65,12 @@ The cryptographic and storage contracts are documented in [docs/VAULT_FORMAT.md]
 ## Repository
 
 ```text
-backend/             FastAPI vault, CLI, MCP, storage, and tests
+backend/             FastAPI vault, CLI, MCP, and storage
 desktop/             Tauri application, private core, packaging, and updater
 extension/           Chromium and Firefox extension
 frontend/            React and Gravity UI web interface
-docker/              production images and runtime validation
+docker/              production images and runtime configuration
 docs/                operator, CLI, extension, and vault-format documentation
-testdata/             interoperability and cryptographic vectors
 ```
 
 Important documentation:
@@ -88,10 +87,10 @@ Important documentation:
 The backend requires Python 3.13 and `uv`; the frontend and extension require Node.js 22 and npm; desktop builds additionally require Rust and the platform Tauri dependencies.
 
 ```shell
-make test
+make check
 ```
 
-The release workflows build natively for amd64 and arm64, verify installed desktop packages and update fixtures, produce CycloneDX SBOMs, and publish only after the required checks pass.
+The release workflows build natively for amd64 and arm64, verify signed packages and update manifests, produce CycloneDX SBOMs, and publish only after the required build checks pass.
 
 ## License
 

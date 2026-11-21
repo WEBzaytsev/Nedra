@@ -1,5 +1,5 @@
-# Local development stack: build from source with hot-reload (UI :3000, API :8000).
-# The real vault runs from prebuilt GHCR images via docker-compose.prod.yml.
+
+
 name: nedra-dev
 
 services:

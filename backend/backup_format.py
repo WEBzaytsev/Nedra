@@ -1,10 +1,3 @@
-"""
-Reading and writing the frames of a backup file (backup format 3,
-docs/VAULT_FORMAT.md section 5). The cryptography, including what each frame
-is bound to, is in ``helpers.BackupKey``; this module only lays the frames out
-and enforces sizes, order and completeness.
-"""
-
 import struct
 from typing import IO
 
@@ -23,9 +16,8 @@ MAX_ATTACHMENT_FRAME_BYTES = 10 * 1024 * 1024
 MAX_ENTRY_FRAME_BYTES = 64 * 1024 * 1024
 MAX_ENTRY_STORED_BYTES = MAX_ENTRY_FRAME_BYTES - 32 * 1024
 FRAME_OVERHEAD = 4 + NONCE_BYTES + TAG_BYTES
-# The format has a practical, enforced total-size ceiling. Entries and their
-# attachments are separate frames, so no aggregate JSON manifest grows with
-# vault size. The file itself remains ciphertext when staged or transported.
+
+
 MAX_BACKUP_BYTES = 1024 * 1024 * 1024
 _FRAME_PREFIX = struct.Struct(">I")
 _INCOMPLETE = "The backup file is incomplete or damaged."
@@ -63,13 +55,6 @@ class BackupWriter:
 
 
 class BackupReader:
-    """
-    Frames are read and authenticated strictly in order: each one is bound to
-    the header, its position and whether it is the last, so a reordered,
-    repeated, dropped, foreign or truncated frame fails, and so does anything
-    after the last frame.
-    """
-
     def __init__(self, source: IO[bytes]) -> None:
         self._source = source
         self._header = _read_exactly(source, BACKUP_HEADER_BYTES)

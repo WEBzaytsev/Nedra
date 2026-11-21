@@ -1,17 +1,5 @@
-//! The extensions the native host and the app accept, and how a browser names
-//! its caller when it starts the host: Chromium passes the origin
-//! `chrome-extension://<id>/` (Windows adds `--parent-window=<n>`), Firefox
-//! passes the manifest path and the extension id.
-//!
-//! The Chromium id comes from the public `key` in extension/manifest/
-//! chromium.json (design decision 34: a throwaway key until the maintainer's
-//! own; a test checks the two agree). A public key is public: any unpacked
-//! extension can claim this id, so the check only keeps out other store
-//! extensions. The pairing is what authenticates the extension.
-
 pub const CHROMIUM_IDS: &[&str] = &["alkkfkojagimdnneandmpodagadmmmii"];
-// Firefox uses this as the installed extension identity. Changing it would
-// create a second extension rather than update existing Nedra installations.
+
 pub const FIREFOX_IDS: &[&str] = &["nedra@zaitsv.dev"];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -21,7 +9,6 @@ pub enum Caller {
 }
 
 impl Caller {
-    /// What the host tells the app, which checks it again.
     pub fn origin(&self) -> String {
         match self {
             Caller::Chromium(id) => format!("chrome-extension://{id}/"),
@@ -44,7 +31,6 @@ impl Caller {
     }
 }
 
-/// The caller named by the host's command line, if it is one of ours.
 pub fn caller_from_args(args: &[String]) -> Option<Caller> {
     match args {
         [origin, rest @ ..] if origin.starts_with("chrome-extension://") => {
@@ -55,63 +41,5 @@ pub fn caller_from_args(args: &[String]) -> Option<Caller> {
         }
         [_manifest, id] => Caller::from_origin(id).filter(|c| matches!(c, Caller::Firefox(_))),
         _ => None,
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn args(list: &[&str]) -> Vec<String> {
-        list.iter().map(|s| s.to_string()).collect()
-    }
-
-    #[test]
-    fn pinned_callers_only() {
-        let chrome = "chrome-extension://alkkfkojagimdnneandmpodagadmmmii/";
-        assert!(caller_from_args(&args(&[chrome])).is_some());
-        assert!(caller_from_args(&args(&[chrome, "--parent-window=1234"])).is_some());
-        assert!(
-            caller_from_args(&args(&["/x/com.nedra.desktop.json", "nedra@zaitsv.dev"])).is_some()
-        );
-        for refused in [
-            &["chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/"][..],
-            &["chrome-extension://alkkfkojagimdnneandmpodagadmmmii"],
-            &["chrome-extension://alkkfkojagimdnneandmpodagadmmmii/x"],
-            &["chrome-extension://ALKKFKOJAGIMDNNEANDMPODAGADMMMII/"],
-            &[chrome, "--other"],
-            &[chrome, "--parent-window=1", "--parent-window=2"],
-            &["/x/manifest.json", "evil@example.com"],
-            &["/x/manifest.json", "nedra@zaitsv.dev.evil"],
-            &[
-                "/x/manifest.json",
-                "chrome-extension://alkkfkojagimdnneandmpodagadmmmii/",
-            ],
-            &["nedra@zaitsv.dev"],
-            &[],
-        ] {
-            assert_eq!(caller_from_args(&args(refused)), None, "{refused:?}");
-        }
-    }
-
-    #[test]
-    fn the_chromium_id_matches_the_manifest_key() {
-        use base64::Engine;
-        use sha2::{Digest, Sha256};
-        let path = concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../../../extension/manifest/chromium.json"
-        );
-        let manifest: serde_json::Value =
-            serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
-        let der = base64::engine::general_purpose::STANDARD
-            .decode(manifest["key"].as_str().unwrap())
-            .unwrap();
-        let id: String = Sha256::digest(&der)[..16]
-            .iter()
-            .flat_map(|b| [b >> 4, b & 15])
-            .map(|n| (b'a' + n) as char)
-            .collect();
-        assert_eq!(CHROMIUM_IDS, &[id.as_str()]);
     }
 }

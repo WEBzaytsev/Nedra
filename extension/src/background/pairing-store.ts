@@ -1,10 +1,3 @@
-// The pairing with the desktop app: its id and the non-extractable pairing key
-// (an HKDF CryptoKey), in IndexedDB, which can hold a CryptoKey without ever
-// exposing its bytes (design 3.3). Nothing else is stored here, and this is the
-// only IndexedDB use in the extension.
-
-// Frozen storage identity: the database contains non-extractable CryptoKeys,
-// so copying them to a newly named IndexedDB database is not dependable.
 const DB = "nedra";
 const STORE = "pairing";
 const KEY = "desktop";

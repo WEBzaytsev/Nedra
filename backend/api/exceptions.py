@@ -61,12 +61,6 @@ async def vault_error_handler(request: Request, exc: Exception) -> JSONResponse:
 
 
 async def validation_handler(request: Request, exc: Exception) -> JSONResponse:
-    """
-    FastAPI's default 422 body echoes every rejected value back, which for this
-    API means passwords, notes and master passwords, and fails to render at all
-    when the value holds an unpaired surrogate. Only the location and message
-    are returned.
-    """
     errors = exc.errors() if isinstance(exc, RequestValidationError) else []
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -100,13 +94,6 @@ def log_unhandled_exception(scope: Scope, exc: BaseException) -> None:
 
 
 class UnhandledErrorMiddleware:
-    """
-    Turn any unhandled exception into a generic 500 and log it without request
-    details or the exception message, which can carry entry names or SQL
-    parameters. The exception is not re-raised, so the server does not log the
-    full traceback again on its own.
-    """
-
     def __init__(self, app: ASGIApp, headers: Mapping[str, str]) -> None:
         self.app = app
         self.headers = dict(headers)

@@ -1,11 +1,3 @@
-//! `nedra-native-host`: started by the browser for the Nedra
-//! extension (native messaging), relays its messages to the running desktop
-//! app over the local socket or pipe and back. It holds no secret and decides
-//! nothing: the channel between the extension and the app is end-to-end
-//! encrypted, the host only checks who started it, frames, sizes and message
-//! types. It answers two things itself: `app_not_running` when the app does not
-//! listen, and `launch`, which starts the app.
-
 use std::io::{self, Read};
 use std::process::ExitCode;
 use std::sync::{Arc, Mutex};
@@ -19,18 +11,12 @@ use serde_json::{json, Value};
 
 mod launch;
 
-/// What the extension may send through, and what the app may send back.
 const TO_APP: &[&str] = &["pair_commit", "pair_reveal", "hello", "msg"];
 const TO_EXTENSION: &[&str] = &["pair_key", "paired", "refused", "hello_ok", "msg"];
 
-/// Release builds are the real app's host and ignore the environment. Debug
-/// builds take a QA root when one is set (the host's own tests), else they
-/// belong to the development app.
 fn identity() -> io::Result<Identity> {
-    if cfg!(feature = "qa") {
-        Identity::qa_from_env()
-    } else if cfg!(debug_assertions) {
-        Identity::qa_from_env().or(Ok(Identity::Development))
+    if cfg!(debug_assertions) {
+        Ok(Identity::Development)
     } else {
         Ok(Identity::Production)
     }
@@ -42,7 +28,6 @@ fn reply(out: &Out, value: Value) -> io::Result<()> {
     framing::write_object(&mut *out.lock().unwrap(), &value)
 }
 
-/// Copy the app's answers to the browser until the app closes the connection.
 fn relay_from_app(mut app: Stream, out: Out) {
     loop {
         match framing::read_object(&mut app) {
@@ -117,7 +102,7 @@ fn main() -> ExitCode {
         return ExitCode::from(2);
     };
     let Ok(identity) = identity() else {
-        eprintln!("nedra-native-host: no QA root");
+        eprintln!("nedra-native-host: identity unavailable");
         return ExitCode::from(2);
     };
     match run(caller, identity, io::stdin().lock()) {

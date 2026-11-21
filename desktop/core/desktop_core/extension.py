@@ -1,14 +1,3 @@
-"""Extension sessions for the desktop app's paired browsers (docs/EXTENSION.md,
-desktop mode).
-
-Only the Rust shell can send these (native frames never come from the
-renderer's API bridge). The shell holds no full session token: an extension
-session is opened from the key of the window's one unlocked session, checked
-against the vault like every request, and its token stays in the shell, which
-uses it for ``/api/extension/*`` like any extension. Locking the window stops
-this process, which ends every session.
-"""
-
 import json
 import re
 

@@ -32,15 +32,6 @@ class BaseModel(DeclarativeBase):
 
 
 class RecordTimestamp(TypeDecorator[datetime]):
-    """Keep corrupt SQLite values available to the record integrity checks.
-
-    SQLite permits arbitrary values in a TIMESTAMP column. The dialect's
-    ordinary decoder raises while fetching the whole result set, preventing
-    even healthy rows from being listed or damaged rows from being removed.
-    Preserve invalid values for the strict readers instead of guessing a time.
-    The stored SQL type and the normal datetime writer remain unchanged.
-    """
-
     impl = TIMESTAMP
     cache_ok = True
 

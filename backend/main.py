@@ -105,7 +105,7 @@ def get_application(
     server.add_middleware(BodySizeLimitMiddleware)
     server.add_middleware(EntryNamePaths)
     server.add_middleware(
-        CORSMiddleware,  # type: ignore[arg-type]
+        CORSMiddleware,
         allow_origins=settings.cors_origins,
         allow_credentials=False,
         allow_methods=["*"],

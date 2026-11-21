@@ -1,6 +1,5 @@
 const HANDOFF_KEY = "nedraExtensionHandoff";
-// Frozen page/extension bridge names keep already installed extensions able to
-// complete a handoff while the web application is upgraded first.
+
 const SESSION_MESSAGE = "nedra:extension-session";
 const CONNECTED_MESSAGE = "nedra:extension-connected";
 export const HANDOFF_ROUTE = "#/connect-extension";
@@ -51,9 +50,7 @@ export const pendingHandoff = () => {
       CLIENT.test(handoff.client ?? "")
     )
       return handoff;
-  } catch {
-    // Malformed tab-local state is discarded below.
-  }
+  } catch {}
   sessionStorage.removeItem(HANDOFF_KEY);
   return null;
 };

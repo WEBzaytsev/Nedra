@@ -24,7 +24,7 @@ from security_key_client import SecurityKeyError, answer
 
 app = typer.Typer(
     name="nedra",
-    help="Manage your self-hosted nedra vault from the terminal.",
+    help="Manage your self-hosted Nedra vault from the terminal.",
     no_args_is_help=True,
     rich_markup_mode="rich",
 )
@@ -56,13 +56,12 @@ _BULK = "bulk-entry-actions"
 _BULK_MOVE = "bulk-entry-move"
 _SECURITY_FACTOR_STEP_UP = "security-factor-step-up"
 _SERVER_TOO_OLD = (
-    "This server is incompatible with this Nedra CLI. Install the same Nedra "
-    "version on the server and the operator workstation."
+    "This server is incompatible with this Nedra CLI. Install the same "
+    "Nedra version on the server and the operator workstation."
 )
 _NO_UNLOCK_ROUTE = (
     "No Nedra unlock route at {url!r}. Check that NEDRA_API_URL ends "
-    "in /api. A server older than 1.5.0 also answers like this: update it, or "
-    "use Nedra CLI 1.5.x."
+    "in /api and that the server and CLI versions match."
 )
 
 
@@ -129,11 +128,6 @@ def _features(client: httpx.Client) -> list[str] | None:
 
 
 class _Vault:
-    """
-    One unlocked vault for the length of a command: a vault session that is
-    locked again when the command ends.
-    """
-
     def __init__(self, client: httpx.Client) -> None:
         self.client = client
         features = _features(client)
@@ -574,7 +568,7 @@ def pw_delete(
         return
     with _vault() as vault:
         if _BULK not in vault.features:
-            _die("Deleting several entries needs Nedra 3.3.0 or newer.")
+            _die("Deleting several entries needs a compatible Nedra server.")
         entries = _entry_rows(vault, names)
         if not yes:
             _out.print("\n".join(f"  {escape(name)}" for name in names))
@@ -629,7 +623,7 @@ def pw_move(
     names = list(dict.fromkeys(names))
     with _vault() as vault:
         if _BULK_MOVE not in vault.features:
-            _die("Moving entries needs Nedra 3.5.0 or newer.")
+            _die("Moving entries needs a compatible Nedra server.")
         entries = _entry_rows(vault, names)
         folder_id = None
         if folder is not None:
@@ -788,8 +782,7 @@ def _trash_params(vault: _Vault, name: str, entry_id: int | None) -> dict[str, i
         return {}
     response = vault.send("GET", "/passwords/trash")
     _check(response)
-    # Older servers ignore an unknown query parameter; refuse before sending a
-    # mutation unless this server supplies selectable row IDs in its Trash list.
+
     if not any(
         row.get("id") == entry_id and row.get("password_name") == name
         for row in response.json()
@@ -836,8 +829,7 @@ def cmd_backup(
                     output.flush()
                     os.fsync(output.fileno())
                 dest = staged.with_suffix("")
-                # Publish only a completed transfer; never replace an existing
-                # backup (or follow a pre-existing destination symlink).
+
                 os.link(staged, dest)
     except (httpx.HTTPError, OSError):
         _die("Backup could not be saved. Check the connection and destination space.")

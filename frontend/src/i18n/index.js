@@ -29,9 +29,7 @@ const applyLanguage = (language) => {
   if (typeof localStorage !== "undefined") {
     try {
       localStorage.setItem(LANGUAGE_STORAGE_KEY, normalized);
-    } catch {
-      // Language still applies for this tab when storage is unavailable.
-    }
+    } catch {}
   }
 };
 

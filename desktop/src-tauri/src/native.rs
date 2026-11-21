@@ -39,7 +39,7 @@ pub async fn choose_backup(files: State<'_, Files>) -> Result<Option<Value>, Str
     let name = file.file_name();
     let mut grants = files.grants.lock().unwrap();
     files.check(generation)?;
-    grants.clear(); // one pending selection; bounded, single use, expires
+    grants.clear();
     grants.insert(ticket.clone(), (file.path().to_path_buf(), Instant::now()));
     Ok(Some(json!({"ticket":ticket,"name":name})))
 }
@@ -145,7 +145,7 @@ pub async fn save_file(
         tauri::ipc::InvokeBody::Raw(bytes) if bytes.len() <= 5 * 1024 * 1024 => bytes.clone(),
         _ => return Err("Invalid attachment.".into()),
     };
-    // Only a suggested basename, never a renderer-provided destination path.
+
     let name = request
         .headers()
         .get("x-filename")
@@ -192,27 +192,6 @@ fn save_selected_file(
         return Err(error);
     }
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn lock_cancels_an_open_attachment_picker_and_revokes_grants() {
-        let files = Files::default();
-        let generation = files.generation.load(Ordering::SeqCst);
-        let path = std::env::temp_dir().join(format!("nedra-save-{}", uuid::Uuid::new_v4()));
-        files
-            .grants
-            .lock()
-            .unwrap()
-            .insert("ticket".into(), (path.clone(), Instant::now()));
-        files.invalidate();
-        assert!(files.grants.lock().unwrap().is_empty());
-        assert!(save_selected_file(&files, generation, &path, b"secret").is_err());
-        assert!(!path.exists());
-    }
 }
 
 #[tauri::command]

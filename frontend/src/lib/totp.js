@@ -1,8 +1,3 @@
-// Time-based one-time password (RFC 6238, HMAC-SHA1) computed with the Web
-// Crypto API. React-free and isolated, like passwordGenerator.js, so the
-// two-factor path is easy to audit. The backend has a matching stdlib version
-// for the CLI; nothing here ever leaves the browser.
-
 const BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 const DEFAULT_PERIOD = 30;
 const DEFAULT_DIGITS = 6;
@@ -27,7 +22,6 @@ const base32Decode = (secret) => {
   return new Uint8Array(bytes);
 };
 
-// Seconds until the current code rolls over. Drives the countdown ring.
 export const totpRemaining = (period = DEFAULT_PERIOD) =>
   period - (Math.floor(Date.now() / 1000) % period);
 
@@ -37,7 +31,6 @@ export const generateTotp = async (
 ) => {
   const key = base32Decode(secret);
 
-  // 8-byte big-endian counter, built without BigInt to stay simple.
   const message = new Uint8Array(8);
   let counter = Math.floor(Date.now() / 1000 / period);
   for (let i = 7; i >= 0; i -= 1) {

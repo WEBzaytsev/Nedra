@@ -67,7 +67,6 @@ const PasswordField = ({
               type="button"
               view="flat-secondary"
               size={size}
-              qa="reveal-button"
               aria-label={t(show ? "passwordField.hide" : "passwordField.show")}
               disabled={props.disabled}
               onMouseDown={(event) => event.preventDefault()}

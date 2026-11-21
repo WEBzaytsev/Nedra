@@ -19,7 +19,6 @@ analysis = Analysis(
         "greenlet",
         "desktop_core.entry",
         "desktop_core.security_key",
-        "desktop_core.vectors",
         "security_key_client",
         "fido2.hid",
         "fido2.hid.macos",
@@ -29,7 +28,7 @@ analysis = Analysis(
     ],
     hookspath=[],
     runtime_hooks=[],
-    excludes=["tkinter", "pydoc", "IPython", "pytest", "hypothesis"],
+    excludes=["tkinter", "pydoc", "IPython"],
     noarchive=False,
     optimize=0,
 )

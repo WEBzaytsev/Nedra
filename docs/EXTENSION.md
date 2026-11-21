@@ -110,8 +110,19 @@ After that the extension fills whenever the app is unlocked:
   refuses remote clients; the app checks the client runs as you. The browser starts the
   host only for the Nedra extension (pinned extension ids), and the app checks again.
 - **What it cannot stop.** Malware running as your user can read the browser's and the
-  app's memory; same-user isolation is the operating system's job. The protocol is
-  specified with test vectors in `testdata/vectors/extension-channel.json`.
+  app's memory; same-user isolation is the operating system's job.
+
+The desktop channel uses the versioned label `nedra/extension/v1` on both sides
+(`extension/src/shared/channel.ts` and `desktop/src-tauri/extension-link/src/channel.rs`).
+The extension commits to its 32-byte X25519 public key with a 16-byte nonce before
+the app sends its key. Both sides derive a six-digit comparison code and the pairing
+key from the same transcript. Each connection derives a new AES-256-GCM key from
+the pairing identifier and fresh 16-byte nonces from both sides. Messages have a
+per-direction counter starting at zero; direction `0x01` is extension to app and
+`0x02` is app to extension. The 12-byte GCM nonce contains the direction in its
+first byte and the big-endian counter in its final eight bytes; the authenticated
+data is that direction byte followed by the same eight-byte counter. A receiver
+refuses an out-of-order counter or failed authentication.
 
 ## Connect to your server and unlock
 
@@ -177,8 +188,7 @@ a time, separate from web sessions. In server mode the
 token lives in the browser's memory-only session storage, readable only by the
 extension's own pages; in desktop mode the app keeps it and the extension has none.
 
-**What it guarantees** (and the test suite checks, including an attack lab of hostile
-pages, see "Testing" below):
+**Security boundaries:**
 
 - Nothing is filled unless you clicked or pressed the shortcut. Page scripts cannot press
   browser shortcuts or open the popup.
@@ -199,9 +209,8 @@ pages, see "Testing" below):
 - It talks only to the address you configured, follows no redirects with the token,
   sends no cookies, and fails closed on TLS errors and on answers that are not
   Nedra's.
-- Nothing secret is written to disk: the browser profile is scanned for the master
-  password, passwords, the 2FA secret, entry names and tokens after a full session in the
-  tests.
+- The extension keeps session tokens in memory-only browser storage. A compromised
+  browser profile or software running as your user is outside this protection.
 
 **The limits.**
 
@@ -288,30 +297,13 @@ browser profile with `extension/dist/chromium` after the build.
 cd extension && npm ci
 npm run build            # dist/chromium, dist/firefox
 npm run package          # + dist/packages/*.zip and SHA256SUMS
-npm test                 # Vitest: URL vectors, message schemas, manifests, clipboard, zips
 npm run typecheck && npm run lint && npm run format:check
 npm run lint:firefox     # web-ext lint on dist/firefox
-npm run test:e2e         # Playwright Chromium: flows, attack lab, desktop mode
-                         # (needs uv for the backend and cargo for the native host)
-SCREENSHOTS=1 npx playwright test screenshots   # every popup state, light and dark
 ```
 
 Layout: `src/background` (the only network and injection code), `src/popup`,
 `src/options` (Preact), `src/fill/fill-script.ts` (the one function ever injected into a
 page), `src/bridge` (handoff content script, registered only while a handoff is pending,
 only on the vault's origin), `src/shared` (message schemas, URL display logic). The
-server side is `backend/api/endpoints/extension.py`, `backend/crud/extension.py` and
-`backend/url_match.py`; URL matching is pinned by `testdata/vectors/url-matching.json`,
-which both sides test.
-
-The e2e tests (`extension/tests/e2e`) start a real backend on a throwaway vault and an
-HTTPS fixture server that answers for every host name (`--host-resolver-rules`) with a
-certificate trusted by its key. They run against the **test build**
-(`node scripts/build.mjs --test`, `dist-test/`), which differs from the real one only in
-ways the tests need and the unit tests prove absent from the real build: host permissions
-for every site (Playwright cannot click the toolbar button that grants `activeTab`), the
-clipboard read permission, a 3-second clipboard timer, a popup that can be pointed at a
-tab and a hook to run the fill command. The attack lab (`extension/tests/attack-lab`)
-covers DOM-based extension clickjacking, hidden-field harvesting, frames, origin tricks,
-form tricks, messaging, synthetic input, extension page access, hostile networks and the
-clipboard. The manual checklist for each release is `extension/VALIDATION.md`.
+server side is `backend/api/endpoints/extension.py` and `backend/crud/extension.py`.
+Release validation requirements are in `extension/VALIDATION.md`.

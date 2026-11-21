@@ -1,12 +1,3 @@
-// The connection to the user's Nedra and the extension session on it.
-//
-// The session token lives in storage.session only (memory, extension pages
-// only). The server enforces everything that matters: the token's scope (fill
-// only), its idle timeout (the vault's inactivity setting), the 12-hour limit,
-// and every way it ends (lock, disconnect in Settings, master password change,
-// server restart). This side only forgets a token the server stopped
-// accepting, or once its deadline passed.
-
 import {
   ApiError,
   NOT_NEDRA,
@@ -88,8 +79,6 @@ export const forgetSession = async (): Promise<void> => {
   await ext.alarms.clear(SESSION_ALARM);
 };
 
-// A call with the session token. A session the server no longer accepts is
-// forgotten; every accepted call is activity and moves the deadline.
 export const authed = async (path: string, body?: unknown): Promise<unknown> => {
   const config = await getServer();
   const session = await getSession();
@@ -108,9 +97,6 @@ export const authed = async (path: string, body?: unknown): Promise<unknown> => 
   }
 };
 
-// A request to whichever Nedra this installation uses: the server's
-// /api/extension/<route> with the session token, or the desktop app over the
-// paired channel (which holds the session itself).
 export const vaultCall = async (
   route: "matches" | "search" | "credential" | "totp",
   body: unknown
@@ -154,9 +140,6 @@ export const messageOf = (error: unknown): string => {
   return "Something went wrong.";
 };
 
-// Check that the API is a Nedra recent enough for the extension, then
-// save the configuration. The host permissions were granted by the page that
-// asked (it had the user's click).
 export const configure = async (target: Target): Promise<Status> => {
   let meta;
   try {
@@ -180,8 +163,6 @@ export const configure = async (target: Target): Promise<Status> => {
   }
   const previous = await getConfig();
   if (previous?.mode === "desktop") {
-    // Leaving desktop mode ends its connection (the app stays unlocked) and
-    // drops the permission; the pairing is kept for switching back.
     forgetDesktop();
     await ext.permissions.remove({ permissions: ["nativeMessaging"] }).catch(() => false);
   } else if (previous && (previous.vault !== target.vault || previous.api !== target.api)) {
@@ -226,8 +207,6 @@ export const unlock = async (username: string, password: string): Promise<Status
   return status(config, { phase: "unlocked", idleTimeoutMs: result.idleTimeoutMs });
 };
 
-// Adopt a token the web app handed over. It is checked with the server before
-// it is kept.
 export const adoptToken = async (token: string): Promise<boolean> => {
   const config = await getServer();
   if (!config) return false;
@@ -255,9 +234,6 @@ export const lock = async (): Promise<void> => {
   }
 };
 
-// Switch to the Nedra app on this computer: the server's session ends and
-// its site access is removed (design decision 39). A pairing made before is
-// kept, so switching back needs no new code.
 export const useDesktop = async (): Promise<Status> => {
   const previous = await getConfig();
   const server = await getServer();
@@ -273,7 +249,7 @@ export const useDesktop = async (): Promise<Status> => {
     strictClipboard: previous?.strictClipboard ?? false,
   };
   await setConfig(config);
-  // The permission was just granted: this worker may not see it yet.
+
   if (!nativeMessagingReady() && (await hasNativePermission())) {
     await restart({ reopenOptions: true, force: true });
     return status(config, { phase: "unpaired" });

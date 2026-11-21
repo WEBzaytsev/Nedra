@@ -1,12 +1,3 @@
-// Runs only on the vault's own origin, only while a handoff the user started
-// is pending (registered and unregistered by the background). It passes one
-// message from the Nedra web app to the background and answers the web
-// app once the background accepted it. It reads nothing else from the page.
-//
-// Accepted only from this window itself (not a frame, not another window), on
-// this origin, with the exact message shape. The background then checks the
-// tab, the frame, the origin and the single-use request nonce.
-
 import {
   CONNECTED_MESSAGE,
   HANDOFF_REDEEM_PATTERN,
@@ -21,9 +12,7 @@ import {
   bridgeWindow.__nedraVaultBridge = true;
   const runtime =
     (globalThis as unknown as { browser?: typeof chrome }).browser?.runtime ?? chrome.runtime;
-  // A wrong message must not stop the right one (the background ignores a
-  // wrong nonce without consuming the request), but the bridge forwards only a
-  // few and goes quiet once a token was accepted.
+
   let attempts = 0;
   let done = false;
 

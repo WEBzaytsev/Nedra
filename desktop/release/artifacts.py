@@ -1,8 +1,3 @@
-"""Collect real Tauri bundles, sign canonical target names, verify, and hash.
-
-The private key is supplied by the protected environment and never copied.
-"""
-
 import argparse
 import hashlib
 import json
@@ -28,7 +23,7 @@ def target():
     return f"{system}-{arch}"
 
 
-def collect(bundle, out, version, qa=False):
+def collect(bundle, out, version):
     bundle = bundle.resolve()
     out = out.resolve()
     out.mkdir(parents=True, exist_ok=True)
@@ -44,8 +39,6 @@ def collect(bundle, out, version, qa=False):
             ("deb/*.deb", "deb", False),
         ],
     }[native.split("-")[0]]
-    if qa:
-        formats = [entry for entry in formats if entry[2]]
     public = out / "updater.pub"
     public.write_text(
         json.loads((ROOT / "desktop/src-tauri/tauri.conf.json").read_text())["plugins"][
@@ -70,7 +63,8 @@ def collect(bundle, out, version, qa=False):
         ]
         env = dict(os.environ)
         key_path = env.pop("TAURI_SIGNING_PRIVATE_KEY")
-        assert Path(key_path).is_file(), "Signing requires an owner-controlled key file"
+        if not Path(key_path).is_file():
+            raise RuntimeError("Signing requires an owner-controlled key file")
         env["TAURI_SIGNING_PRIVATE_KEY_PATH"] = key_path
         result = subprocess.run(
             command, cwd=ROOT / "desktop", env=env, capture_output=True
@@ -97,17 +91,13 @@ def collect(bundle, out, version, qa=False):
     records = []
     for pattern, suffix, update in formats:
         candidates = list(bundle.glob(pattern))
-        assert len(candidates) == 1, (pattern, candidates)
+        if len(candidates) != 1:
+            raise RuntimeError(f"Expected one bundle for {pattern}, got {len(candidates)}")
         canonical = out / f"Nedra_{version}_{native}.{suffix}"
         shutil.copy2(candidates[0], canonical)
-        if update and qa:
+        if update:
             sign(canonical)
-            record(canonical, True)
-        else:
-            record(canonical, False)
-        if update and not qa:
-            sign(canonical)
-            records[-1]["updater"] = True
+        record(canonical, update)
     source = subprocess.check_output(
         ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True
     ).strip()
@@ -117,7 +107,6 @@ def collect(bundle, out, version, qa=False):
                 "commit": source,
                 "version": version,
                 "target": native,
-                "qa": qa,
                 "workflow_run": os.environ.get("GITHUB_RUN_ID"),
                 "runner": os.environ.get("RUNNER_OS"),
                 "artifacts": records,
@@ -135,6 +124,5 @@ if __name__ == "__main__":
     )
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--version", required=True)
-    parser.add_argument("--qa", action="store_true")
     args = parser.parse_args()
-    collect(args.bundle, args.out, args.version, args.qa)
+    collect(args.bundle, args.out, args.version)

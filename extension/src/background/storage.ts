@@ -1,18 +1,5 @@
-// Where the extension keeps state (docs/EXTENSION.md, "Where state lives").
-//
-// storage.local holds only the configuration (the vault's addresses, two
-// preferences), a random installation id and, for a moment, the restart.ts
-// marker that reopens the settings. No secret, token or entry name.
-// storage.session lives in memory only, is cleared when the browser exits and
-// is readable by extension pages only (TRUSTED_CONTEXTS): the session token,
-// its deadline, a pending handoff and the digest of the last copied value.
-
 import { ext, randomToken } from "../shared/browser";
 
-// One connection per installation (design decision 39): the user's server
-// (vault and API addresses) or the desktop app on this computer (no address;
-// vault and api are empty). A configuration saved before desktop mode existed
-// has no mode and is a server.
 export interface Config {
   mode: "server" | "desktop";
   vault: string;
@@ -69,7 +56,6 @@ export const getConfig = async (): Promise<Config | null> => {
   return { mode: "server", vault: config.vault, api: config.api, ...preferences };
 };
 
-// The server connection, or null in desktop mode (or when not set up).
 export const getServer = async (): Promise<Config | null> => {
   const config = await getConfig();
   return config?.mode === "server" ? config : null;
@@ -78,10 +64,6 @@ export const getServer = async (): Promise<Config | null> => {
 export const setConfig = (config: Config | null): Promise<void> =>
   config ? local().set({ config }) : local().remove("config");
 
-// A random id for this installation (browser profile), sent when a session
-// opens so the server ends this installation's previous one. Not a secret: it
-// opens nothing, it only lets a new unlock replace an old session whose token
-// was lost (browser restart, extension reload).
 export const installId = async (): Promise<string> => {
   const { installId: stored } = (await local().get("installId")) as { installId?: unknown };
   if (typeof stored === "string" && /^[A-Za-z0-9_-]{22}$/.test(stored)) return stored;

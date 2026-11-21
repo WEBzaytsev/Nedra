@@ -1,7 +1,3 @@
-// Fill and copy. A login's username and password exist here only for the one
-// call that places them in the page (or hands them to the popup to copy), and
-// are dropped right after.
-
 import { asCredential, asTotp, type Credential, type Totp } from "./api";
 import { vaultCall } from "./session";
 import { getConfig } from "./storage";
@@ -11,8 +7,6 @@ import type { FillOutcome, FillReason, PageInfo } from "../shared/messages";
 import { displayHost, normalizeOrigin } from "../shared/url";
 import { fillLogin } from "../fill/fill-script";
 
-// The page in a tab, as the browser reports it: the activeTab grant (a click
-// on the toolbar button, or the shortcut) is what lets us see its address.
 export const pageInfo = async (tabId: number): Promise<PageInfo> => {
   const tab = await ext.tabs.get(tabId).catch(() => null);
   const url = tab?.url;

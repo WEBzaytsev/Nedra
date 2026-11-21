@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { FileArrowUp } from "@gravity-ui/icons";
 import {
   Flex,
@@ -143,8 +143,14 @@ const ImportDialog = ({ open, onClose, onImport, onImportCsv }) => {
   const [onConflict, setOnConflict] = useState("skip");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
+  const [invalidPassword, setInvalidPassword] = useState(false);
+  const passwordRef = useRef(null);
+  const generation = useRef(0);
+  const inFlight = useRef(false);
 
   useEffect(() => {
+    generation.current += 1;
+    inFlight.current = false;
     if (open) {
       setMode("nedra");
       setFile(null);
@@ -152,7 +158,12 @@ const ImportDialog = ({ open, onClose, onImport, onImportCsv }) => {
       setError("");
       setOnConflict("skip");
       setResult(null);
+      setLoading(false);
+      setInvalidPassword(false);
     }
+    return () => {
+      generation.current += 1;
+    };
   }, [open]);
 
   const isCsv = mode === "csv";
@@ -160,45 +171,64 @@ const ImportDialog = ({ open, onClose, onImport, onImportCsv }) => {
     onUpdate: ([selectedFile]) => {
       setFile(selectedFile ?? null);
       setError("");
+      setInvalidPassword(false);
     },
   });
 
   const changeMode = (next) => {
+    if (inFlight.current) return;
     setMode(next);
     setFile(null);
     setError("");
+    setInvalidPassword(false);
   };
 
   const handleImport = async () => {
+    if (inFlight.current) return;
     if (!file) {
+      setInvalidPassword(false);
       setError(t(isCsv ? "importDialog.selectCsv" : "importDialog.selectBackup"));
       return;
     }
     if (!isCsv && !password.trim()) {
+      setInvalidPassword(true);
       setError(t("importDialog.enterBackupPassword"));
+      passwordRef.current?.focus();
       return;
     }
+    inFlight.current = true;
+    const current = generation.current;
+    setInvalidPassword(false);
     setLoading(true);
     setError("");
     try {
       const data = isCsv
         ? await onImportCsv({ file, onConflict })
         : await onImport({ file, masterPassword: password, onConflict });
+      if (current !== generation.current) return;
       setResult(data);
+      setPassword("");
     } catch (requestError) {
+      if (current !== generation.current) return;
       setError(requestError.message);
       if (IS_DESKTOP && !isCsv) setFile(null);
     } finally {
-      setLoading(false);
+      if (current === generation.current) {
+        inFlight.current = false;
+        setLoading(false);
+      }
     }
   };
 
   const chooseFile = async () => {
+    const current = generation.current;
     try {
-      setFile(await chooseBackup());
+      const selected = await chooseBackup();
+      if (current !== generation.current) return;
+      setFile(selected);
       setError("");
     } catch {
-      setError(t("importDialog.filePickerError"));
+      if (current === generation.current) setError(t("importDialog.filePickerError"));
     }
   };
 
@@ -207,6 +237,8 @@ const ImportDialog = ({ open, onClose, onImport, onImportCsv }) => {
       aria-label={t(result ? "importDialog.completeTitle" : "importDialog.title")}
 
       contentOverflow="auto"
+      disableEscapeKeyDown={loading}
+      disableOutsideClick={loading}
       fullWidth
       hasCloseButton={!loading}
       maxWidth="m"
@@ -225,6 +257,7 @@ const ImportDialog = ({ open, onClose, onImport, onImportCsv }) => {
               size="l"
               name="import-mode"
               direction="vertical"
+              disabled={loading}
               value={mode}
               onUpdate={changeMode}
               options={[
@@ -248,6 +281,7 @@ const ImportDialog = ({ open, onClose, onImport, onImportCsv }) => {
                     view="outlined"
                     size="xl"
                     width="max"
+                    disabled={loading}
                     onClick={IS_DESKTOP && !isCsv ? chooseFile : fileTriggerProps.onClick}
                   >
                     <Icon data={FileArrowUp} />
@@ -258,14 +292,17 @@ const ImportDialog = ({ open, onClose, onImport, onImportCsv }) => {
                   {!isCsv && (
                     <PasswordField
                       label={t("importDialog.backupPassword")}
+                      controlRef={passwordRef}
+                      disabled={loading}
                       value={password}
                       onChange={(event) => {
                         setPassword(event.target.value);
                         setError("");
+                        setInvalidPassword(false);
                       }}
-                      validationState={error ? "invalid" : undefined}
-                      errorMessage={error || undefined}
-                      note={error ? undefined : t("importDialog.backupPasswordHelp")}
+                      validationState={invalidPassword ? "invalid" : undefined}
+                      errorMessage={invalidPassword ? error : undefined}
+                      note={invalidPassword ? undefined : t("importDialog.backupPasswordHelp")}
                       required
                       autoFocus
                       autoComplete="current-password"
@@ -275,7 +312,9 @@ const ImportDialog = ({ open, onClose, onImport, onImportCsv }) => {
                     />
                   )}
 
-                  {isCsv && error && <Alert theme="danger" view="outlined" message={error} />}
+                  {error && !invalidPassword && (
+                    <Alert theme="danger" view="outlined" message={error} />
+                  )}
                 </Flex>
               </Col>
               <Col size={{ xs: 12, m: 5 }} minWidth="0">
@@ -284,6 +323,7 @@ const ImportDialog = ({ open, onClose, onImport, onImportCsv }) => {
                   <RadioGroup
                     aria-label={t("importDialog.existingLabel")}
                     direction="vertical"
+                    disabled={loading}
                     value={onConflict}
                     onUpdate={setOnConflict}
                     options={[

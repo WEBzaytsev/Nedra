@@ -2,6 +2,12 @@
 
 This file records public Nedra releases.
 
+## [5.0.1] - 2026-11-21
+
+- Aligned server and browser-extension URL matching for control characters and invalid addresses.
+- Improved manual update error reporting and recovery in the web interface.
+- Simplified unused code and removed the retired test harnesses without changing the Nedra 5 storage or backup formats.
+
 ## [5.0.0] - 2026-11-17
 
 ### Independent product boundary
@@ -26,4 +32,5 @@ This file records public Nedra releases.
 - Multi-architecture container images with deterministic CycloneDX SBOMs, BuildKit provenance, and keyless cosign signatures.
 - Checked installation snapshots, integrity verification, rollback gates, and reproducible release manifests.
 
+[5.0.1]: https://github.com/WEBzaytsev/Nedra/releases/tag/v5.0.1
 [5.0.0]: https://github.com/WEBzaytsev/Nedra/releases/tag/v5.0.0

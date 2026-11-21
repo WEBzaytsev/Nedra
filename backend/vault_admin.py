@@ -84,7 +84,7 @@ def restore(
 def reset_settings(
     yes: Annotated[bool, typer.Option("--yes", help="Do not ask to confirm.")] = False,
 ) -> None:
-    get_vault_defaults()  # Refuse invalid environment defaults before changing data.
+    get_vault_defaults()
     if not yes:
         typer.confirm(
             "Discard saved settings and inherit the server defaults?", abort=True

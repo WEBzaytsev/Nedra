@@ -59,12 +59,6 @@ _READ_ONLY_ROUTES = frozenset(
 async def get_session(
     request: Request, database: Annotated[Database, Depends(get_database)]
 ) -> AsyncGenerator[AsyncSession]:
-    """
-    One transaction per request. GET requests and the POST routes that only
-    read (unlock, the session heartbeat) run as read transactions on a
-    snapshot; every other request takes SQLite's write lock before its first
-    statement.
-    """
     route = getattr(request.scope.get("route"), "name", None)
     write = request.method not in _READ_ONLY_METHODS and route not in _READ_ONLY_ROUTES
     async with database.transaction(write=write) as session:
@@ -129,13 +123,6 @@ SessionTokenHeader = Annotated[str | None, Header(alias=SESSION_HEADER)]
 async def get_credential(
     vault_sessions: VaultSessionsDep, token: SessionTokenHeader = None
 ) -> SessionToken:
-    """
-    The session token a request carries in the ``x-nedra-session`` header.
-    ``Authorization`` is left alone, so a reverse proxy can still put its own
-    authentication in front of the vault. A token that names no live session is
-    refused here, before the request touches the database, so it can never wait
-    for or hold the vault's write lock.
-    """
     if token is None:
         raise SessionRequired("The vault is locked. Unlock it first.")
     vault_sessions.resolve(token, refresh=False)
@@ -272,13 +259,6 @@ VaultKeyDep = Annotated[VaultKey, Depends(get_vault_key)]
 async def get_session_key(
     credential: CredentialDep, vault_sessions: VaultSessionsDep
 ) -> VaultKey:
-    """
-    The session's key, from memory only. For a route that must read a large
-    body before it touches the database: the session is checked before the
-    body is read, and no transaction (so no write lock) is open while it
-    arrives. The route's CRUD method must still check the key against the
-    vault (``MasterPasswordCRUD.verify_vault_key``) before it reads or writes.
-    """
     return vault_sessions.resolve(credential.token)
 
 
@@ -294,13 +274,6 @@ async def get_entry_name(
     password_name: Annotated[str, Path()],
     x_nedra_entry: Annotated[str | None, Header(alias="x-nedra-entry")] = None,
 ) -> str:
-    """
-    The entry a request names. Current clients also send the intended name in
-    the x-nedra-entry header, percent-encoded, because a reverse proxy
-    that decodes %2F would turn the name 'x/purge' into a request to purge the
-    entry 'x' and the server cannot tell from the path alone. When the header
-    is present and does not match, the request is refused.
-    """
     name = entry_name(password_name)
     if x_nedra_entry is not None and unquote(x_nedra_entry) != name:
         raise InvalidRequest(_PATH_CHANGED)

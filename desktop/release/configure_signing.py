@@ -1,5 +1,3 @@
-"""Keep key material out of workflow output and public artifact directories."""
-
 import json
 import os
 import subprocess
