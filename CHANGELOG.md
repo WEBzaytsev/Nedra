@@ -2,6 +2,11 @@
 
 This file records public Nedra releases.
 
+## [5.0.2] - 2026-11-22
+
+- Added Desktop connection to an existing Nedra server through explicit approval in the system browser, without entering server credentials in Desktop.
+- Added server-side connection revocation and a reconnect-only state when access ends, while retaining the local vault and ordinary web login.
+
 ## [5.0.1] - 2026-11-21
 
 - Aligned server and browser-extension URL matching for control characters and invalid addresses.
@@ -32,5 +37,6 @@ This file records public Nedra releases.
 - Multi-architecture container images with deterministic CycloneDX SBOMs, BuildKit provenance, and keyless cosign signatures.
 - Checked installation snapshots, integrity verification, rollback gates, and reproducible release manifests.
 
+[5.0.2]: https://github.com/WEBzaytsev/Nedra/releases/tag/v5.0.2
 [5.0.1]: https://github.com/WEBzaytsev/Nedra/releases/tag/v5.0.1
 [5.0.0]: https://github.com/WEBzaytsev/Nedra/releases/tag/v5.0.0

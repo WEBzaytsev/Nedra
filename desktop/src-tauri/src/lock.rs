@@ -62,12 +62,25 @@ extern "C" {
 }
 pub(super) extern "C" fn lock() {
     if let Some(app) = APP.get() {
-        reset_renderer(app);
-        app.state::<Arc<Clipboard>>().clear();
-
-        app.state::<Arc<Supervisor>>().lock();
-        let _ = app.emit("vault-locked", ());
+        crate::server::disconnect_on_lock(app);
+        lock_local(app);
     }
+}
+
+pub(crate) fn lock_local(app: &tauri::AppHandle) {
+    reset_renderer(app);
+    finish_local_lock(app);
+}
+
+pub(crate) fn lock_local_for_server(app: &tauri::AppHandle) {
+    reset_renderer_state(app);
+    finish_local_lock(app);
+}
+
+fn finish_local_lock(app: &tauri::AppHandle) {
+    app.state::<Arc<Clipboard>>().clear();
+    app.state::<Arc<Supervisor>>().lock();
+    let _ = app.emit("vault-locked", ());
 }
 pub fn install(app: tauri::AppHandle) {
     let _ = APP.set(app);
@@ -104,6 +117,19 @@ pub fn vault_lock() {
 }
 
 pub fn reset_renderer(app: &tauri::AppHandle) {
+    reset_renderer_state(app);
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.hide();
+        if let Ok(mut url) = window.url() {
+            url.set_path("/login");
+            url.set_query(None);
+            url.set_fragment(None);
+            let _ = window.navigate(url);
+        }
+    }
+}
+
+fn reset_renderer_state(app: &tauri::AppHandle) {
     {
         let mut policy = POLICY.lock().unwrap();
         policy.epoch += 1;
@@ -116,13 +142,7 @@ pub fn reset_renderer(app: &tauri::AppHandle) {
     if let Some(extension) = app.try_state::<Arc<crate::extension::Extension>>() {
         extension.on_lock();
     }
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.hide();
-        if let Ok(mut url) = window.url() {
-            url.set_path("/login");
-            url.set_query(None);
-            url.set_fragment(None);
-            let _ = window.navigate(url);
-        }
+    if let Some(keys) = app.try_state::<Arc<crate::security_key::SecurityKeys>>() {
+        keys.cancel();
     }
 }

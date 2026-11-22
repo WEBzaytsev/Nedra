@@ -52,7 +52,7 @@ Download the package for your platform from [GitHub Releases](https://github.com
 - Windows: x64 or ARM64 installer;
 - Linux: x64 or ARM64 AppImage and Debian package.
 
-Desktop vaults are local. The application can pair with the Nedra browser extension without exposing a TCP listener. Update packages are verified with the embedded release key before installation.
+Desktop can use a local vault or connect to an existing Nedra server after approval in the system browser. A local vault can pair with the Nedra browser extension without exposing a TCP listener. Update packages are verified with the embedded release key before installation.
 
 ## Security model
 

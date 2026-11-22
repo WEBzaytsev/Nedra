@@ -2,6 +2,7 @@ import { IS_DESKTOP } from "./platform";
 let desktopSession = null;
 const SESSION = "nedraSession";
 const USER = "nedraUser";
+export const DESKTOP_SERVER_SESSION = "nedraDesktopServerSession";
 
 export const LOGOUT_NOTICE = "logout_notice";
 
@@ -34,3 +35,6 @@ export const clearSession = () => {
   sessionStorage.removeItem(SESSION);
   sessionStorage.removeItem(USER);
 };
+
+export const isDesktopServerSession = () =>
+  !IS_DESKTOP && sessionStorage.getItem(DESKTOP_SERVER_SESSION) === "1";

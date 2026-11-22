@@ -13,6 +13,7 @@ mod menu;
 mod native;
 mod protocol;
 mod security_key;
+mod server;
 mod sidecar;
 mod updates;
 
@@ -106,7 +107,8 @@ pub fn run() {
     let launched = Instant::now();
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .manage(updates::Updates::default());
+        .manage(updates::Updates::default())
+        .manage(server::ServerRuntime::default());
     let builder = builder.invoke_handler(tauri::generate_handler![
         commands::core_request,
         commands::core_cancel,
@@ -136,7 +138,11 @@ pub fn run() {
         extension::extension_status,
         extension::extension_set_enabled,
         extension::extension_unpair,
-        extension::extension_pairing_answer
+        extension::extension_pairing_answer,
+        server::server_choice,
+        server::server_connect,
+        server::server_local,
+        server::server_disconnect
     ]);
     let app = builder
         .setup(move |app| {
@@ -177,7 +183,9 @@ pub fn run() {
                     })
                     .on_new_window(|_, _| tauri::webview::NewWindowResponse::Deny)
                     .on_page_load(|window, payload| {
-                        if payload.event() == tauri::webview::PageLoadEvent::Finished {
+                        if payload.event() == tauri::webview::PageLoadEvent::Finished
+                            && window.app_handle().get_webview_window("server").is_none()
+                        {
                             let _ = window.show();
                         }
                     })
@@ -192,6 +200,22 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("Nedra could not initialize its window");
     app.run(|handle, event| {
+        if matches!(&event, RunEvent::ExitRequested { .. }) {
+            server::app_exit_requested(handle);
+        }
+        if let RunEvent::WindowEvent {
+            label,
+            event: tauri::WindowEvent::Destroyed,
+            ..
+        } = &event
+        {
+            if label == "server" && server::server_window_destroyed(handle) {
+                if let Some(main) = handle.get_webview_window("main") {
+                    let _ = main.show();
+                    let _ = main.set_focus();
+                }
+            }
+        }
         if let RunEvent::Exit = event {
             handle.state::<Arc<clipboard::Clipboard>>().clear();
             if let Some(extension) = handle.try_state::<Arc<extension::Extension>>() {

@@ -41,6 +41,7 @@ import { useColorMode } from "../hooks/useColorMode";
 import useMenuAction from "../hooks/useMenuAction";
 import { useNotify } from "../hooks/useNotify";
 import { getCurrentUser } from "../utils";
+import { IS_DESKTOP } from "../platform";
 
 import BrandMark from "./BrandMark";
 import PasswordChangeDialog from "./PasswordChangeDialog";
@@ -207,6 +208,16 @@ const TopMenu = () => {
     </Box>
   );
   const utilityItems = [
+    ...(IS_DESKTOP
+      ? [
+          {
+            id: "server",
+            label: t("desktopGate.changeVault"),
+            icon: Globe,
+            action: () => window.dispatchEvent(new Event("nedra-select-server")),
+          },
+        ]
+      : []),
     ...(admin
       ? [{ id: "settings", label: t("topMenu.settings"), icon: Gear, action: openSettings }]
       : []),

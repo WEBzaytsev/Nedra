@@ -19,6 +19,7 @@ MAX_LIFETIME_MS = 12 * 60 * 60 * 1000
 DEFAULT_MAX_SESSIONS = 32
 DEFAULT_MAX_EXTENSION_SESSIONS = 8
 HANDOFF_TTL_MS = 5 * 60 * 1000
+DESKTOP_HANDOFF_TTL_MS = 5 * 60 * 1000
 
 _TOKEN = re.compile(r"[A-Za-z0-9_-]{43}", re.ASCII)
 _HANDLE = re.compile(r"[A-Za-z0-9_-]{22}", re.ASCII)
@@ -73,6 +74,17 @@ class _ExtensionHandoff:
     redeem_digest: bytes | None = field(default=None, repr=False)
 
 
+@dataclass(slots=True)
+class _DesktopHandoff:
+    request_digest: bytes = field(repr=False)
+    secret_digest: bytes = field(repr=False)
+    created: Instant
+    state: str = "pending"
+    user_id: int | None = None
+    session_token: str | None = field(default=None, repr=False)
+    session_handle: str | None = None
+
+
 @dataclass(frozen=True, slots=True)
 class SessionInfo:
     idle_timeout_ms: int
@@ -108,6 +120,7 @@ class VaultSessions:
         self._clock = clock
         self._sessions: OrderedDict[bytes, _Session] = OrderedDict()
         self._handoffs: dict[bytes, _ExtensionHandoff] = {}
+        self._desktop_handoffs: dict[bytes, _DesktopHandoff] = {}
         self._lock = threading.Lock()
 
     @property
@@ -257,6 +270,101 @@ class VaultSessions:
             ):
                 del self._handoffs[request_digest]
 
+    def start_desktop_handoff(self) -> tuple[str, str]:
+        now = self._clock()
+        request = secrets.token_urlsafe(TOKEN_BYTES)
+        secret = secrets.token_urlsafe(TOKEN_BYTES)
+        with self._lock:
+            self._drop_expired(now)
+            self._desktop_handoffs[_digest(request)] = _DesktopHandoff(
+                request_digest=_digest(request),
+                secret_digest=_digest(secret),
+                created=now,
+            )
+        return request, secret
+
+    def answer_desktop_handoff(
+        self, request: str, allow: bool, user_id: int, web_token: str
+    ) -> str | None:
+        now = self._clock()
+        request_digest = _digest(request)
+        with self._lock:
+            self._drop_expired(now)
+            handoff = self._desktop_handoffs.get(request_digest)
+            source = self._sessions.get(_digest(web_token))
+            if (
+                handoff is None
+                or handoff.state != "pending"
+                or source is None
+                or source.scope is not Scope.FULL
+                or source.user_id != user_id
+            ):
+                return None
+            handoff.user_id = user_id
+            if not allow:
+                handoff.state = "denied"
+                return ""
+            token, handle = self._open_locked(
+                source.key,
+                source.user_id,
+                source.credential_fingerprint,
+                Scope.FULL,
+                "Nedra Desktop",
+                f"desktop:{request}",
+            )
+            handoff.state = "approved"
+            handoff.session_token = token
+            handoff.session_handle = handle
+            return handle
+
+    def poll_desktop_handoff(self, request: str, secret: str) -> dict[str, str]:
+        now = self._clock()
+        request_digest = _digest(request)
+        with self._lock:
+            self._drop_expired(now)
+            handoff = self._desktop_handoffs.get(request_digest)
+            if handoff is None:
+                return {"state": "expired"}
+            if not secrets.compare_digest(handoff.secret_digest, _digest(secret)):
+                return {"state": "unavailable"}
+            if handoff.state != "approved":
+                return {"state": handoff.state}
+            token = handoff.session_token
+            handle = handoff.session_handle
+            if token is None or handle is None or _digest(token) not in self._sessions:
+                del self._desktop_handoffs[request_digest]
+                return {"state": "revoked"}
+            del self._desktop_handoffs[request_digest]
+            return {"state": "approved", "session_token": token, "id": handle}
+
+    def cancel_desktop_handoff(self, request: str, secret: str) -> None:
+        request_digest = _digest(request)
+        with self._lock:
+            handoff = self._desktop_handoffs.get(request_digest)
+            if handoff is None or not secrets.compare_digest(
+                handoff.secret_digest, _digest(secret)
+            ):
+                return
+            del self._desktop_handoffs[request_digest]
+            if handoff.session_token is not None:
+                self._sessions.pop(_digest(handoff.session_token), None)
+
+    def revoke_desktop(self, handle: str, user_id: int) -> bool:
+        if not _HANDLE.fullmatch(handle):
+            return False
+        with self._lock:
+            for digest, session in list(self._sessions.items()):
+                if (
+                    session.scope is Scope.FULL
+                    and session.user_id == user_id
+                    and session.client is not None
+                    and session.client.startswith("desktop:")
+                    and secrets.compare_digest(session.handle.encode(), handle.encode())
+                ):
+                    del self._sessions[digest]
+                    return True
+        return False
+
     def _open(
         self,
         key: VaultKey,
@@ -385,6 +493,7 @@ class VaultSessions:
             count = len(self._sessions)
             self._sessions.clear()
             self._handoffs.clear()
+            self._desktop_handoffs.clear()
             return count
 
     def revoke_user(self, user_id: int) -> int:
@@ -399,6 +508,9 @@ class VaultSessions:
             for digest, handoff in list(self._handoffs.items()):
                 if handoff.user_id == user_id:
                     del self._handoffs[digest]
+            for digest, handoff in list(self._desktop_handoffs.items()):
+                if handoff.user_id == user_id:
+                    del self._desktop_handoffs[digest]
             return len(matching)
 
     def revoke_user_except(self, user_id: int, token: str) -> int:
@@ -520,4 +632,9 @@ class VaultSessions:
         for digest, handoff in list(self._handoffs.items()):
             if now.ms_since(handoff.created) >= HANDOFF_TTL_MS:
                 del self._handoffs[digest]
+        for digest, handoff in list(self._desktop_handoffs.items()):
+            if now.ms_since(handoff.created) >= DESKTOP_HANDOFF_TTL_MS:
+                if handoff.session_token is not None:
+                    self._sessions.pop(_digest(handoff.session_token), None)
+                del self._desktop_handoffs[digest]
         return len(expired)

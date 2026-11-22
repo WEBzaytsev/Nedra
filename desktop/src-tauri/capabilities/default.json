@@ -36,6 +36,10 @@
     "allow-extension-status",
     "allow-extension-set-enabled",
     "allow-extension-unpair",
-    "allow-extension-pairing-answer"
+    "allow-extension-pairing-answer",
+    "allow-server-choice",
+    "allow-server-connect",
+    "allow-server-local",
+    "allow-server-disconnect"
   ]
 }

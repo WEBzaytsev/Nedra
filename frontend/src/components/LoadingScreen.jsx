@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 
 import BrandMark from "./BrandMark";
 
-const LoadingScreen = ({ label }) => {
+const LoadingScreen = ({ label, action }) => {
   const { t } = useTranslation();
 
   return (
@@ -19,6 +19,7 @@ const LoadingScreen = ({ label }) => {
       <BrandMark />
       <Loader size="l" />
       <Text color="secondary">{label ?? t("common.labels.loading")}</Text>
+      {action}
     </Flex>
   );
 };

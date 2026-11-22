@@ -254,9 +254,9 @@ const AppFrame = () => {
         >
           <DesktopGate>
             <AppContent />
+            {IS_DESKTOP && <PairingDialog />}
+            <SecurityKeyPrompt />
           </DesktopGate>
-          {IS_DESKTOP && <PairingDialog />}
-          <SecurityKeyPrompt />
         </Box>
         {phone ? (
           <Box

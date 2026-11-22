@@ -1,12 +1,18 @@
 # Nedra desktop
 
-A Tauri 2 application around the React and Gravity UI interface and the production Python vault core. Normal vault operations run offline. No Docker, terminal, database server, or backend TCP listener is needed to use the packaged app.
+A Tauri 2 application around the React and Gravity UI interface and the production Python vault core. The local vault works offline; alternatively, connect to an existing Nedra HTTPS server in an isolated application window. No Docker or terminal is needed to use the packaged app.
+
+## Connect to a server
+
+At first launch choose **Local vault** or enter the HTTPS origin of your Nedra server (for example, `https://vault.example.com`) and choose **Connect to server**. Desktop opens a one-time approval request in the system browser. Sign in to the existing Nedra web installation there and explicitly allow or deny the request. The server window is created only after approval; denial, expiry and revocation do not grant access. Direct server sign-in inside Desktop is not available. No local vault setup is needed. An existing installation can switch from its local sign-in screen or the vault menu. A normal application quit keeps the selected mode and server address, but every new connection still requires a fresh browser approval. Closing or locking only the server window cancels any pending connection, retains the address, clears the selected-server flag and returns to the chooser; retrying is explicit. Passwords are never stored by the desktop shell. If the server cannot be reached or its certificate is invalid, the app stays on the chooser rather than opening an empty local vault.
+
+The remote webview has no Tauri capabilities and may navigate only within its chosen HTTPS origin; external/new windows are denied. It uses a private session and is destroyed when closed or when the operating system locks. Windows fails closed unless WebView2 is new enough to support private profiles. Its session, drafts and cache are not transferred to another origin or the local vault. The local core, native backup/clipboard/device bridges and browser-extension host remain scoped to the local vault. Server-side WebAuthn support depends on the installed OS webview; use the server's own browser if the OS webview cannot complete the ceremony. Closing or locking the window clears the local private webview session and requests server-side session revocation; if the server is unreachable, an issued token remains valid until server expiry or explicit revocation in the web client. Use the web client's Revoke action to confirm access has ended.
 
 Installers and signed updater artifacts are built on six native GitHub runners. See [installation and updates](../docs/UPDATING.md#desktop) and [release maintenance](RELEASING.md). Apple Developer ID/notarization and Windows Authenticode signing are not used.
 
 ## Launch on macOS
 
-Build with `make desktop-build`, then open `desktop/src-tauri/target/release/bundle/macos/Nedra.app` in Finder. You may copy the complete `.app` to Applications. Do not copy its executable alone. The first screen creates a master password; subsequent launches unlock the persisted vault. Use **Log out**, or **Command/Ctrl+Shift+L**, to lock. Closing the window or quitting terminates the core.
+Build with `make desktop-build`, then open `desktop/src-tauri/target/release/bundle/macos/Nedra.app` in Finder. You may copy the complete `.app` to Applications. Do not copy its executable alone. For a local vault, choose **Local vault** on first launch, then create an administrator password; subsequent launches unlock the persisted vault. Use **Log out**, or **Command/Ctrl+Shift+L**, to lock. Closing the window or quitting terminates the core.
 
 macOS bundles are ad-hoc signed, not notarized, and Gatekeeper can reject an internet download. No library-validation bypass entitlement is added. Tauri updater signatures authorize updates independently of OS publisher signing.
 
@@ -31,7 +37,11 @@ make desktop-setup
 make desktop-dev
 make desktop-check
 make check
+cd frontend && npm run test:desktop-mode && npm run build:desktop
+cd ../desktop/src-tauri && cargo test --locked -p nedra-desktop
 ```
+
+The focused desktop-mode tests cover first launch, persisted local/server selection, origin filtering, exact persisted choice fields, cancellation, application quit versus server-window close, native capability isolation and the Windows private-WebView2 gate. Packaged runtime checks still belong on each native target; a Linux run does not qualify Windows WebView2 behavior.
 
 `desktop-dev` runs Vite and the source Python core from the dedicated venv. Python edits require restarting the app, **not rebuilding PyInstaller**. Frontend edits hot reload. Debug Python and script paths are fixed relative to the checkout; the production binary selects only the bundled executable.
 

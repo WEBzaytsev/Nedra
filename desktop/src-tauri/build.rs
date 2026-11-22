@@ -72,6 +72,10 @@ fn main() {
         "extension_set_enabled",
         "extension_unpair",
         "extension_pairing_answer",
+        "server_choice",
+        "server_connect",
+        "server_local",
+        "server_disconnect",
     ];
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
         tauri_build::AppManifest::new().commands(Box::leak(commands.into_boxed_slice())),

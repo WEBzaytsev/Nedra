@@ -745,6 +745,38 @@ class ExtensionSessionInfo(BaseModel):
     last_used: datetime
 
 
+class DesktopConnectionStart(BaseModel):
+    request: Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9_-]{43}$")]
+    secret: Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9_-]{43}$")]
+    verification_url: str
+    expires_in_ms: int
+
+
+class DesktopConnectionPoll(BaseModel):
+    request: Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9_-]{43}$")]
+    secret: Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9_-]{43}$")]
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class DesktopConnectionAnswer(BaseModel):
+    request: Annotated[str, StringConstraints(pattern=r"^[A-Za-z0-9_-]{43}$")]
+    allow: bool
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class DesktopConnectionStatus(BaseModel):
+    state: Literal["pending", "approved", "denied", "expired", "revoked", "unavailable"]
+    session_token: str | None = None
+    id: str | None = None
+
+
+class DesktopConnectionApproved(BaseModel):
+    state: Literal["approved", "denied"]
+    id: str | None = None
+
+
 class ExtensionMatchRequest(BaseModel):
     origin: _ExtensionOrigin
     subdomains: bool = False

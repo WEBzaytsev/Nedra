@@ -898,10 +898,54 @@ en.desktopUpdate = {
   downloadInstall: "Download and install",
 };
 en.desktopGate = {
+  choose: "Choose a vault",
+  address: "Server address",
+  connect: "Connect to server",
+  local: "Local vault",
+  back: "Back",
+  retry: "Retry",
+  connecting: "Connecting to server…",
+  windowOpen: "Server window is open",
+  closed: "Server window is closed",
+  locked: "Application locked",
+  lock: "Lock",
+  closeWindow: "Close server window",
+  changeVault: "Switch vault",
+  serverSession:
+    "This window uses the access approved in your system browser. Closing it does not revoke the server session.",
+  addressHint: "HTTPS only, without a path or parameters",
+  invalidAddress:
+    "Use an address like https://vault.example.com without a path, parameters or credentials",
+  serverFailed:
+    "Server unavailable. Check the address, network and certificate, then retry or go back.",
+  choiceFailed: "Could not load your selected mode. Retry.",
+  webviewUnavailable: "Update Microsoft Edge WebView2, then reconnect.",
+  localFailed: "Could not open the local vault. Retry.",
+  lockFailed: "Could not lock the local vault. Select the mode again.",
+  disconnectFailed: "Could not close the server window. Retry or close it manually.",
   opening: "Opening Nedra…",
   openFailedTitle: "Your vault could not be opened",
   openFailedDescription:
     "Close other Nedra windows and check that the application is fully installed, then try again.",
+};
+en.desktopConnect = {
+  title: "Allow Nedra Desktop?",
+  description:
+    "Nedra Desktop requested access to this server vault. Allow only if you started the request in the desktop app.",
+  allow: "Allow desktop access",
+  deny: "Deny",
+  revoke: "Revoke desktop access",
+  working: "Saving your decision…",
+  approved: "Desktop access approved. You can return to the app.",
+  denied: "Desktop access was not granted.",
+  revoked: "Desktop access was revoked.",
+  unavailable: "This request is invalid, expired or was already answered.",
+  opening: "Opening the approved server vault…",
+  sessionFailed:
+    "The approved desktop session is unavailable. Start a new request in Nedra Desktop.",
+  reconnectTitle: "Connect again from Nedra Desktop",
+  reconnectDescription:
+    "Direct sign-in is unavailable in the desktop server window. Close it and start a new connection request in Nedra Desktop, then approve it in your system browser.",
 };
 
 export default en;

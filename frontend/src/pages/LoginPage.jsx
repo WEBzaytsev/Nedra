@@ -21,7 +21,8 @@ import BrandMark from "../components/BrandMark";
 import PasswordField from "../components/PasswordField";
 import ThemeToggle from "../components/ThemeToggle";
 import { getMasterPasswordStrength } from "../lib/passwordStrength";
-import { LOGOUT_NOTICE } from "../utils";
+import { LOGOUT_NOTICE, isDesktopServerSession } from "../utils";
+import { IS_DESKTOP } from "../platform";
 
 const LoginPage = () => {
   const { t } = useTranslation();
@@ -143,7 +144,22 @@ const LoginPage = () => {
     recover({ username, recoveryCode, password: value, returnTo: state?.returnTo });
   };
 
-  if (initialized === null) return <LoadingScreen />;
+  if (initialized === null)
+    return (
+      <LoadingScreen
+        action={
+          IS_DESKTOP && (
+            <Button
+              type="button"
+              size="xl"
+              onClick={() => window.dispatchEvent(new Event("nedra-select-server"))}
+            >
+              {t("desktopGate.changeVault")}
+            </Button>
+          )
+        }
+      />
+    );
 
   if (issuedRecoveryCode)
     return (
@@ -169,6 +185,20 @@ const LoginPage = () => {
             >
               {t("auth.recoveryContinue")}
             </Button>
+          </Flex>
+        </Card>
+      </Container>
+    );
+
+  if (isDesktopServerSession())
+    return (
+      <Container maxWidth="440px" gutters="spacing-3" paddingBlock="spacing-10">
+        <Card view="outlined">
+          <Flex direction="column" gap="spacing-5" padding="spacing-6">
+            <Box as="h1" margin="0">
+              <Text variant="header-1">{t("desktopConnect.reconnectTitle")}</Text>
+            </Box>
+            <Alert theme="info" message={t("desktopConnect.reconnectDescription")} />
           </Flex>
         </Card>
       </Container>
@@ -380,6 +410,17 @@ const LoginPage = () => {
           </Text>
         </Flex>
       </Card>
+      {IS_DESKTOP && (
+        <Flex justifyContent="center" marginBlockStart="spacing-4">
+          <Button
+            type="button"
+            size="l"
+            onClick={() => window.dispatchEvent(new Event("nedra-select-server"))}
+          >
+            {t("desktopGate.connect")}
+          </Button>
+        </Flex>
+      )}
     </Container>
   );
 };

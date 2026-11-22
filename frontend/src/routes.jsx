@@ -5,6 +5,8 @@ import PasswordsPage from "./pages/PasswordsPage";
 import UsersPage from "./pages/UsersPage";
 import EntryCreatePage from "./pages/EntryCreatePage";
 import PreferencesPage from "./pages/PreferencesPage";
+import DesktopConnectPage from "./pages/DesktopConnectPage";
+import DesktopSessionPage from "./pages/DesktopSessionPage";
 import { getCurrentUser, isAuth } from "./utils";
 
 const ProtectedRoute = ({ children, role }) => {
@@ -23,6 +25,18 @@ const ProtectedRoute = ({ children, role }) => {
 };
 
 const routes = [
+  {
+    path: "/desktop-session",
+    element: <DesktopSessionPage />,
+  },
+  {
+    path: "/desktop-connect",
+    element: (
+      <ProtectedRoute>
+        <DesktopConnectPage />
+      </ProtectedRoute>
+    ),
+  },
   ...[
     { path: "/settings", section: "settings", role: "admin" },
     { path: "/account/password", section: "password" },

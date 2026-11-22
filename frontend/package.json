@@ -1,6 +1,6 @@
 {
   "name": "nedra-web",
-  "version": "5.0.1",
+  "version": "5.0.2",
   "private": true,
   "type": "module",
   "dependencies": {
@@ -28,6 +28,7 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write \"src/**/*.{js,jsx}\"",
     "format:check": "prettier --check \"src/**/*.{js,jsx}\"",
+    "test:desktop-mode": "node --test src/platform/serverMode.test.js",
     "build:desktop": "vite build --mode desktop"
   },
   "devDependencies": {

@@ -19,7 +19,8 @@ export const saveFile = async (blob, filename) =>
 const RETURN_TO = "nedraReturnTo";
 
 const protectedPath = (value) =>
-  typeof value === "string" && /^\/(?:passwords|users|entries\/new)\/?(?:[?#]|$)/.test(value);
+  typeof value === "string" &&
+  /^\/(?:passwords|users|entries\/new|desktop-connect)\/?(?:[?#]|$)/.test(value);
 
 export const rememberReturnTo = () => {
   const path = window.location.pathname + window.location.search + window.location.hash;
