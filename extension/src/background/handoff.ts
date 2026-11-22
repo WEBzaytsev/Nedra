@@ -1,3 +1,4 @@
+import { t } from "../shared/browser";
 import { request } from "./api";
 import { adoptToken, browserName } from "./session";
 import { getHandoff, getServer, installId, setHandoff } from "./storage";
@@ -71,7 +72,7 @@ export const cancelHandoff = async (): Promise<void> => {
 
 export const startHandoff = async (): Promise<void> => {
   const config = await getServer();
-  if (!config) throw new Error("Connect to your Nedra first.");
+  if (!config) throw new Error(t("bg_connect_first"));
   await cancelHandoff();
   const requestNonce = randomToken(32);
   const tab = randomToken(32);
@@ -89,7 +90,7 @@ export const startHandoff = async (): Promise<void> => {
     await request(config.api, "/extension/handoffs/cancel", {
       body: { request: requestNonce, tab, origin: config.vault, browser, client },
     }).catch(() => {});
-    throw new Error("Could not open Nedra.");
+    throw new Error(t("bg_could_not_open"));
   }
   const handoffTabId = handoffTab.id;
   const expires = Date.now() + HANDOFF_TTL_MS;
@@ -111,7 +112,7 @@ export const startHandoff = async (): Promise<void> => {
       body: { request: requestNonce, tab, origin: config.vault, browser, client },
     }).catch(() => {});
     await clearHandoff();
-    throw new Error("Could not open Nedra.");
+    throw new Error(t("bg_could_not_open"));
   }
 };
 

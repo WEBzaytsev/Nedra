@@ -2,6 +2,12 @@
 
 This file records public Nedra releases.
 
+## [5.0.4] - 2026-11-22
+
+- Improved Russian wording across the web vault, Desktop connection and security-key states.
+- Localized the browser extension's popup, settings, filling feedback and known connection errors; preserved server-provided diagnostics.
+- Added Russian labels for macOS application menus and a Russian option for the Windows installer.
+
 ## [5.0.3] - 2026-11-22
 
 - Use a reserved example domain in the Desktop connection form and setup guide.
@@ -41,6 +47,7 @@ This file records public Nedra releases.
 - Multi-architecture container images with deterministic CycloneDX SBOMs, BuildKit provenance, and keyless cosign signatures.
 - Checked installation snapshots, integrity verification, rollback gates, and reproducible release manifests.
 
+[5.0.4]: https://github.com/WEBzaytsev/Nedra/releases/tag/v5.0.4
 [5.0.2]: https://github.com/WEBzaytsev/Nedra/releases/tag/v5.0.2
 [5.0.1]: https://github.com/WEBzaytsev/Nedra/releases/tag/v5.0.1
 [5.0.0]: https://github.com/WEBzaytsev/Nedra/releases/tag/v5.0.0

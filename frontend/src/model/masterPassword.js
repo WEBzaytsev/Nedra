@@ -9,6 +9,7 @@ import {
 } from "../platform/biometric";
 import apiClient from "../api/client";
 import { errorDetail } from "../lib/http";
+import { errorMessage } from "../lib/errorMessage";
 import { securityKeyAssertion } from "../lib/securityKey";
 import i18n from "../i18n";
 import { setCurrentUser, setSessionToken } from "../utils";
@@ -138,8 +139,8 @@ const MasterPassword = {
     } catch (err) {
       actions.setError(
         typeof err === "string"
-          ? err
-          : await errorDetail(err, err?.message || i18n.t("errors.authentication"))
+          ? errorMessage(err, i18n.t("errors.authentication"))
+          : await errorDetail(err, errorMessage(err, i18n.t("errors.authentication")))
       );
     } finally {
       actions.setLoading(false);

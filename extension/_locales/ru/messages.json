@@ -1,0 +1,615 @@
+{
+  "extension_description": {
+    "message": "Подставляет данные для входа из вашего самостоятельного хранилища Nedra — только по вашей команде. Без учётной записи и отслеживания."
+  },
+  "extension_name": {
+    "message": "Nedra"
+  },
+  "fill_login": {
+    "message": "Подставить данные для входа, сохранённые для этой страницы"
+  },
+  "open_nedra": {
+    "message": "Открыть Nedra"
+  },
+  "ui_about": {
+    "message": "О расширении"
+  },
+  "ui_allow": {
+    "message": "Разрешить"
+  },
+  "ui_api_address": {
+    "message": "Адрес API"
+  },
+  "ui_api_on_another_address": {
+    "message": "API на другом адресе?"
+  },
+  "ui_can_t_reach_nedra": {
+    "message": "Не удаётся связаться с Nedra"
+  },
+  "ui_cancel": {
+    "message": "Отмена"
+  },
+  "ui_change_shortcuts": {
+    "message": "Изменить сочетания"
+  },
+  "ui_choose_allow_in_nedra_if_both_codes_match_if_they_differ_choose_don_t_allow": {
+    "message": "Выберите «Разрешить» в Nedra, если коды совпадают. Если нет — «Не разрешать»."
+  },
+  "ui_close": {
+    "message": "Закрыть"
+  },
+  "ui_confirm_fill": {
+    "message": "Подтвердите заполнение"
+  },
+  "ui_confirm_in_nedra": {
+    "message": "Подтвердите в Nedra"
+  },
+  "ui_connect": {
+    "message": "Подключить"
+  },
+  "ui_connect_this_browser_to_your_own_nedra_server_no_account_nothing_in_between": {
+    "message": "Подключите браузер к своему серверу Nedra. Без учётной записи и посредников."
+  },
+  "ui_connect_to_your_own_nedra_server_the_extension_asks_your_browser_for_access_to_that_one_address_only": {
+    "message": "Подключитесь к своему серверу Nedra. Расширение запросит доступ только к этому адресу."
+  },
+  "ui_connecting": {
+    "message": "Подключение…"
+  },
+  "ui_connection": {
+    "message": "Подключение"
+  },
+  "ui_copy_2fa_code": {
+    "message": "Копировать код 2FA"
+  },
+  "ui_copy_password": {
+    "message": "Копировать пароль"
+  },
+  "ui_copy_username": {
+    "message": "Копировать имя пользователя"
+  },
+  "ui_disconnect": {
+    "message": "Отключить"
+  },
+  "ui_error_clipboard_permission_needed": {
+    "message": "Для этой настройки нужно разрешение на чтение буфера обмена."
+  },
+  "ui_error_could_not_connect": {
+    "message": "Не удалось подключиться."
+  },
+  "ui_error_could_not_connect_to_app": {
+    "message": "Не удалось подключиться к приложению."
+  },
+  "ui_error_could_not_disconnect": {
+    "message": "Не удалось отключиться."
+  },
+  "ui_error_could_not_open_nedra": {
+    "message": "Не удалось открыть Nedra."
+  },
+  "ui_error_could_not_pair": {
+    "message": "Не удалось выполнить сопряжение."
+  },
+  "ui_error_could_not_reach_nedra": {
+    "message": "Не удалось связаться с Nedra."
+  },
+  "ui_error_could_not_remove_clipboard_permission": {
+    "message": "Не удалось отозвать разрешение на чтение буфера обмена. Повторите попытку."
+  },
+  "ui_error_could_not_save_settings": {
+    "message": "Не удалось сохранить настройки."
+  },
+  "ui_error_could_not_start_nedra": {
+    "message": "Не удалось запустить Nedra."
+  },
+  "ui_error_could_not_switch": {
+    "message": "Не удалось переключиться."
+  },
+  "ui_error_could_not_unlock": {
+    "message": "Не удалось разблокировать."
+  },
+  "ui_error_no_web_page_to_fill": {
+    "message": "На этой вкладке нет страницы, которую Nedra может заполнить. Скопируйте данные."
+  },
+  "ui_error_something_went_wrong": {
+    "message": "Что-то пошло не так."
+  },
+  "ui_favorite": {
+    "message": "Избранное"
+  },
+  "ui_fill_anyway": {
+    "message": "Заполнить всё равно"
+  },
+  "ui_fill_from": {
+    "message": "Источник заполнения"
+  },
+  "ui_fill_logins_from_nedra_on_this_computer_you_confirm_a_code_in_the_app_once_for_this_browser": {
+    "message": "Заполняйте данные для входа из Nedra на этом компьютере. Один раз подтвердите код в приложении для этого браузера."
+  },
+  "ui_fill_logins_from_your_nedra": {
+    "message": "Заполняйте данные для входа из Nedra"
+  },
+  "ui_filling": {
+    "message": "Заполнение"
+  },
+  "ui_keyboard_shortcuts": {
+    "message": "Сочетания клавиш"
+  },
+  "ui_leave_empty_when_the_api_is_at": {
+    "message": "Оставьте пустым, если API находится по адресу"
+  },
+  "ui_loading": {
+    "message": "Загрузка"
+  },
+  "ui_loading_33ce41": {
+    "message": "Загрузка…"
+  },
+  "ui_lock": {
+    "message": "Заблокировать"
+  },
+  "ui_lock_nedra": {
+    "message": "Заблокировать Nedra"
+  },
+  "ui_locked": {
+    "message": "Заблокировано"
+  },
+  "ui_logins_for_this_site": {
+    "message": "Данные для входа для этого сайта"
+  },
+  "ui_match_subdomains": {
+    "message": "Учитывать поддомены"
+  },
+  "ui_nedra_app": {
+    "message": "Приложение Nedra"
+  },
+  "ui_nedra_app_on_this_computer": {
+    "message": "Приложение Nedra на этом компьютере"
+  },
+  "ui_nedra_asks_whether_to_allow_this_browser_check_that_it_shows_this_code": {
+    "message": "Nedra запросит разрешение для этого браузера. Проверьте, что в приложении показан этот код:"
+  },
+  "ui_nedra_is_locked": {
+    "message": "Nedra заблокирована"
+  },
+  "ui_nedra_isn_t_running": {
+    "message": "Nedra не запущена"
+  },
+  "ui_nedra_needs_an_update": {
+    "message": "Nedra нужно обновить"
+  },
+  "ui_no_logins_match_your_search": {
+    "message": "По вашему запросу ничего не найдено."
+  },
+  "ui_no_logins_saved_for_this_site_search_all_your_logins_above": {
+    "message": "Для этого сайта нет сохранённых данных. Выполните поиск по всем данным выше."
+  },
+  "ui_no_web_page_in_this_tab": {
+    "message": "В этой вкладке нет веб-страницы"
+  },
+  "ui_not_reachable": {
+    "message": "Недоступно"
+  },
+  "ui_only_clear_what_nedra_copied": {
+    "message": "Очищать только то, что скопировала Nedra"
+  },
+  "ui_open_settings": {
+    "message": "Открыть настройки"
+  },
+  "ui_open_the_nedra_app_on_this_computer_to_fill_logins": {
+    "message": "Откройте приложение Nedra на этом компьютере, чтобы заполнять данные для входа."
+  },
+  "ui_opening": {
+    "message": "Открытие…"
+  },
+  "ui_pair": {
+    "message": "Связать"
+  },
+  "ui_pair_with_the_nedra_app": {
+    "message": "Связать с приложением Nedra"
+  },
+  "ui_pairing": {
+    "message": "Связывание…"
+  },
+  "ui_password": {
+    "message": "Пароль"
+  },
+  "ui_save": {
+    "message": "Сохранить"
+  },
+  "ui_search_logins": {
+    "message": "Поиск данных для входа"
+  },
+  "ui_search_results": {
+    "message": "Результаты поиска"
+  },
+  "ui_search_your_logins_to_copy_one": {
+    "message": "Найдите данные для входа, чтобы скопировать их."
+  },
+  "ui_set_up_nedra": {
+    "message": "Настроить Nedra"
+  },
+  "ui_settings": {
+    "message": "Настройки"
+  },
+  "ui_try_again": {
+    "message": "Повторить"
+  },
+  "ui_unlock": {
+    "message": "Разблокировать"
+  },
+  "ui_unlock_in_nedra": {
+    "message": "Разблокировать в Nedra"
+  },
+  "ui_unlock_it_in_the_app_with_your_master_password_security_key_or_touch_id": {
+    "message": "Разблокируйте её в приложении мастер-паролем, ключом безопасности или Touch ID."
+  },
+  "ui_unlocked": {
+    "message": "Разблокировано"
+  },
+  "ui_unlocking": {
+    "message": "Разблокировка…"
+  },
+  "ui_unpair": {
+    "message": "Отвязать"
+  },
+  "ui_use_the_nedra_app": {
+    "message": "Использовать приложение Nedra"
+  },
+  "ui_use_this_for_a_security_key_passkey_or_touch_id": {
+    "message": "Используйте этот вариант для ключа безопасности, passkey или Touch ID."
+  },
+  "ui_username": {
+    "message": "Имя пользователя"
+  },
+  "ui_vault_address": {
+    "message": "Адрес хранилища"
+  },
+  "ui_your_nedra_server": {
+    "message": "Ваш сервер Nedra"
+  },
+  "ui_your_secrets_stay_in_the_dark": {
+    "message": "Ваши секреты остаются в темноте."
+  },
+  "ui_timeout_vault": {
+    "message": "время бездействия, заданное в хранилище"
+  },
+  "ui_timeout_seconds": {
+    "message": "$ARG1$ с бездействия",
+    "placeholders": {
+      "arg1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ui_timeout_minutes": {
+    "message": "$ARG1$ мин бездействия",
+    "placeholders": {
+      "arg1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ui_permission_address": {
+    "message": "Разрешите расширению доступ к адресу хранилища, чтобы подключиться."
+  },
+  "ui_update_first": {
+    "message": "Сначала обновите Nedra."
+  },
+  "ui_connected_open": {
+    "message": "Подключено. Откройте Nedra на панели браузера, чтобы войти."
+  },
+  "ui_disconnected": {
+    "message": "Браузер отключён."
+  },
+  "ui_unpaired_from_app": {
+    "message": "Подключение к приложению Nedra удалено."
+  },
+  "ui_could_not_unpair": {
+    "message": "Не удалось удалить подключение."
+  },
+  "ui_native_permission": {
+    "message": "Разрешите браузеру обмениваться данными с приложением Nedra на этом компьютере."
+  },
+  "ui_desktop_unlocked": {
+    "message": "Подключено · Nedra открыта"
+  },
+  "ui_desktop_locked": {
+    "message": "Подключено · Nedra заблокирована"
+  },
+  "ui_desktop_no_app": {
+    "message": "Подключено · приложение Nedra не запущено"
+  },
+  "ui_desktop_no_host": {
+    "message": "Расширения браузера отключены в Nedra"
+  },
+  "ui_desktop_offline": {
+    "message": "Нет связи с приложением Nedra"
+  },
+  "ui_unsupported": {
+    "message": "Этот браузер не может подключиться к приложению Nedra. Обновите Chrome до версии 133, Firefox до 130 или выше."
+  },
+  "ui_pair_instructions": {
+    "message": "Подключите этот браузер к Nedra на компьютере. Сверьте код в приложении с кодом здесь и подтвердите подключение. Хранилище должно быть открыто."
+  },
+  "ui_check_pair_code": {
+    "message": "Сверьте код с приложением Nedra и нажмите там «Разрешить»:"
+  },
+  "ui_native_transport": {
+    "message": "Расширение общается с приложением напрямую через браузер, без сети. В Nedra откройте «Настройки» → «Расширение браузера» и разрешите подключение."
+  },
+  "ui_unlock_with_app": {
+    "message": "Откройте хранилище в приложении с помощью пароля, аппаратного ключа или Touch ID."
+  },
+  "ui_server_https": {
+    "message": "Ваше хранилище на сервере по HTTPS."
+  },
+  "ui_subdomain_help": {
+    "message": "Предлагать запись для example.com также на login.example.com. Не сопоставлять разные сайты вроде co.uk или github.io."
+  },
+  "ui_clipboard_help": {
+    "message": "Пароль удаляется из буфера через 30 секунд. Если включить настройку, Nedra сначала проверит его содержимое и не удалит то, что вы скопировали позже. Браузер запросит разрешение на чтение буфера."
+  },
+  "ui_desktop_lock_hint": {
+    "message": "Заполнение доступно, пока хранилище открыто в приложении Nedra."
+  },
+  "ui_server_lock_hint": {
+    "message": "Блокируется через $ARG1$, как ваше хранилище (изменить можно в настройках Nedra), а также при закрытии браузера.",
+    "placeholders": {
+      "arg1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ui_shortcut_hint": {
+    "message": "Открыть Nedra:"
+  },
+  "ui_fill_this_page": {
+    "message": "Заполнить эту страницу:"
+  },
+  "ui_firefox_shortcuts": {
+    "message": "Чтобы изменить сочетания, откройте about:addons, нажмите значок шестерёнки и выберите «Управление сочетаниями клавиш расширений»."
+  },
+  "ui_about_description": {
+    "message": "Расширение Nedra $ARG1$ общается только с вашим хранилищем и заполняет поля по вашей команде. Для поиска записей передаётся адрес сайта без пути и содержимого страницы. Значки сайтов и аналитические данные не собираются.",
+    "placeholders": {
+      "arg1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ui_verify_install": {
+    "message": "Установили из файла? Сверьте его с SHA256SUMS из выпуска на GitHub:"
+  },
+  "ui_reproducible_build": {
+    "message": "О воспроизводимой сборке см. docs/EXTENSION.md."
+  },
+  "ui_api_hint": {
+    "message": "Оставьте поле пустым, если API доступен по пути /api на адресе хранилища. По умолчанию веб-интерфейс Docker работает на порту 3000, API — на 8000."
+  },
+  "ui_fill_username_only": {
+    "message": "Имя пользователя заполнено. На следующем шаге нажмите «Заполнить» ещё раз."
+  },
+  "ui_fill_password_only": {
+    "message": "Пароль заполнен."
+  },
+  "ui_fill_no_fields": {
+    "message": "На странице не найдены поля для входа."
+  },
+  "ui_fill_hidden": {
+    "message": "Поля для входа скрыты или перекрыты. Ничего не заполнено."
+  },
+  "ui_fill_new_password": {
+    "message": "Похоже, это форма регистрации или смены пароля. Ничего не заполнено."
+  },
+  "ui_fill_origin": {
+    "message": "Страница изменилась до заполнения. Повторите попытку."
+  },
+  "ui_fill_frame": {
+    "message": "На самой странице нет полей входа. Если форма находится во встроенном окне, скопируйте данные вручную."
+  },
+  "ui_fill_blocked": {
+    "message": "Нельзя заполнить эту страницу. Скопируйте пароль."
+  },
+  "ui_filled": {
+    "message": "Заполнено."
+  },
+  "ui_handoff_pending": {
+    "message": "Завершите вход во вкладке Nedra и снова откройте расширение."
+  },
+  "ui_unlock_first": {
+    "message": "Сначала откройте хранилище Nedra, затем подключите браузер."
+  },
+  "ui_open_it_yourself": {
+    "message": "Откройте приложение вручную."
+  },
+  "ui_2fa_code": {
+    "message": "Код 2FA"
+  },
+  "ui_copied_clears": {
+    "message": "$ARG1$ скопирован. Буфер будет очищен через $ARG2$ с.",
+    "placeholders": {
+      "arg1": {
+        "content": "$1"
+      },
+      "arg2": {
+        "content": "$2"
+      }
+    }
+  },
+  "ui_insecure_label": {
+    "message": "небезопасно"
+  },
+  "ui_no_website": {
+    "message": "без сайта"
+  },
+  "ui_mismatch_prompt": {
+    "message": "Эта запись сохранена для $ARG1$. Заполнить на $ARG2$?",
+    "placeholders": {
+      "arg1": {
+        "content": "$1"
+      },
+      "arg2": {
+        "content": "$2"
+      }
+    }
+  },
+  "ui_insecure_prompt": {
+    "message": "Эта страница использует HTTP. Скопировать пароль вместо заполнения?"
+  },
+  "ui_code_left": {
+    "message": "Код 2FA $ARG1$, осталось $ARG2$ с",
+    "placeholders": {
+      "arg1": {
+        "content": "$1"
+      },
+      "arg2": {
+        "content": "$2"
+      }
+    }
+  },
+  "ui_copy_username_for": {
+    "message": "Копировать имя пользователя для $ARG1$",
+    "placeholders": {
+      "arg1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ui_copy_password_for": {
+    "message": "Копировать пароль для $ARG1$",
+    "placeholders": {
+      "arg1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ui_copy_2fa_for": {
+    "message": "Копировать код 2FA для $ARG1$",
+    "placeholders": {
+      "arg1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ui_footer_fill": {
+    "message": "Заполнить:"
+  },
+  "ui_footer_copy": {
+    "message": "Копировать пароль:"
+  },
+  "ui_footer_username": {
+    "message": "Имя пользователя:"
+  },
+  "ui_browser_too_old": {
+    "message": "Браузер устарел для подключения к Nedra"
+  },
+  "ui_browser_update": {
+    "message": "Обновите Chrome до версии 133, Firefox до 130 или выше либо подключитесь к серверу Nedra."
+  },
+  "ui_enable_extensions": {
+    "message": "Разрешите расширения браузера в Nedra"
+  },
+  "ui_enable_extensions_hint": {
+    "message": "В приложении Nedra откройте «Настройки» → «Расширение браузера» и включите «Разрешить расширения браузера»."
+  },
+  "ui_pairing_code": {
+    "message": "Код подключения $ARG1$",
+    "placeholders": {
+      "arg1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ui_open_nedra": {
+    "message": "Открыть Nedra"
+  },
+  "ui_invalid_https": {
+    "message": "Укажите адрес HTTPS. Обычный HTTP доступен только для localhost."
+  },
+  "ui_invalid_web_address": {
+    "message": "Укажите адрес сайта."
+  },
+  "ui_invalid_api_https": {
+    "message": "Укажите адрес API по HTTPS. Обычный HTTP доступен только для localhost."
+  },
+  "bg_no_host": {
+    "message": "Нет связи с Nedra через браузер. В приложении разрешите расширения: «Настройки» → «Расширение браузера»."
+  },
+  "bg_app_not_running": {
+    "message": "Приложение Nedra не запущено."
+  },
+  "bg_app_closed": {
+    "message": "Приложение Nedra разорвало соединение."
+  },
+  "bg_unpaired": {
+    "message": "Браузер не подключён к приложению Nedra."
+  },
+  "bg_protocol": {
+    "message": "Версии приложения Nedra и расширения несовместимы. Обновите оба."
+  },
+  "bg_no_permission": {
+    "message": "Разрешите обмен данными с приложением Nedra в настройках расширения."
+  },
+  "bg_restarting": {
+    "message": "Nedra завершает настройку. Откройте её снова чуть позже."
+  },
+  "bg_locked": {
+    "message": "Nedra заблокирована. Сначала откройте хранилище."
+  },
+  "bg_denied": {
+    "message": "Подключение не разрешено в Nedra."
+  },
+  "bg_busy": {
+    "message": "Nedra подключает другой браузер. Повторите попытку позже."
+  },
+  "bg_disabled": {
+    "message": "Расширения браузера отключены в приложении Nedra."
+  },
+  "bg_caller": {
+    "message": "Nedra не распознаёт это расширение."
+  },
+  "bg_unknown_pairing": {
+    "message": "Подключение этого браузера к Nedra больше не действует."
+  },
+  "bg_launch_failed": {
+    "message": "Не удалось запустить Nedra. Откройте приложение вручную."
+  },
+  "bg_timeout": {
+    "message": "Nedra не ответила вовремя."
+  },
+  "bg_refused": {
+    "message": "Nedra отклонила запрос."
+  },
+  "bg_cannot_reach": {
+    "message": "Нет связи с вашим хранилищем Nedra."
+  },
+  "bg_not_server": {
+    "message": "По этому адресу отвечает не сервер Nedra."
+  },
+  "bg_invalid_answer": {
+    "message": "Расширение не смогло прочитать ответ Nedra."
+  },
+  "bg_connection_help": {
+    "message": "Нет связи с Nedra. Проверьте работу сервера и доверие браузера к его сертификату."
+  },
+  "bg_unknown": {
+    "message": "Произошла ошибка."
+  },
+  "bg_update": {
+    "message": "Обновите Nedra, чтобы пользоваться расширением."
+  },
+  "bg_wrong_password": {
+    "message": "Неверный пароль."
+  },
+  "bg_locked_session": {
+    "message": "Nedra заблокирована."
+  },
+  "bg_no_answer": {
+    "message": "Nedra не ответила."
+  },
+  "bg_connect_first": {
+    "message": "Сначала подключитесь к Nedra."
+  },
+  "bg_could_not_open": {
+    "message": "Не удалось открыть Nedra."
+  }
+}

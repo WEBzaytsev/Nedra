@@ -1,0 +1,615 @@
+{
+  "extension_description": {
+    "message": "Fill logins from your self-hosted Nedra vault, only when you ask. No account, no tracking."
+  },
+  "extension_name": {
+    "message": "Nedra"
+  },
+  "fill_login": {
+    "message": "Fill the login saved for this page"
+  },
+  "open_nedra": {
+    "message": "Open Nedra"
+  },
+  "ui_about": {
+    "message": "About"
+  },
+  "ui_allow": {
+    "message": "Allow"
+  },
+  "ui_api_address": {
+    "message": "API address"
+  },
+  "ui_api_on_another_address": {
+    "message": "API on another address?"
+  },
+  "ui_can_t_reach_nedra": {
+    "message": "Can't reach Nedra"
+  },
+  "ui_cancel": {
+    "message": "Cancel"
+  },
+  "ui_change_shortcuts": {
+    "message": "Change shortcuts"
+  },
+  "ui_choose_allow_in_nedra_if_both_codes_match_if_they_differ_choose_don_t_allow": {
+    "message": "Choose Allow in Nedra if both codes match. If they differ, choose Don't allow."
+  },
+  "ui_close": {
+    "message": "Close"
+  },
+  "ui_confirm_fill": {
+    "message": "Confirm fill"
+  },
+  "ui_confirm_in_nedra": {
+    "message": "Confirm in Nedra"
+  },
+  "ui_connect": {
+    "message": "Connect"
+  },
+  "ui_connect_this_browser_to_your_own_nedra_server_no_account_nothing_in_between": {
+    "message": "Connect this browser to your own Nedra server. No account, nothing in between."
+  },
+  "ui_connect_to_your_own_nedra_server_the_extension_asks_your_browser_for_access_to_that_one_address_only": {
+    "message": "Connect to your own Nedra server. The extension asks your browser for access to that one address only."
+  },
+  "ui_connecting": {
+    "message": "Connecting…"
+  },
+  "ui_connection": {
+    "message": "Connection"
+  },
+  "ui_copy_2fa_code": {
+    "message": "Copy 2FA code"
+  },
+  "ui_copy_password": {
+    "message": "Copy password"
+  },
+  "ui_copy_username": {
+    "message": "Copy username"
+  },
+  "ui_disconnect": {
+    "message": "Disconnect"
+  },
+  "ui_error_clipboard_permission_needed": {
+    "message": "Clipboard read permission is needed for this setting."
+  },
+  "ui_error_could_not_connect": {
+    "message": "Could not connect."
+  },
+  "ui_error_could_not_connect_to_app": {
+    "message": "Could not connect to the app."
+  },
+  "ui_error_could_not_disconnect": {
+    "message": "Could not disconnect."
+  },
+  "ui_error_could_not_open_nedra": {
+    "message": "Could not open Nedra."
+  },
+  "ui_error_could_not_pair": {
+    "message": "Could not pair."
+  },
+  "ui_error_could_not_reach_nedra": {
+    "message": "Could not reach Nedra."
+  },
+  "ui_error_could_not_remove_clipboard_permission": {
+    "message": "Could not remove clipboard read permission. Try again."
+  },
+  "ui_error_could_not_save_settings": {
+    "message": "Could not save settings."
+  },
+  "ui_error_could_not_start_nedra": {
+    "message": "Nedra could not be started."
+  },
+  "ui_error_could_not_switch": {
+    "message": "Could not switch."
+  },
+  "ui_error_could_not_unlock": {
+    "message": "Could not unlock."
+  },
+  "ui_error_no_web_page_to_fill": {
+    "message": "This tab has no web page Nedra can fill. Copy instead."
+  },
+  "ui_error_something_went_wrong": {
+    "message": "Something went wrong."
+  },
+  "ui_favorite": {
+    "message": "Favorite"
+  },
+  "ui_fill_anyway": {
+    "message": "Fill anyway"
+  },
+  "ui_fill_from": {
+    "message": "Fill from"
+  },
+  "ui_fill_logins_from_nedra_on_this_computer_you_confirm_a_code_in_the_app_once_for_this_browser": {
+    "message": "Fill logins from Nedra on this computer. You confirm a code in the app once for this browser."
+  },
+  "ui_fill_logins_from_your_nedra": {
+    "message": "Fill logins from your Nedra"
+  },
+  "ui_filling": {
+    "message": "Filling"
+  },
+  "ui_keyboard_shortcuts": {
+    "message": "Keyboard shortcuts"
+  },
+  "ui_leave_empty_when_the_api_is_at": {
+    "message": "Leave empty when the API is at"
+  },
+  "ui_loading": {
+    "message": "Loading"
+  },
+  "ui_loading_33ce41": {
+    "message": "Loading…"
+  },
+  "ui_lock": {
+    "message": "Lock"
+  },
+  "ui_lock_nedra": {
+    "message": "Lock Nedra"
+  },
+  "ui_locked": {
+    "message": "Locked"
+  },
+  "ui_logins_for_this_site": {
+    "message": "Logins for this site"
+  },
+  "ui_match_subdomains": {
+    "message": "Match subdomains"
+  },
+  "ui_nedra_app": {
+    "message": "Nedra app"
+  },
+  "ui_nedra_app_on_this_computer": {
+    "message": "Nedra app on this computer"
+  },
+  "ui_nedra_asks_whether_to_allow_this_browser_check_that_it_shows_this_code": {
+    "message": "Nedra asks whether to allow this browser. Check that it shows this code:"
+  },
+  "ui_nedra_is_locked": {
+    "message": "Nedra is locked"
+  },
+  "ui_nedra_isn_t_running": {
+    "message": "Nedra isn't running"
+  },
+  "ui_nedra_needs_an_update": {
+    "message": "Nedra needs an update"
+  },
+  "ui_no_logins_match_your_search": {
+    "message": "No logins match your search."
+  },
+  "ui_no_logins_saved_for_this_site_search_all_your_logins_above": {
+    "message": "No logins saved for this site. Search all your logins above."
+  },
+  "ui_no_web_page_in_this_tab": {
+    "message": "No web page in this tab"
+  },
+  "ui_not_reachable": {
+    "message": "Not reachable"
+  },
+  "ui_only_clear_what_nedra_copied": {
+    "message": "Only clear what Nedra copied"
+  },
+  "ui_open_settings": {
+    "message": "Open settings"
+  },
+  "ui_open_the_nedra_app_on_this_computer_to_fill_logins": {
+    "message": "Open the Nedra app on this computer to fill logins."
+  },
+  "ui_opening": {
+    "message": "Opening…"
+  },
+  "ui_pair": {
+    "message": "Pair"
+  },
+  "ui_pair_with_the_nedra_app": {
+    "message": "Pair with the Nedra app"
+  },
+  "ui_pairing": {
+    "message": "Pairing…"
+  },
+  "ui_password": {
+    "message": "Password"
+  },
+  "ui_save": {
+    "message": "Save"
+  },
+  "ui_search_logins": {
+    "message": "Search logins"
+  },
+  "ui_search_results": {
+    "message": "Search results"
+  },
+  "ui_search_your_logins_to_copy_one": {
+    "message": "Search your logins to copy one."
+  },
+  "ui_set_up_nedra": {
+    "message": "Set up Nedra"
+  },
+  "ui_settings": {
+    "message": "Settings"
+  },
+  "ui_try_again": {
+    "message": "Try again"
+  },
+  "ui_unlock": {
+    "message": "Unlock"
+  },
+  "ui_unlock_in_nedra": {
+    "message": "Unlock in Nedra"
+  },
+  "ui_unlock_it_in_the_app_with_your_master_password_security_key_or_touch_id": {
+    "message": "Unlock it in the app with your master password, security key or Touch ID."
+  },
+  "ui_unlocked": {
+    "message": "Unlocked"
+  },
+  "ui_unlocking": {
+    "message": "Unlocking…"
+  },
+  "ui_unpair": {
+    "message": "Unpair"
+  },
+  "ui_use_the_nedra_app": {
+    "message": "Use the Nedra app"
+  },
+  "ui_use_this_for_a_security_key_passkey_or_touch_id": {
+    "message": "Use this for a security key, passkey or Touch ID."
+  },
+  "ui_username": {
+    "message": "Username"
+  },
+  "ui_vault_address": {
+    "message": "Vault address"
+  },
+  "ui_your_nedra_server": {
+    "message": "Your Nedra server"
+  },
+  "ui_your_secrets_stay_in_the_dark": {
+    "message": "Your secrets stay in the dark."
+  },
+  "ui_timeout_vault": {
+    "message": "your vault's inactivity timeout"
+  },
+  "ui_timeout_seconds": {
+    "message": "$ARG1$ s of inactivity",
+    "placeholders": {
+      "arg1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ui_timeout_minutes": {
+    "message": "$ARG1$ min of inactivity",
+    "placeholders": {
+      "arg1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ui_permission_address": {
+    "message": "Nedra needs access to your vault's address to talk to it."
+  },
+  "ui_update_first": {
+    "message": "Update Nedra first."
+  },
+  "ui_connected_open": {
+    "message": "Connected. Open Nedra from the toolbar to unlock."
+  },
+  "ui_disconnected": {
+    "message": "Disconnected from this browser."
+  },
+  "ui_unpaired_from_app": {
+    "message": "Unpaired from the Nedra app."
+  },
+  "ui_could_not_unpair": {
+    "message": "Could not unpair."
+  },
+  "ui_native_permission": {
+    "message": "Nedra needs your permission to talk to the app on this computer."
+  },
+  "ui_desktop_unlocked": {
+    "message": "Paired · Nedra is unlocked"
+  },
+  "ui_desktop_locked": {
+    "message": "Paired · Nedra is locked"
+  },
+  "ui_desktop_no_app": {
+    "message": "Paired · the Nedra app isn't running"
+  },
+  "ui_desktop_no_host": {
+    "message": "Browser extensions are turned off in the Nedra app"
+  },
+  "ui_desktop_offline": {
+    "message": "Can't reach the Nedra app"
+  },
+  "ui_unsupported": {
+    "message": "This browser can't pair with the Nedra app. Update to Chrome 133, Firefox 130 or newer."
+  },
+  "ui_pair_instructions": {
+    "message": "Pair this browser with Nedra on this computer. The app shows a code; check that it is the one shown here, then allow it. Nedra must be unlocked."
+  },
+  "ui_check_pair_code": {
+    "message": "Check that Nedra shows this code, then choose Allow there:"
+  },
+  "ui_native_transport": {
+    "message": "The extension talks to the app through your browser's native messaging, never over the network. In the app, turn on Settings → Browser extension → Allow browser extensions."
+  },
+  "ui_unlock_with_app": {
+    "message": "Unlock with the app (master password, security key or Touch ID)."
+  },
+  "ui_server_https": {
+    "message": "A vault you host, over HTTPS."
+  },
+  "ui_subdomain_help": {
+    "message": "Offer a login saved for example.com on login.example.com too. Never across public suffixes such as co.uk or github.io."
+  },
+  "ui_clipboard_help": {
+    "message": "Copied passwords are cleared after 30 seconds. With this on, Nedra first checks the clipboard still holds its copy, so it never wipes something you copied since. Your browser will ask to let it read the clipboard."
+  },
+  "ui_desktop_lock_hint": {
+    "message": "Fills only while the Nedra app is unlocked. Locking the app locks this too."
+  },
+  "ui_server_lock_hint": {
+    "message": "Locks after $ARG1$, the same as your vault (change it in Nedra's Settings), and when the browser closes.",
+    "placeholders": {
+      "arg1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ui_shortcut_hint": {
+    "message": "Open Nedra:"
+  },
+  "ui_fill_this_page": {
+    "message": "Fill this page:"
+  },
+  "ui_firefox_shortcuts": {
+    "message": "To change them, open about:addons, click the gear icon and choose “Manage Extension Shortcuts”."
+  },
+  "ui_about_description": {
+    "message": "Nedra extension $ARG1$. No Nedra account, ever. The extension comes from your browser's store, which sees the install like any extension. It only ever talks to your own Nedra, and only when you ask it to fill. Only the page's origin is sent to find matches, never its path or contents. No favicons, no analytics, no remote configuration.",
+    "placeholders": {
+      "arg1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ui_verify_install": {
+    "message": "Installed from a file? Check it against SHA256SUMS from the GitHub release:"
+  },
+  "ui_reproducible_build": {
+    "message": "The build is reproducible; see docs/EXTENSION.md."
+  },
+  "ui_api_hint": {
+    "message": "Leave empty when the API is at /api on the vault address (the usual reverse proxy setup). The Docker defaults are UI on port 3000 and API on port 8000."
+  },
+  "ui_fill_username_only": {
+    "message": "Username filled. Fill again on the next step."
+  },
+  "ui_fill_password_only": {
+    "message": "Password filled."
+  },
+  "ui_fill_no_fields": {
+    "message": "No login fields found on this page."
+  },
+  "ui_fill_hidden": {
+    "message": "The login fields on this page are hidden or covered, so nothing was filled."
+  },
+  "ui_fill_new_password": {
+    "message": "This looks like a sign-up or password change form, so nothing was filled."
+  },
+  "ui_fill_origin": {
+    "message": "The page changed before the fill, so nothing was filled. Try again."
+  },
+  "ui_fill_frame": {
+    "message": "No login fields on this page itself. If the form is inside a frame, Nedra does not fill it: copy instead."
+  },
+  "ui_fill_blocked": {
+    "message": "This page can't be filled. Copy the password instead."
+  },
+  "ui_filled": {
+    "message": "Filled."
+  },
+  "ui_handoff_pending": {
+    "message": "Finish unlocking in the Nedra tab, then open this again."
+  },
+  "ui_unlock_first": {
+    "message": "Unlock Nedra first, then pair this browser."
+  },
+  "ui_open_it_yourself": {
+    "message": "Open it yourself."
+  },
+  "ui_2fa_code": {
+    "message": "2FA code"
+  },
+  "ui_copied_clears": {
+    "message": "$ARG1$ copied. Clears in $ARG2$ s.",
+    "placeholders": {
+      "arg1": {
+        "content": "$1"
+      },
+      "arg2": {
+        "content": "$2"
+      }
+    }
+  },
+  "ui_insecure_label": {
+    "message": "not secure"
+  },
+  "ui_no_website": {
+    "message": "no website"
+  },
+  "ui_mismatch_prompt": {
+    "message": "This login is saved for $ARG1$. Fill it on $ARG2$?",
+    "placeholders": {
+      "arg1": {
+        "content": "$1"
+      },
+      "arg2": {
+        "content": "$2"
+      }
+    }
+  },
+  "ui_insecure_prompt": {
+    "message": "This page isn't secure (HTTP). Copy instead?"
+  },
+  "ui_code_left": {
+    "message": "2FA code $ARG1$, $ARG2$ seconds left",
+    "placeholders": {
+      "arg1": {
+        "content": "$1"
+      },
+      "arg2": {
+        "content": "$2"
+      }
+    }
+  },
+  "ui_copy_username_for": {
+    "message": "Copy username for $ARG1$",
+    "placeholders": {
+      "arg1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ui_copy_password_for": {
+    "message": "Copy password for $ARG1$",
+    "placeholders": {
+      "arg1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ui_copy_2fa_for": {
+    "message": "Copy 2FA code for $ARG1$",
+    "placeholders": {
+      "arg1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ui_footer_fill": {
+    "message": "Fill:"
+  },
+  "ui_footer_copy": {
+    "message": "Copy password:"
+  },
+  "ui_footer_username": {
+    "message": "Username:"
+  },
+  "ui_browser_too_old": {
+    "message": "This browser is too old for the Nedra app"
+  },
+  "ui_browser_update": {
+    "message": "Update to Chrome 133, Firefox 130 or newer, or connect to your Nedra server instead."
+  },
+  "ui_enable_extensions": {
+    "message": "Turn on browser extensions in Nedra"
+  },
+  "ui_enable_extensions_hint": {
+    "message": "In the Nedra app, open Settings → Browser extension and turn on “Allow browser extensions”."
+  },
+  "ui_pairing_code": {
+    "message": "Pairing code $ARG1$",
+    "placeholders": {
+      "arg1": {
+        "content": "$1"
+      }
+    }
+  },
+  "ui_open_nedra": {
+    "message": "Open Nedra"
+  },
+  "ui_invalid_https": {
+    "message": "Use an https:// address (plain http only works for localhost)."
+  },
+  "ui_invalid_web_address": {
+    "message": "That does not look like a web address."
+  },
+  "ui_invalid_api_https": {
+    "message": "Use an https:// address for the API (plain http only works for localhost)."
+  },
+  "bg_no_host": {
+    "message": "Nedra can't be reached from this browser. In the Nedra app, turn on Settings → Browser extension → Allow browser extensions."
+  },
+  "bg_app_not_running": {
+    "message": "The Nedra app isn't running."
+  },
+  "bg_app_closed": {
+    "message": "The Nedra app closed the connection."
+  },
+  "bg_unpaired": {
+    "message": "This browser isn't paired with the Nedra app."
+  },
+  "bg_protocol": {
+    "message": "The Nedra app and this extension don't understand each other. Update both."
+  },
+  "bg_no_permission": {
+    "message": "Nedra needs your permission to talk to the app. Allow it in the extension's settings."
+  },
+  "bg_restarting": {
+    "message": "Nedra is finishing its setup. Open it again in a moment."
+  },
+  "bg_locked": {
+    "message": "Nedra is locked. Unlock it first."
+  },
+  "bg_denied": {
+    "message": "Pairing wasn't allowed in Nedra."
+  },
+  "bg_busy": {
+    "message": "Nedra is pairing another browser. Try again in a moment."
+  },
+  "bg_disabled": {
+    "message": "Browser extensions are turned off in the Nedra app."
+  },
+  "bg_caller": {
+    "message": "Nedra doesn't trust this copy of the extension."
+  },
+  "bg_unknown_pairing": {
+    "message": "This browser isn't paired with the Nedra app any more."
+  },
+  "bg_launch_failed": {
+    "message": "Nedra could not be started. Open it yourself."
+  },
+  "bg_timeout": {
+    "message": "Nedra didn't answer in time."
+  },
+  "bg_refused": {
+    "message": "Nedra refused the request."
+  },
+  "bg_cannot_reach": {
+    "message": "Can't reach your Nedra."
+  },
+  "bg_not_server": {
+    "message": "This address answered, but not like a Nedra server."
+  },
+  "bg_invalid_answer": {
+    "message": "Nedra sent an answer this extension cannot read."
+  },
+  "bg_connection_help": {
+    "message": "Can't reach your Nedra. Check that it is running and that this browser trusts its certificate."
+  },
+  "bg_unknown": {
+    "message": "Something went wrong."
+  },
+  "bg_update": {
+    "message": "Update Nedra to use the extension."
+  },
+  "bg_wrong_password": {
+    "message": "Wrong master password."
+  },
+  "bg_locked_session": {
+    "message": "Nedra is locked."
+  },
+  "bg_no_answer": {
+    "message": "Nedra did not answer."
+  },
+  "bg_connect_first": {
+    "message": "Connect to your Nedra first."
+  },
+  "bg_could_not_open": {
+    "message": "Could not open Nedra."
+  }
+}

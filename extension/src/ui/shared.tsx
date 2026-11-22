@@ -1,4 +1,4 @@
-import { ext } from "../shared/browser";
+import { ext, t } from "../shared/browser";
 import type { Message, Reply } from "../shared/messages";
 
 export class BackgroundError extends Error {
@@ -12,7 +12,7 @@ export class BackgroundError extends Error {
 
 export const send = async <T,>(message: Message): Promise<T> => {
   const reply = (await ext.runtime.sendMessage(message)) as Reply<T> | undefined;
-  if (!reply) throw new BackgroundError("Nedra did not answer.", null);
+  if (!reply) throw new BackgroundError(t("bg_no_answer"), null);
   if (!reply.ok) throw new BackgroundError(reply.error, reply.code ?? null);
   return reply.value;
 };

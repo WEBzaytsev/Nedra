@@ -1,4 +1,5 @@
 import { normalizeOrigin, originString, serverOrigin } from "./url";
+import { t } from "./browser";
 
 export interface Target {
   vault: string;
@@ -22,13 +23,11 @@ const apiFor = (vault: string, api: string | null): string | null => {
 export const targetFor = (vaultInput: string, apiInput: string | null): Target | string => {
   const vault = serverOrigin(vaultInput);
   if (!vault) {
-    return normalizeOrigin(vaultInput)
-      ? "Use an https:// address (plain http only works for localhost)."
-      : "That doesn't look like a web address.";
+    return normalizeOrigin(vaultInput) ? t("ui_invalid_https") : t("ui_invalid_web_address");
   }
   const vaultOrigin = originString(vault);
   const api = apiFor(vaultOrigin, apiInput?.trim() || null);
-  if (!api) return "Use an https:// address for the API (plain http only works for localhost).";
+  if (!api) return t("ui_invalid_api_https");
   return { vault: vaultOrigin, api };
 };
 

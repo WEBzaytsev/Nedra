@@ -2,7 +2,7 @@ import { ApiError } from "./api";
 import { type Pairing, deletePairing, loadPairing, savePairing } from "./pairing-store";
 import { reportUnexpected } from "./report";
 import { nativeMessagingReady, restart } from "./restart";
-import { ext } from "../shared/browser";
+import { ext, t } from "../shared/browser";
 import {
   Channel,
   bytes,
@@ -35,24 +35,22 @@ const NO_PERMISSION = "no_permission";
 const RESTARTING = "restarting";
 
 export const MESSAGES: Record<string, string> = {
-  [NO_HOST]:
-    "Nedra can't be reached from this browser. In the Nedra app, turn on Settings → Browser extension → Allow browser extensions.",
-  [APP_NOT_RUNNING]: "The Nedra app isn't running.",
-  [APP_CLOSED]: "The Nedra app closed the connection.",
-  [UNPAIRED]: "This browser isn't paired with the Nedra app.",
-  [PROTOCOL]: "The Nedra app and this extension don't understand each other. Update both.",
-  [NO_PERMISSION]:
-    "Nedra needs your permission to talk to the app. Allow it in the extension's settings.",
-  [RESTARTING]: "Nedra is finishing its setup. Open it again in a moment.",
-  locked: "Nedra is locked. Unlock it first.",
-  denied: "Pairing wasn't allowed in Nedra.",
-  busy: "Nedra is pairing another browser. Try again in a moment.",
-  disabled: "Browser extensions are turned off in the Nedra app.",
-  caller: "Nedra doesn't trust this copy of the extension.",
+  [NO_HOST]: t("bg_no_host"),
+  [APP_NOT_RUNNING]: t("bg_app_not_running"),
+  [APP_CLOSED]: t("bg_app_closed"),
+  [UNPAIRED]: t("bg_unpaired"),
+  [PROTOCOL]: t("bg_protocol"),
+  [NO_PERMISSION]: t("bg_no_permission"),
+  [RESTARTING]: t("bg_restarting"),
+  locked: t("bg_locked"),
+  denied: t("bg_denied"),
+  busy: t("bg_busy"),
+  disabled: t("bg_disabled"),
+  caller: t("bg_caller"),
 
-  unknown_pairing: "This browser isn't paired with the Nedra app any more.",
-  launch_failed: "Nedra could not be started. Open it yourself.",
-  timeout: "Nedra didn't answer in time.",
+  unknown_pairing: t("bg_unknown_pairing"),
+  launch_failed: t("bg_launch_failed"),
+  timeout: t("bg_timeout"),
 };
 
 const failure = (code: string, status = 0): ApiError =>
@@ -227,7 +225,7 @@ const request = async (link: Live, op: string, extra: Record<string, unknown>) =
   const code = typeof reply.code === "string" ? reply.code : "error";
   const status = typeof reply.status === "number" ? reply.status : code === "locked" ? 401 : 0;
   const detail = typeof reply.detail === "string" ? reply.detail.slice(0, 300) : null;
-  throw new ApiError(detail ?? MESSAGES[code] ?? "Nedra refused the request.", status, code);
+  throw new ApiError(detail ?? MESSAGES[code] ?? t("bg_refused"), status, code);
 };
 
 export const call = (op: string, extra: Record<string, unknown> = {}): Promise<unknown> => {
@@ -382,7 +380,7 @@ export const desktopPhase = async (): Promise<{
     return {
       phase: "offline",
       code: null,
-      error: error instanceof ApiError ? error.message : "Something went wrong.",
+      error: error instanceof ApiError ? error.message : t("ui_error_something_went_wrong"),
     };
   }
 };

@@ -1,7 +1,7 @@
 import { render } from "preact";
 import { useCallback, useEffect, useState } from "preact/hooks";
 
-import { ext } from "../shared/browser";
+import { ext, t } from "../shared/browser";
 import { TARGET, VERSION } from "../shared/constants";
 import type { Status } from "../shared/messages";
 import { serverOrigin } from "../shared/url";
@@ -9,9 +9,10 @@ import { NedraIcon, send } from "../ui/shared";
 import { notNeededBy, permissionOrigins, targetFor } from "../shared/target";
 
 const formatTimeout = (ms: number | null): string => {
-  if (!ms) return "your vault's inactivity timeout";
-  if (ms < 60_000 || ms % 60_000 !== 0) return `${Math.round(ms / 1000)} s of inactivity`;
-  return `${ms / 60_000} min of inactivity`;
+  if (!ms) return t("ui_timeout_vault");
+  if (ms < 60_000 || ms % 60_000 !== 0)
+    return t("ui_timeout_seconds", String(Math.round(ms / 1000)));
+  return t("ui_timeout_minutes", String(ms / 60_000));
 };
 
 const Connection = ({ status, reload }: { status: Status; reload: () => void }) => {
@@ -39,7 +40,7 @@ const Connection = ({ status, reload }: { status: Status; reload: () => void }) 
     const granted = await ext.permissions.request({ origins }).catch(() => false);
     if (!granted) {
       setMessage({
-        text: "Nedra needs access to your vault's address to talk to it.",
+        text: t("ui_permission_address"),
         bad: true,
       });
       return;
@@ -53,19 +54,19 @@ const Connection = ({ status, reload }: { status: Status; reload: () => void }) 
       });
       if (next.phase === "too-old") {
         await drop(notNeededBy(origins, held));
-        setMessage({ text: next.error ?? "Update Nedra first.", bad: true });
+        setMessage({ text: next.error ?? t("ui_update_first"), bad: true });
         return;
       }
       await drop(notNeededBy(held, origins));
       setMessage({
-        text: "Connected. Open Nedra from the toolbar to unlock.",
+        text: t("ui_connected_open"),
         bad: false,
       });
       reload();
     } catch (err) {
       await drop(notNeededBy(origins, held));
       setMessage({
-        text: err instanceof Error ? err.message : "Could not connect.",
+        text: err instanceof Error ? err.message : t("ui_error_could_not_connect"),
         bad: true,
       });
     } finally {
@@ -80,10 +81,13 @@ const Connection = ({ status, reload }: { status: Status; reload: () => void }) 
       await send({ type: "forget" });
       setVault("");
       setApi("");
-      setMessage({ text: "Disconnected from this browser.", bad: false });
+      setMessage({ text: t("ui_disconnected"), bad: false });
       reload();
     } catch (err) {
-      setMessage({ text: err instanceof Error ? err.message : "Could not disconnect.", bad: true });
+      setMessage({
+        text: err instanceof Error ? err.message : t("ui_error_could_not_disconnect"),
+        bad: true,
+      });
       reload();
     } finally {
       setBusy(false);
@@ -93,26 +97,27 @@ const Connection = ({ status, reload }: { status: Status; reload: () => void }) 
   const connected = status.mode === "server" && status.phase !== "setup";
   return (
     <section aria-labelledby="connection">
-      <h2 id="connection">Connection</h2>
+      <h2 id="connection">{t("ui_connection")}</h2>
       {connected ? (
         <div class="row">
           <span class={`status ${status.phase === "unlocked" ? "on" : ""}`}>
             {status.phase === "unlocked"
-              ? "Unlocked"
+              ? t("ui_unlocked")
               : status.phase === "locked"
-                ? "Locked"
-                : "Not reachable"}
+                ? t("ui_locked")
+                : t("ui_not_reachable")}
           </span>
           <code>{status.vault}</code>
         </div>
       ) : (
         <p>
-          Connect to your own Nedra server. The extension asks your browser for access to that one
-          address only.
+          {t(
+            "ui_connect_to_your_own_nedra_server_the_extension_asks_your_browser_for_access_to_that_one_address_only"
+          )}
         </p>
       )}
       <form onSubmit={connect}>
-        <label for="vault">Vault address</label>
+        <label for="vault">{t("ui_vault_address")}</label>
         <input
           id="vault"
           class="field mono"
@@ -123,8 +128,8 @@ const Connection = ({ status, reload }: { status: Status; reload: () => void }) 
           onInput={(e) => setVault((e.target as HTMLInputElement).value)}
         />
         <details open={Boolean(api)}>
-          <summary>API on another address?</summary>
-          <label for="api">API address</label>
+          <summary>{t("ui_api_on_another_address")}</summary>
+          <label for="api">{t("ui_api_address")}</label>
           <input
             id="api"
             class="field mono"
@@ -137,18 +142,15 @@ const Connection = ({ status, reload }: { status: Status; reload: () => void }) 
             spellcheck={false}
             onInput={(e) => setApi((e.target as HTMLInputElement).value)}
           />
-          <p style={{ marginTop: "6px", fontSize: "12px" }}>
-            Leave empty when the API is at <code>/api</code> on the vault address (the usual reverse
-            proxy setup). The Docker defaults are UI on port 3000 and API on port 8000.
-          </p>
+          <p style={{ marginTop: "6px", fontSize: "12px" }}>{t("ui_api_hint")}</p>
         </details>
         <div class="buttons">
           <button class="button primary" type="submit" disabled={busy || !vault.trim()}>
-            {busy ? "Connecting…" : connected ? "Save" : "Connect"}
+            {busy ? t("ui_connecting") : connected ? t("ui_save") : t("ui_connect")}
           </button>
           {connected && (
             <button class="button danger" type="button" onClick={disconnect}>
-              Disconnect
+              {t("ui_disconnect")}
             </button>
           )}
         </div>
@@ -166,14 +168,14 @@ const Connection = ({ status, reload }: { status: Status; reload: () => void }) 
   );
 };
 
-const NEEDS_NATIVE_PERMISSION = "Nedra needs your permission to talk to the app on this computer.";
+const NEEDS_NATIVE_PERMISSION = t("ui_native_permission");
 
 const DESKTOP_STATES: Partial<Record<Status["phase"], string>> = {
-  unlocked: "Paired · Nedra is unlocked",
-  locked: "Paired · Nedra is locked",
-  "no-app": "Paired · the Nedra app isn't running",
-  "no-host": "Browser extensions are turned off in the Nedra app",
-  offline: "Can't reach the Nedra app",
+  unlocked: t("ui_desktop_unlocked"),
+  locked: t("ui_desktop_locked"),
+  "no-app": t("ui_desktop_no_app"),
+  "no-host": t("ui_desktop_no_host"),
+  offline: t("ui_desktop_offline"),
 };
 
 const spacedCode = (code: string | null): string =>
@@ -196,7 +198,10 @@ const DesktopConnection = ({ status, reload }: { status: Status; reload: () => v
     try {
       await send<Status>({ type: "pair" });
     } catch (err) {
-      setMessage({ text: err instanceof Error ? err.message : "Could not pair.", bad: true });
+      setMessage({
+        text: err instanceof Error ? err.message : t("ui_error_could_not_pair"),
+        bad: true,
+      });
     } finally {
       setBusy(false);
       reload();
@@ -208,10 +213,13 @@ const DesktopConnection = ({ status, reload }: { status: Status; reload: () => v
     setMessage(null);
     try {
       await send({ type: "unpair" });
-      setMessage({ text: "Unpaired from the Nedra app.", bad: false });
+      setMessage({ text: t("ui_unpaired_from_app"), bad: false });
       reload();
     } catch (err) {
-      setMessage({ text: err instanceof Error ? err.message : "Could not unpair.", bad: true });
+      setMessage({
+        text: err instanceof Error ? err.message : t("ui_could_not_unpair"),
+        bad: true,
+      });
       reload();
     } finally {
       setBusy(false);
@@ -232,7 +240,7 @@ const DesktopConnection = ({ status, reload }: { status: Status; reload: () => v
       reload();
     } catch (err) {
       setMessage({
-        text: err instanceof Error ? err.message : "Could not connect to the app.",
+        text: err instanceof Error ? err.message : t("ui_error_could_not_connect_to_app"),
         bad: true,
       });
     }
@@ -241,20 +249,20 @@ const DesktopConnection = ({ status, reload }: { status: Status; reload: () => v
   const state = DESKTOP_STATES[status.phase];
   return (
     <section aria-labelledby="desktop">
-      <h2 id="desktop">Nedra app</h2>
+      <h2 id="desktop">{t("ui_nedra_app")}</h2>
       {status.phase === "setup" && (
         <>
           <p>{NEEDS_NATIVE_PERMISSION}</p>
           <div class="buttons">
             <button class="button primary" onClick={() => void allow()}>
-              Allow
+              {t("ui_allow")}
             </button>
           </div>
         </>
       )}
       {status.phase === "unsupported" && (
         <p class="error" role="alert">
-          This browser can't pair with the Nedra app. Update to Chrome 133, Firefox 130 or newer.
+          {t("ui_unsupported")}
         </p>
       )}
       {state && (
@@ -264,10 +272,7 @@ const DesktopConnection = ({ status, reload }: { status: Status; reload: () => v
       )}
       {status.phase === "unpaired" && (
         <>
-          <p>
-            Pair this browser with Nedra on this computer. The app shows a code; check that it is
-            the one shown here, then allow it. Nedra must be unlocked.
-          </p>
+          <p>{t("ui_pair_instructions")}</p>
           {status.error && (
             <p class="error" role="alert">
               {status.error}
@@ -275,15 +280,15 @@ const DesktopConnection = ({ status, reload }: { status: Status; reload: () => v
           )}
           <div class="buttons">
             <button class="button primary" onClick={pair} disabled={busy}>
-              {busy ? "Pairing…" : "Pair"}
+              {busy ? t("ui_pairing") : t("ui_pair")}
             </button>
           </div>
         </>
       )}
       {pairing && (
         <>
-          <p>Check that Nedra shows this code, then choose Allow there:</p>
-          <p class="pairing-code" aria-label={`Pairing code ${spacedCode(status.pairingCode)}`}>
+          <p>{t("ui_check_pair_code")}</p>
+          <p class="pairing-code" aria-label={t("ui_pairing_code", spacedCode(status.pairingCode))}>
             {spacedCode(status.pairingCode)}
           </p>
           <div class="buttons">
@@ -293,7 +298,7 @@ const DesktopConnection = ({ status, reload }: { status: Status; reload: () => v
                 void send({ type: "cancel-pair" }).finally(reload);
               }}
             >
-              Cancel
+              {t("ui_cancel")}
             </button>
           </div>
         </>
@@ -304,7 +309,7 @@ const DesktopConnection = ({ status, reload }: { status: Status; reload: () => v
         status.phase !== "setup" && (
           <div class="buttons">
             <button class="button danger" type="button" onClick={disconnect}>
-              Unpair
+              {t("ui_unpair")}
             </button>
           </div>
         )}
@@ -317,10 +322,7 @@ const DesktopConnection = ({ status, reload }: { status: Status; reload: () => v
           {message.text}
         </p>
       )}
-      <p style={{ marginTop: "12px", fontSize: "12px" }}>
-        The extension talks to the app through your browser's native messaging, never over the
-        network. In the app, turn on Settings → Browser extension → Allow browser extensions.
-      </p>
+      <p style={{ marginTop: "12px", fontSize: "12px" }}>{t("ui_native_transport")}</p>
     </section>
   );
 };
@@ -344,14 +346,14 @@ const Mode = ({ status, reload }: { status: Status; reload: () => void }) => {
     try {
       await send<Status>({ type: "use-desktop" });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not switch.");
+      setError(err instanceof Error ? err.message : t("ui_error_could_not_switch"));
     }
     reload();
   };
 
   return (
     <section aria-labelledby="mode">
-      <h2 id="mode">Fill from</h2>
+      <h2 id="mode">{t("ui_fill_from")}</h2>
       <div class="choices" role="radiogroup" aria-labelledby="mode">
         <label class="choice">
           <input
@@ -361,8 +363,8 @@ const Mode = ({ status, reload }: { status: Status; reload: () => void }) => {
             onChange={() => void choose("desktop")}
           />
           <span>
-            Nedra app on this computer
-            <small>Unlock with the app (master password, security key or Touch ID).</small>
+            {t("ui_nedra_app_on_this_computer")}
+            <small>{t("ui_unlock_with_app")}</small>
           </span>
         </label>
         <label class="choice">
@@ -373,8 +375,8 @@ const Mode = ({ status, reload }: { status: Status; reload: () => void }) => {
             onChange={() => void choose("server")}
           />
           <span>
-            Your Nedra server
-            <small>A vault you host, over HTTPS.</small>
+            {t("ui_your_nedra_server")}
+            <small>{t("ui_server_https")}</small>
           </span>
         </label>
       </div>
@@ -389,7 +391,7 @@ const Mode = ({ status, reload }: { status: Status; reload: () => void }) => {
       {chosen === "desktop" && status.mode !== "desktop" && (
         <div class="buttons">
           <button class="button primary" onClick={() => void choose("desktop")}>
-            Use the Nedra app
+            {t("ui_use_the_nedra_app")}
           </button>
         </div>
       )}
@@ -410,7 +412,7 @@ const Preferences = ({ status, reload }: { status: Status; reload: () => void })
       });
       reload();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save settings.");
+      setError(err instanceof Error ? err.message : t("ui_error_could_not_save_settings"));
     }
   };
 
@@ -420,7 +422,7 @@ const Preferences = ({ status, reload }: { status: Status; reload: () => void })
         .request({ permissions: ["clipboardRead"] })
         .catch(() => false);
       if (!granted) {
-        setError("Clipboard read permission is needed for this setting.");
+        setError(t("ui_error_clipboard_permission_needed"));
         return;
       }
     } else {
@@ -428,7 +430,7 @@ const Preferences = ({ status, reload }: { status: Status; reload: () => void })
         .remove({ permissions: ["clipboardRead"] })
         .catch(() => false);
       if (!removed) {
-        setError("Could not remove clipboard read permission. Try again.");
+        setError(t("ui_error_could_not_remove_clipboard_permission"));
         return;
       }
     }
@@ -441,7 +443,7 @@ const Preferences = ({ status, reload }: { status: Status; reload: () => void })
 
   return (
     <section aria-labelledby="filling">
-      <h2 id="filling">Filling</h2>
+      <h2 id="filling">{t("ui_filling")}</h2>
       {error && (
         <p class="error" role="alert">
           {error}
@@ -449,11 +451,8 @@ const Preferences = ({ status, reload }: { status: Status; reload: () => void })
       )}
       <div class="toggle">
         <label for="subdomains" style={{ margin: 0 }}>
-          <span>Match subdomains</span>
-          <small>
-            Offer a login saved for example.com on login.example.com too. Never across public
-            suffixes such as co.uk or github.io.
-          </small>
+          <span>{t("ui_match_subdomains")}</span>
+          <small>{t("ui_subdomain_help")}</small>
         </label>
         <input
           id="subdomains"
@@ -465,12 +464,8 @@ const Preferences = ({ status, reload }: { status: Status; reload: () => void })
       </div>
       <div class="toggle">
         <label for="strict" style={{ margin: 0 }}>
-          <span>Only clear what Nedra copied</span>
-          <small>
-            Copied passwords are cleared after 30 seconds. With this on, Nedra first checks the
-            clipboard still holds its copy, so it never wipes something you copied since. Your
-            browser will ask to let it read the clipboard.
-          </small>
+          <span>{t("ui_only_clear_what_nedra_copied")}</span>
+          <small>{t("ui_clipboard_help")}</small>
         </label>
         <input
           id="strict"
@@ -481,27 +476,21 @@ const Preferences = ({ status, reload }: { status: Status; reload: () => void })
         />
       </div>
       {status.mode === "desktop" ? (
-        <p>Fills only while the Nedra app is unlocked. Locking the app locks this too.</p>
+        <p>{t("ui_desktop_lock_hint")}</p>
       ) : (
-        <p>
-          Locks after {formatTimeout(status.idleTimeoutMs)}, the same as your vault (change it in
-          Nedra's Settings), and when the browser closes.
-        </p>
+        <p>{t("ui_server_lock_hint", formatTimeout(status.idleTimeoutMs))}</p>
       )}
-      <h2 style={{ marginTop: "18px" }}>Keyboard shortcuts</h2>
+      <h2 style={{ marginTop: "18px" }}>{t("ui_keyboard_shortcuts")}</h2>
       <p>
-        Open Nedra: <code>Alt+Shift+M</code>. Fill this page:{" "}
+        {t("ui_shortcut_hint")} <code>Alt+Shift+M</code>. {t("ui_fill_this_page")}{" "}
         <code>{/Mac/.test(navigator.platform) ? "⌘+Shift+L" : "Ctrl+Shift+L"}</code>.
       </p>
       {TARGET === "chromium" ? (
         <button class="button" onClick={shortcuts}>
-          Change shortcuts
+          {t("ui_change_shortcuts")}
         </button>
       ) : (
-        <p>
-          To change them, open <code>about:addons</code>, click the gear icon and choose “Manage
-          Extension Shortcuts”.
-        </p>
+        <p>{t("ui_firefox_shortcuts")}</p>
       )}
     </section>
   );
@@ -509,17 +498,11 @@ const Preferences = ({ status, reload }: { status: Status; reload: () => void })
 
 const About = () => (
   <section aria-labelledby="about">
-    <h2 id="about">About</h2>
+    <h2 id="about">{t("ui_about")}</h2>
+    <p>{t("ui_about_description", VERSION)}</p>
     <p>
-      Nedra extension <code>{VERSION}</code>. No Nedra account, ever. The extension comes from your
-      browser's store, which sees the install like any extension. It only ever talks to your own
-      Nedra, and only when you ask it to fill. Only the page's origin is sent to find matches, never
-      its path or contents. No favicons, no analytics, no remote configuration.
-    </p>
-    <p>
-      Installed from a file? Check it against <code>SHA256SUMS</code> from the GitHub release:{" "}
-      <code>shasum -a 256 -c SHA256SUMS</code>. The build is reproducible; see{" "}
-      <code>docs/EXTENSION.md</code>.
+      {t("ui_verify_install")} <code>shasum -a 256 -c SHA256SUMS</code>.{" "}
+      {t("ui_reproducible_build")}
     </p>
   </section>
 );
@@ -539,14 +522,14 @@ const App = () => {
         </span>
         <span class="wordmark">Nedra</span>
       </h1>
-      <p class="tagline">Your secrets stay in the dark.</p>
+      <p class="tagline">{t("ui_your_secrets_stay_in_the_dark")}</p>
       {status ? (
         <>
           <Mode status={status} reload={reload} />
           <Preferences status={status} reload={reload} />
         </>
       ) : (
-        <p class="muted">Loading…</p>
+        <p class="muted">{t("ui_loading_33ce41")}</p>
       )}
       <About />
     </main>

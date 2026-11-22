@@ -840,7 +840,7 @@ const PasswordsPage = () => {
                   <Col
                     size={{
                       xs: folderOptions.length ? 6 : 12,
-                      m: folderOptions.length ? 6 : 4,
+                      m: folderOptions.length ? 6 : 3,
                       xl: folderOptions.length ? 3 : 4,
                     }}
                     minWidth="0"
@@ -859,7 +859,7 @@ const PasswordsPage = () => {
                       ]}
                     />
                   </Col>
-                  <Col size={{ xs: 12, m: 2, xl: 2 }} minWidth="0">
+                  <Col size={{ xs: 12, m: folderOptions.length ? 6 : 3, xl: 2 }} minWidth="0">
                     <EntryFilterMenu
                       active={entryFilters}
                       counts={filterCounts}

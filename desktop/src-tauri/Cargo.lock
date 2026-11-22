@@ -2499,7 +2499,7 @@ dependencies = [
 
 [[package]]
 name = "nedra-desktop"
-version = "5.0.3"
+version = "5.0.4"
 dependencies = [
  "arboard",
  "base64 0.23.1",
@@ -2527,7 +2527,7 @@ dependencies = [
 
 [[package]]
 name = "nedra-extension-link"
-version = "5.0.3"
+version = "5.0.4"
 dependencies = [
  "aes-gcm",
  "base64 0.22.1",
@@ -2544,7 +2544,7 @@ dependencies = [
 
 [[package]]
 name = "nedra-native-host"
-version = "5.0.3"
+version = "5.0.4"
 dependencies = [
  "libc",
  "nedra-extension-link",

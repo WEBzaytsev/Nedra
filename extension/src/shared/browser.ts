@@ -1,6 +1,9 @@
 export const ext: typeof chrome =
   (globalThis as unknown as { browser?: typeof chrome }).browser ?? globalThis.chrome;
 
+export const t = (key: string, substitutions?: string | string[]): string =>
+  ext.i18n.getMessage(key, substitutions) || key;
+
 export const randomToken = (bytes = 32): string => {
   const data = crypto.getRandomValues(new Uint8Array(bytes));
   let binary = "";

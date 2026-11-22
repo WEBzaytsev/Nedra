@@ -1,5 +1,12 @@
 use tauri::AppHandle;
 
+#[cfg(any(target_os = "macos", test))]
+fn russian_locale(locale: Option<&str>) -> bool {
+    locale
+        .map(|value| value.to_ascii_lowercase().starts_with("ru"))
+        .unwrap_or(false)
+}
+
 #[cfg(target_os = "macos")]
 const REPOSITORY: &str = "https://github.com/WEBzaytsev/Nedra";
 
@@ -24,6 +31,22 @@ mod native {
     pub struct VaultItems(pub Vec<MenuItem<Wry>>);
 
     pub fn install(app: &AppHandle) -> tauri::Result<()> {
+        let preferred = std::process::Command::new("/usr/bin/defaults")
+            .args(["read", "-g", "AppleLanguages"])
+            .output()
+            .ok()
+            .filter(|output| output.status.success())
+            .and_then(|output| String::from_utf8(output.stdout).ok())
+            .and_then(|output| {
+                output
+                    .lines()
+                    .map(|line| line.trim().trim_end_matches(',').trim_matches('"'))
+                    .find(|line| line.chars().next().is_some_and(char::is_alphabetic))
+                    .map(str::to_owned)
+            });
+        let lang = std::env::var("LANG").ok();
+        let russian = super::russian_locale(preferred.as_deref().or(lang.as_deref()));
+        let text = |english, russian_text| if russian { russian_text } else { english };
         let mut vault = Vec::new();
         let mut action = |id: &str, text: &str, accelerator: Option<&str>| {
             let mut builder = MenuItemBuilder::with_id(id, text).enabled(false);
@@ -34,18 +57,45 @@ mod native {
             vault.push(item.clone());
             Ok::<_, tauri::Error>(item)
         };
-        let check_updates = action("check-updates", "Check for Updates…", None)?;
-        let settings = action("settings", "Settings…", Some("CmdOrCtrl+,"))?;
-        let lock = action("lock", "Lock Vault", Some("CmdOrCtrl+Shift+L"))?;
-        let new_login = action("new-login", "New Login", Some("CmdOrCtrl+N"))?;
-        let new_note = action("new-note", "New Secure Note", Some("CmdOrCtrl+Shift+N"))?;
-        let import = action("import", "Import…", None)?;
-        let backup = action("backup", "Back Up Vault…", None)?;
-        let find = action("find", "Find…", Some("CmdOrCtrl+F"))?;
-        let trash = action("trash", "Trash", None)?;
-        let health = action("health", "Vault Health", None)?;
-        let theme =
-            MenuItemBuilder::with_id("toggle-theme", "Switch Light/Dark Theme").build(app)?;
+        let check_updates = action(
+            "check-updates",
+            text("Check for Updates…", "Проверить обновления…"),
+            None,
+        )?;
+        let settings = action(
+            "settings",
+            text("Settings…", "Настройки…"),
+            Some("CmdOrCtrl+,"),
+        )?;
+        let lock = action(
+            "lock",
+            text("Lock Vault", "Заблокировать хранилище"),
+            Some("CmdOrCtrl+Shift+L"),
+        )?;
+        let new_login = action(
+            "new-login",
+            text("New Login", "Новый вход"),
+            Some("CmdOrCtrl+N"),
+        )?;
+        let new_note = action(
+            "new-note",
+            text("New Secure Note", "Новая защищённая заметка"),
+            Some("CmdOrCtrl+Shift+N"),
+        )?;
+        let import = action("import", text("Import…", "Импортировать…"), None)?;
+        let backup = action(
+            "backup",
+            text("Back Up Vault…", "Создать резервную копию…"),
+            None,
+        )?;
+        let find = action("find", text("Find…", "Найти…"), Some("CmdOrCtrl+F"))?;
+        let trash = action("trash", text("Trash", "Корзина"), None)?;
+        let health = action("health", text("Vault Health", "Состояние хранилища"), None)?;
+        let theme = MenuItemBuilder::with_id(
+            "toggle-theme",
+            text("Switch Light/Dark Theme", "Переключить светлую/тёмную тему"),
+        )
+        .build(app)?;
 
         let about = AboutMetadataBuilder::new()
             .name(Some("Nedra"))
@@ -68,7 +118,7 @@ mod native {
             .separator()
             .quit()
             .build()?;
-        let file = SubmenuBuilder::new(app, "File")
+        let file = SubmenuBuilder::new(app, text("File", "Файл"))
             .item(&new_login)
             .item(&new_note)
             .separator()
@@ -77,7 +127,7 @@ mod native {
             .separator()
             .close_window()
             .build()?;
-        let edit = SubmenuBuilder::new(app, "Edit")
+        let edit = SubmenuBuilder::new(app, text("Edit", "Правка"))
             .undo()
             .redo()
             .separator()
@@ -88,7 +138,7 @@ mod native {
             .separator()
             .item(&find)
             .build()?;
-        let view = SubmenuBuilder::new(app, "View")
+        let view = SubmenuBuilder::new(app, text("View", "Вид"))
             .item(&trash)
             .item(&health)
             .separator()
@@ -96,17 +146,23 @@ mod native {
             .separator()
             .fullscreen()
             .build()?;
-        let window = SubmenuBuilder::new(app, "Window")
+        let window = SubmenuBuilder::new(app, text("Window", "Окно"))
             .minimize()
             .maximize()
             .separator()
             .close_window()
             .build()?;
-        let help = SubmenuBuilder::new(app, "Help")
-            .text("help-website", "Nedra on GitHub")
-            .text("help-releases", "Release Notes")
+        let help = SubmenuBuilder::new(app, text("Help", "Справка"))
+            .text("help-website", text("Nedra on GitHub", "Nedra на GitHub"))
+            .text(
+                "help-releases",
+                text("Release Notes", "Примечания к выпуску"),
+            )
             .separator()
-            .text("help-issue", "Report an Issue…")
+            .text(
+                "help-issue",
+                text("Report an Issue…", "Сообщить о проблеме…"),
+            )
             .build()?;
         app.set_menu(
             MenuBuilder::new(app)
@@ -150,4 +206,16 @@ pub fn menu_state(app: AppHandle, unlocked: bool) {
     native::set_unlocked(app, unlocked);
     #[cfg(not(target_os = "macos"))]
     let _ = (app, unlocked);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::russian_locale;
+
+    #[test]
+    fn recognizes_russian_locale_without_changing_english_fallback() {
+        assert!(russian_locale(Some("ru_RU.UTF-8")));
+        assert!(!russian_locale(Some("en_US.UTF-8")));
+        assert!(!russian_locale(None));
+    }
 }

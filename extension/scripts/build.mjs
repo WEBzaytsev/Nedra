@@ -101,6 +101,7 @@ const buildTarget = async (target) => {
   if (target === "chromium")
     cpSync(join(root, "src/offscreen/offscreen.html"), join(out, "offscreen.html"));
   cpSync(join(root, "src/icons"), join(out, "icons"), { recursive: true });
+  cpSync(join(root, "_locales"), join(out, "_locales"), { recursive: true });
   for (const [name, source] of Object.entries(FONTS))
     cpSync(join(root, source), join(out, "fonts", name));
   writeFileSync(join(out, "manifest.json"), `${JSON.stringify(manifestFor(target), null, 2)}\n`);

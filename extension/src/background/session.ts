@@ -27,7 +27,7 @@ import {
   setConfig,
   setSession,
 } from "./storage";
-import { ext } from "../shared/browser";
+import { ext, t } from "../shared/browser";
 import { type BrowserName, FEATURE, HANDOFF_CHECK_TIMEOUT_MS, TARGET } from "../shared/constants";
 import type { Logins } from "./api";
 import type { Status } from "../shared/messages";
@@ -82,7 +82,7 @@ export const forgetSession = async (): Promise<void> => {
 export const authed = async (path: string, body?: unknown): Promise<unknown> => {
   const config = await getServer();
   const session = await getSession();
-  if (!config || !session) throw new ApiError("Nedra is locked.", 401, "invalid_session");
+  if (!config || !session) throw new ApiError(t("bg_locked_session"), 401, "invalid_session");
   try {
     const data = await request(config.api, path, { body, token: session.token });
     await remember(session.token, session.idleTimeoutMs, session.idleTimeoutMs);
@@ -132,12 +132,12 @@ export const currentStatus = async (): Promise<Status> => {
 export const messageOf = (error: unknown): string => {
   if (error instanceof ApiError) {
     if (error.code === UNREACHABLE) {
-      return "Can't reach your Nedra. Check that it is running and that this browser trusts its certificate.";
+      return t("bg_connection_help");
     }
     return error.message;
   }
   reportUnexpected(error);
-  return "Something went wrong.";
+  return t("bg_unknown");
 };
 
 export const configure = async (target: Target): Promise<Status> => {
@@ -194,14 +194,14 @@ export const unlock = async (username: string, password: string): Promise<Status
       if (!/master password/i.test(error.message)) {
         return status(config, {
           phase: "too-old",
-          error: "Update Nedra to use the extension.",
+          error: t("bg_update"),
         });
       }
     }
     throw error;
   }
   if (!result.valid || !result.token || result.idleTimeoutMs === null) {
-    throw new ApiError("Wrong master password.", 200, "wrong_password");
+    throw new ApiError(t("bg_wrong_password"), 200, "wrong_password");
   }
   await remember(result.token, result.idleTimeoutMs, result.idleTimeoutMs);
   return status(config, { phase: "unlocked", idleTimeoutMs: result.idleTimeoutMs });

@@ -26,7 +26,7 @@ import {
 } from "./session";
 import { resumeAfterRestart } from "./restart";
 import { getConfig, getHandoff, restrictSessionStorage, setConfig } from "./storage";
-import { ext } from "../shared/browser";
+import { ext, t } from "../shared/browser";
 import { type Message, type Reply, parseMessage } from "../shared/messages";
 
 const extensionPage = (sender: chrome.runtime.MessageSender): boolean =>
@@ -108,7 +108,7 @@ const handle = async (
       return ok(null);
     case "settings": {
       const config = await getConfig();
-      if (!config) return failed(new Error("Connect to your Nedra first."));
+      if (!config) return failed(new Error(t("bg_connect_first")));
       await setConfig({
         ...config,
         subdomains: message.subdomains,

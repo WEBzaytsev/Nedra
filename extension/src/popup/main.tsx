@@ -1,7 +1,7 @@
 import { render } from "preact";
 import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 
-import { ext, sha256Hex } from "../shared/browser";
+import { ext, sha256Hex, t } from "../shared/browser";
 import { CLIPBOARD_CLEAR_MS } from "../shared/constants";
 import type { FillOutcome, Login, PageInfo, Status } from "../shared/messages";
 import { unicodeHost } from "../shared/url";
@@ -46,18 +46,23 @@ const close = () => {
 };
 
 const FILL_MESSAGES: Record<string, string> = {
-  "username-only": "Username filled. Fill again on the next step.",
-  "password-only": "Password filled.",
-  "no-fields": "No login fields found on this page.",
-  hidden: "The login fields on this page are hidden or covered, so nothing was filled.",
-  "new-password": "This looks like a sign-up or password change form, so nothing was filled.",
-  origin: "The page changed before the fill, so nothing was filled. Try again.",
-  frame:
-    "No login fields on this page itself. If the form is inside a frame, Nedra does not fill it: copy instead.",
-  blocked: "This page can't be filled. Copy the password instead.",
+  "username-only": t("ui_fill_username_only"),
+  "password-only": t("ui_fill_password_only"),
+  "no-fields": t("ui_fill_no_fields"),
+  hidden: t("ui_fill_hidden"),
+  "new-password": t("ui_fill_new_password"),
+  origin: t("ui_fill_origin"),
+  frame: t("ui_fill_frame"),
+  blocked: t("ui_fill_blocked"),
 };
 
-const Header = ({ onLock, lockLabel = "Lock" }: { onLock?: () => void; lockLabel?: string }) => (
+const Header = ({
+  onLock,
+  lockLabel = t("ui_lock"),
+}: {
+  onLock?: () => void;
+  lockLabel?: string;
+}) => (
   <header class="top">
     <span class="brand-mark">
       <NedraIcon />
@@ -70,8 +75,8 @@ const Header = ({ onLock, lockLabel = "Lock" }: { onLock?: () => void; lockLabel
     )}
     <button
       class="icon-button"
-      title="Settings"
-      aria-label="Settings"
+      title={t("ui_settings")}
+      aria-label={t("ui_settings")}
       onClick={() => {
         void ext.runtime.openOptionsPage();
         close();
@@ -114,8 +119,8 @@ const Setup = () => (
     <div class="hero">
       <NedraIcon size={44} />
     </div>
-    <h1>Fill logins from your Nedra</h1>
-    <p>Connect this browser to your own Nedra server. No account, nothing in between.</p>
+    <h1>{t("ui_fill_logins_from_your_nedra")}</h1>
+    <p>{t("ui_connect_this_browser_to_your_own_nedra_server_no_account_nothing_in_between")}</p>
     <button
       class="button primary"
       ref={focusOnMount}
@@ -124,19 +129,21 @@ const Setup = () => (
         close();
       }}
     >
-      Set up Nedra
+      {t("ui_set_up_nedra")}
     </button>
   </main>
 );
 
 const Problem = ({ status, onRetry }: { status: Status; onRetry: () => void }) => (
   <main class="centered" role="alert">
-    <h1>{status.phase === "too-old" ? "Nedra needs an update" : "Can't reach Nedra"}</h1>
+    <h1>
+      {status.phase === "too-old" ? t("ui_nedra_needs_an_update") : t("ui_can_t_reach_nedra")}
+    </h1>
     <p>{status.error}</p>
     <div class="stack">
       {status.phase === "offline" && (
         <button class="button primary" ref={focusOnMount} onClick={onRetry}>
-          Try again
+          {t("ui_try_again")}
         </button>
       )}
       <button
@@ -146,7 +153,7 @@ const Problem = ({ status, onRetry }: { status: Status; onRetry: () => void }) =
           close();
         }}
       >
-        Open settings
+        {t("ui_open_settings")}
       </button>
     </div>
   </main>
@@ -170,7 +177,7 @@ const Locked = ({ status, onUnlocked }: { status: Status; onUnlocked: (s: Status
       onUnlocked(next);
     } catch (err) {
       if (err instanceof BackgroundError && err.code === "use_handoff") setNeedsHandoff(true);
-      setError(err instanceof Error ? err.message : "Could not unlock.");
+      setError(err instanceof Error ? err.message : t("ui_error_could_not_unlock"));
     } finally {
       setBusy(false);
     }
@@ -182,48 +189,46 @@ const Locked = ({ status, onUnlocked }: { status: Status; onUnlocked: (s: Status
       await send({ type: "handoff" });
       close();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not open Nedra.");
+      setError(err instanceof Error ? err.message : t("ui_error_could_not_open_nedra"));
     }
   };
 
   return (
     <main class="centered">
-      <h1>Unlock</h1>
+      <h1>{t("ui_unlock")}</h1>
       <p class="mono" style={{ fontSize: "12px" }}>
         {status.vault}
       </p>
-      {status.handoffPending && (
-        <p class="warn">Finish unlocking in the Nedra tab, then open this again.</p>
-      )}
+      {status.handoffPending && <p class="warn">{t("ui_handoff_pending")}</p>}
       {!needsHandoff && (
         <form class="stack" onSubmit={submit}>
           <label class="sr-only" for="username">
-            Username
+            {t("ui_username")}
           </label>
           <input
             id="username"
             class="field"
             type="text"
             autoComplete="username"
-            placeholder="Username"
+            placeholder={t("ui_username")}
             ref={focusOnMount}
             value={username}
             onInput={(e) => setUsername((e.target as HTMLInputElement).value)}
           />
           <label class="sr-only" for="password">
-            Password
+            {t("ui_password")}
           </label>
           <input
             id="password"
             class="field"
             type="password"
             autoComplete="current-password"
-            placeholder="Password"
+            placeholder={t("ui_password")}
             value={password}
             onInput={(e) => setPassword((e.target as HTMLInputElement).value)}
           />
           <button class="button primary" type="submit" disabled={busy || !username || !password}>
-            {busy ? "Unlocking…" : "Unlock"}
+            {busy ? t("ui_unlocking") : t("ui_unlock")}
           </button>
         </form>
       )}
@@ -233,10 +238,12 @@ const Locked = ({ status, onUnlocked }: { status: Status; onUnlocked: (s: Status
         </p>
       )}
       <button class="button" onClick={handoff} ref={needsHandoff ? focusOnMount : null}>
-        <Icon name="shield" size={16} /> Unlock in Nedra
+        <Icon name="shield" size={16} /> {t("ui_unlock_in_nedra")}
       </button>
       {!needsHandoff && (
-        <p style={{ fontSize: "12px" }}>Use this for a security key, passkey or Touch ID.</p>
+        <p style={{ fontSize: "12px" }}>
+          {t("ui_use_this_for_a_security_key_passkey_or_touch_id")}
+        </p>
       )}
     </main>
   );
@@ -265,7 +272,7 @@ const Notice = ({
     <div class="stack">
       {action}
       <button class="button" onClick={openSettings}>
-        Open settings
+        {t("ui_open_settings")}
       </button>
     </div>
   </main>
@@ -282,10 +289,10 @@ const Unpaired = ({ status, onChange }: { status: Status; onChange: (s: Status) 
     } catch (err) {
       setError(
         err instanceof BackgroundError && err.code === "locked"
-          ? "Unlock Nedra first, then pair this browser."
+          ? t("ui_unlock_first")
           : err instanceof Error
             ? err.message
-            : "Could not pair."
+            : t("ui_error_could_not_pair")
       );
     } finally {
       setBusy(false);
@@ -296,10 +303,11 @@ const Unpaired = ({ status, onChange }: { status: Status; onChange: (s: Status) 
       <div class="hero">
         <NedraIcon size={44} />
       </div>
-      <h1>Pair with the Nedra app</h1>
+      <h1>{t("ui_pair_with_the_nedra_app")}</h1>
       <p>
-        Fill logins from Nedra on this computer. You confirm a code in the app once for this
-        browser.
+        {t(
+          "ui_fill_logins_from_nedra_on_this_computer_you_confirm_a_code_in_the_app_once_for_this_browser"
+        )}
       </p>
       {error && (
         <p class="error" role="alert">
@@ -307,7 +315,7 @@ const Unpaired = ({ status, onChange }: { status: Status; onChange: (s: Status) 
         </p>
       )}
       <button class="button primary" ref={focusOnMount} onClick={pair} disabled={busy}>
-        {busy ? "Pairing…" : "Pair"}
+        {busy ? t("ui_pairing") : t("ui_pair")}
       </button>
     </main>
   );
@@ -317,13 +325,13 @@ const Pairing = ({ status, onCancel }: { status: Status; onCancel: () => void })
   const code = spacedCode(status.pairingCode);
   return (
     <main class="centered">
-      <h1>Confirm in Nedra</h1>
-      <p>Nedra asks whether to allow this browser. Check that it shows this code:</p>
-      <p class="pairing-code" aria-label={`Pairing code ${code}`}>
+      <h1>{t("ui_confirm_in_nedra")}</h1>
+      <p>{t("ui_nedra_asks_whether_to_allow_this_browser_check_that_it_shows_this_code")}</p>
+      <p class="pairing-code" aria-label={t("ui_pairing_code", code)}>
         {code}
       </p>
       <p style={{ fontSize: "12px" }}>
-        Choose Allow in Nedra if both codes match. If they differ, choose Don't allow.
+        {t("ui_choose_allow_in_nedra_if_both_codes_match_if_they_differ_choose_don_t_allow")}
       </p>
       <button
         class="button"
@@ -332,7 +340,7 @@ const Pairing = ({ status, onCancel }: { status: Status; onCancel: () => void })
           void send({ type: "cancel-pair" }).finally(onCancel);
         }}
       >
-        Cancel
+        {t("ui_cancel")}
       </button>
     </main>
   );
@@ -346,13 +354,13 @@ const NoApp = () => {
     try {
       await send({ type: "open-app" });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Nedra could not be started.");
+      setError(err instanceof Error ? err.message : t("ui_error_could_not_start_nedra"));
       setState("failed");
     }
   };
   return (
     <Notice
-      title="Nedra isn't running"
+      title={t("ui_nedra_isn_t_running")}
       action={
         <button
           class="button primary"
@@ -360,14 +368,14 @@ const NoApp = () => {
           onClick={start}
           disabled={state === "starting"}
         >
-          {state === "starting" ? "Opening…" : "Open Nedra"}
+          {state === "starting" ? t("ui_opening") : t("ui_open_nedra")}
         </button>
       }
     >
-      <p>Open the Nedra app on this computer to fill logins.</p>
+      <p>{t("ui_open_the_nedra_app_on_this_computer_to_fill_logins")}</p>
       {state === "failed" && (
         <p class="error" role="alert">
-          {error} Open it yourself.
+          {error} {t("ui_open_it_yourself")}
         </p>
       )}
     </Notice>
@@ -382,20 +390,20 @@ const DesktopLocked = () => {
       await send({ type: "show-app" });
       close();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not reach Nedra.");
+      setError(err instanceof Error ? err.message : t("ui_error_could_not_reach_nedra"));
     }
   };
   return (
     <main class="centered">
-      <h1>Nedra is locked</h1>
-      <p>Unlock it in the app with your master password, security key or Touch ID.</p>
+      <h1>{t("ui_nedra_is_locked")}</h1>
+      <p>{t("ui_unlock_it_in_the_app_with_your_master_password_security_key_or_touch_id")}</p>
       {error && (
         <p class="error" role="alert">
           {error}
         </p>
       )}
       <button class="button primary" ref={focusOnMount} onClick={show}>
-        <Icon name="shield" size={16} /> Unlock Nedra
+        <Icon name="shield" size={16} /> {t("ui_unlock_in_nedra")}
       </button>
     </main>
   );
@@ -432,7 +440,7 @@ const Unlocked = ({
       )
         return onLocked();
       setToast({
-        text: err instanceof Error ? err.message : "Something went wrong.",
+        text: err instanceof Error ? err.message : t("ui_error_something_went_wrong"),
         tone: "bad",
       });
     },
@@ -502,7 +510,7 @@ const Unlocked = ({
           confirmed,
         });
         value = totp.code;
-        label = "2FA code";
+        label = t("ui_2fa_code");
         setCodes((all) => ({
           ...all,
           [login.id]: { code: totp.code, until: Date.now() + totp.expiresIn * 1000 },
@@ -515,12 +523,12 @@ const Unlocked = ({
           confirmed,
         });
         value = (what === "password" ? credential.password : credential.username) ?? "";
-        label = what === "password" ? "Password" : "Username";
+        label = what === "password" ? t("ui_password") : t("ui_username");
       }
       await navigator.clipboard.writeText(value);
       await send({ type: "copied", digest: await sha256Hex(value) });
       setToast({
-        text: `${label} copied. Clears in ${Math.round(CLIPBOARD_CLEAR_MS / 1000)} s.`,
+        text: t("ui_copied_clears", [label, String(Math.round(CLIPBOARD_CLEAR_MS / 1000))]),
         tone: "ok",
       });
     } catch (err) {
@@ -540,7 +548,7 @@ const Unlocked = ({
         confirmed,
       });
       if (outcome.reason === "filled" || outcome.reason === "password-only") {
-        setToast({ text: FILL_MESSAGES[outcome.reason] ?? "Filled.", tone: "ok" });
+        setToast({ text: FILL_MESSAGES[outcome.reason] ?? t("ui_filled"), tone: "ok" });
         if (outcome.reason === "filled") close();
         return;
       }
@@ -558,7 +566,7 @@ const Unlocked = ({
     setToast(null);
     if (!page?.origin) {
       setToast({
-        text: "This tab has no web page Nedra can fill. Copy instead.",
+        text: t("ui_error_no_web_page_to_fill"),
         tone: "warn",
       });
       return;
@@ -623,8 +631,8 @@ const Unlocked = ({
   if (!listing) {
     return (
       <>
-        <Header onLock={lockNow} lockLabel={desktop ? "Lock Nedra" : "Lock"} />
-        <div class="loading" aria-label="Loading">
+        <Header onLock={lockNow} lockLabel={desktop ? t("ui_lock_nedra") : t("ui_lock")} />
+        <div class="loading" aria-label={t("ui_loading")}>
           <NedraIcon size={32} />
         </div>
       </>
@@ -632,20 +640,22 @@ const Unlocked = ({
   }
 
   const unicode = page?.host ? unicodeHost(page.host.replace(/^http:\/\//, "")) : null;
-  const listLabel = results ? "Search results" : "Logins for this site";
+  const listLabel = results ? t("ui_search_results") : t("ui_logins_for_this_site");
 
   return (
     <div>
-      <Header onLock={lockNow} lockLabel={desktop ? "Lock Nedra" : "Lock"} />
+      <Header onLock={lockNow} lockLabel={desktop ? t("ui_lock_nedra") : t("ui_lock")} />
       <div class="page mono" title={unicode ? `${page?.host} (${unicode})` : (page?.host ?? "")}>
         {page?.host ? (
           page.insecure ? (
-            <span class="insecure">⚠ {page.host} · not secure</span>
+            <span class="insecure">
+              ⚠ {page.host} · {t("ui_insecure_label")}
+            </span>
           ) : (
             page.host
           )
         ) : (
-          "No web page in this tab"
+          t("ui_no_web_page_in_this_tab")
         )}
       </div>
       <div class="search">
@@ -653,14 +663,14 @@ const Unlocked = ({
           <Icon name="search" size={16} />
         </span>
         <label class="sr-only" for="search">
-          Search logins
+          {t("ui_search_logins")}
         </label>
         <input
           id="search"
           ref={searchRef}
           class="field"
           type="search"
-          placeholder="Search logins"
+          placeholder={t("ui_search_logins")}
           autoComplete="off"
           spellcheck={false}
 
@@ -674,37 +684,44 @@ const Unlocked = ({
       </div>
 
       {prompt && (
-        <div class="panel" role="alertdialog" aria-label="Confirm fill" aria-live="assertive">
+        <div
+          class="panel"
+          role="alertdialog"
+          aria-label={t("ui_confirm_fill")}
+          aria-live="assertive"
+        >
           {prompt.kind === "mismatch" && (
             <>
               <p>
-                This login is saved for <strong>{prompt.login.host ?? "no website"}</strong>. Fill
-                it on <strong>{page?.host}</strong>?
+                {t("ui_mismatch_prompt", [
+                  prompt.login.host ?? t("ui_no_website"),
+                  page?.host ?? "",
+                ])}
               </p>
               <div class="buttons">
                 <button class="button" onClick={() => setPrompt(null)}>
-                  Cancel
+                  {t("ui_cancel")}
                 </button>
                 <button
                   class="button primary"
                   ref={focusOnMount}
                   onClick={() => void doFill(prompt.login, true)}
                 >
-                  Fill anyway
+                  {t("ui_fill_anyway")}
                 </button>
               </div>
             </>
           )}
           {prompt.kind === "insecure" && (
             <>
-              <p>This page isn't secure (HTTP). Copy instead?</p>
+              <p>{t("ui_insecure_prompt")}</p>
               <div class="buttons">
                 <button class="button" onClick={() => setPrompt(null)}>
-                  Cancel
+                  {t("ui_cancel")}
                 </button>
                 {prompt.canFill && (
                   <button class="button" onClick={() => void doFill(prompt.login, false)}>
-                    Fill anyway
+                    {t("ui_fill_anyway")}
                   </button>
                 )}
                 <button
@@ -715,7 +732,7 @@ const Unlocked = ({
                     void copy(prompt.login, "password");
                   }}
                 >
-                  Copy password
+                  {t("ui_copy_password")}
                 </button>
               </div>
             </>
@@ -725,7 +742,7 @@ const Unlocked = ({
               <p>{prompt.text}</p>
               <div class="buttons">
                 <button class="button" onClick={() => setPrompt(null)}>
-                  Close
+                  {t("ui_close")}
                 </button>
                 <button
                   class="button primary"
@@ -735,7 +752,7 @@ const Unlocked = ({
                     void copy(prompt.login, "password");
                   }}
                 >
-                  Copy password
+                  {t("ui_copy_password")}
                 </button>
               </div>
             </>
@@ -755,10 +772,10 @@ const Unlocked = ({
       {rows.length === 0 ? (
         <div class="empty">
           {results
-            ? "No logins match your search."
+            ? t("ui_no_logins_match_your_search")
             : page?.origin
-              ? "No logins saved for this site. Search all your logins above."
-              : "Search your logins to copy one."}
+              ? t("ui_no_logins_saved_for_this_site_search_all_your_logins_above")
+              : t("ui_search_your_logins_to_copy_one")}
           {vault && (
             <div>
               <button
@@ -768,7 +785,7 @@ const Unlocked = ({
                   close();
                 }}
               >
-                Open Nedra
+                {t("ui_open_nedra")}
               </button>
             </div>
           )}
@@ -808,7 +825,7 @@ const Unlocked = ({
                     <span class="name">
                       {login.name}
                       {login.favorite && (
-                        <span class="star" aria-label="Favorite">
+                        <span class="star" aria-label={t("ui_favorite")}>
                           <Icon name="star" size={13} />
                         </span>
                       )}
@@ -817,7 +834,7 @@ const Unlocked = ({
                   </span>
                   <span class="actions" onClick={(e) => e.stopPropagation()}>
                     {code && left > 0 && (
-                      <span class="code" aria-label={`2FA code ${code.code}, ${left} seconds left`}>
+                      <span class="code" aria-label={t("ui_code_left", [code.code, String(left)])}>
                         {code.code}
                         <Ring seconds={left} />
                       </span>
@@ -825,8 +842,8 @@ const Unlocked = ({
                     {login.username && (
                       <button
                         class="icon-button"
-                        title="Copy username"
-                        aria-label={`Copy username for ${login.name}`}
+                        title={t("ui_copy_username")}
+                        aria-label={t("ui_copy_username_for", login.name)}
                         onClick={() => void copy(login, "username")}
                       >
                         <Icon name="user" size={17} />
@@ -834,8 +851,8 @@ const Unlocked = ({
                     )}
                     <button
                       class="icon-button"
-                      title="Copy password"
-                      aria-label={`Copy password for ${login.name}`}
+                      title={t("ui_copy_password")}
+                      aria-label={t("ui_copy_password_for", login.name)}
                       onClick={() => void copy(login, "password")}
                     >
                       <Icon name="key" size={17} />
@@ -843,8 +860,8 @@ const Unlocked = ({
                     {login.has_totp && (
                       <button
                         class="icon-button"
-                        title="Copy 2FA code"
-                        aria-label={`Copy 2FA code for ${login.name}`}
+                        title={t("ui_copy_2fa_code")}
+                        aria-label={t("ui_copy_2fa_for", login.name)}
                         onClick={() => void copy(login, "totp")}
                       >
                         <Icon name="timer" size={17} />
@@ -858,7 +875,8 @@ const Unlocked = ({
         </>
       )}
       <footer class="hint">
-        Fill: <kbd>Enter</kbd> · Copy password: <kbd>{MOD}C</kbd> · Username: <kbd>{MOD}⇧C</kbd>
+        {t("ui_footer_fill")} <kbd>Enter</kbd> · {t("ui_footer_copy")} <kbd>{MOD}C</kbd> ·{" "}
+        {t("ui_footer_username")} <kbd>{MOD}⇧C</kbd>
       </footer>
     </div>
   );
@@ -887,7 +905,7 @@ const App = () => {
         strictClipboard: false,
         handoffPending: false,
         pairingCode: null,
-        error: err instanceof Error ? err.message : "Something went wrong.",
+        error: err instanceof Error ? err.message : t("ui_error_something_went_wrong"),
       })),
     []
   );
@@ -909,7 +927,7 @@ const App = () => {
 
   if (!status) {
     return (
-      <div class="loading" aria-label="Loading">
+      <div class="loading" aria-label={t("ui_loading")}>
         <NedraIcon size={32} />
       </div>
     );
@@ -936,10 +954,8 @@ const App = () => {
       return (
         <>
           <Header />
-          <Notice title="This browser is too old for the Nedra app">
-            <p>
-              Update to Chrome 133, Firefox 130 or newer, or connect to your Nedra server instead.
-            </p>
+          <Notice title={t("ui_browser_too_old")}>
+            <p>{t("ui_browser_update")}</p>
           </Notice>
         </>
       );
@@ -962,17 +978,14 @@ const App = () => {
         <>
           <Header />
           <Notice
-            title="Turn on browser extensions in Nedra"
+            title={t("ui_enable_extensions")}
             action={
               <button class="button primary" ref={focusOnMount} onClick={load}>
-                Try again
+                {t("ui_try_again")}
               </button>
             }
           >
-            <p>
-              In the Nedra app, open Settings → Browser extension and turn on “Allow browser
-              extensions”.
-            </p>
+            <p>{t("ui_enable_extensions_hint")}</p>
           </Notice>
         </>
       );

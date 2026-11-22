@@ -1,3 +1,4 @@
+import { t } from "../shared/browser";
 import {
   MAX_RESPONSE_BYTES,
   REQUEST_TIMEOUT_MS,
@@ -73,7 +74,7 @@ export const request = async (
       signal: AbortSignal.timeout(timeoutMs),
     });
   } catch {
-    throw new ApiError("Can't reach your Nedra.", 0, UNREACHABLE);
+    throw new ApiError(t("bg_cannot_reach"), 0, UNREACHABLE);
   }
   let data: unknown;
   try {
@@ -81,11 +82,7 @@ export const request = async (
     if (!type.toLowerCase().startsWith("application/json")) throw new Error("not json");
     data = JSON.parse(await readCapped(response));
   } catch {
-    throw new ApiError(
-      "This address answered, but not like a Nedra server.",
-      response.status,
-      NOT_NEDRA
-    );
+    throw new ApiError(t("bg_not_server"), response.status, NOT_NEDRA);
   }
   if (!response.ok) {
     const record = (data ?? {}) as { detail?: unknown; code?: unknown };
@@ -103,7 +100,7 @@ const stringOrNull = (value: unknown): value is string | null =>
   value === null || typeof value === "string";
 
 const invalid = (): never => {
-  throw new ApiError("Nedra sent an answer this extension cannot read.", 200, NOT_NEDRA);
+  throw new ApiError(t("bg_invalid_answer"), 200, NOT_NEDRA);
 };
 
 export interface Meta {

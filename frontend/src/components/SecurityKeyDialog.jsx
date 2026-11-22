@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import apiClient from "../api/client";
 import { endSession } from "../api/session";
 import { errorDetail } from "../lib/http";
+import { errorMessage } from "../lib/errorMessage";
 import { registerSecurityKey } from "../lib/securityKey";
 import { securityKeyStepUp } from "../lib/securityStepUp";
 import { IS_DESKTOP } from "../platform";
@@ -20,8 +21,8 @@ import Dialog from "./TaskSurface";
 
 const dialogError = (error, fallback) =>
   typeof error === "string"
-    ? error
-    : errorDetail(error, error?.isAxiosError ? fallback : error?.message || fallback);
+    ? errorMessage(error, fallback)
+    : errorDetail(error, error?.isAxiosError ? fallback : errorMessage(error, fallback));
 
 const SecurityKeyDialog = ({ open, onClose }) => {
   const { t } = useTranslation();

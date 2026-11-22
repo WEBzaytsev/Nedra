@@ -1,9 +1,10 @@
 {
   "manifest_version": 3,
-  "name": "Nedra",
+  "name": "__MSG_extension_name__",
   "short_name": "Nedra",
-  "version": "5.0.3",
-  "description": "Fill logins from your self-hosted Nedra vault, only when you ask. No account, no tracking.",
+  "version": "5.0.4",
+  "description": "__MSG_extension_description__",
+  "default_locale": "en",
   "homepage_url": "https://github.com/WEBzaytsev/Nedra",
   "icons": {
     "16": "icons/icon-16.png",
@@ -45,14 +46,14 @@
       "suggested_key": {
         "default": "Alt+Shift+M"
       },
-      "description": "Open Nedra"
+      "description": "__MSG_open_nedra__"
     },
     "fill-login": {
       "suggested_key": {
         "default": "Ctrl+Shift+L",
         "mac": "Command+Shift+L"
       },
-      "description": "Fill the login saved for this page"
+      "description": "__MSG_fill_login__"
     }
   },
   "content_security_policy": {
