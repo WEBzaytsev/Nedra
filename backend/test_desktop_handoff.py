@@ -1,6 +1,8 @@
+import os
 import unittest
 
 from errors import SessionRequired
+from helpers import VaultKey
 from vault_sessions import Instant, VaultSessions
 
 
@@ -19,7 +21,7 @@ class DesktopHandoffTests(unittest.TestCase):
     def sessions(self) -> tuple[VaultSessions, Clock, str]:
         clock = Clock()
         sessions = VaultSessions(idle_timeout_ms=60_000, clock=clock)
-        web_token = sessions.open(object(), user_id=7)  # type: ignore[arg-type]
+        web_token = sessions.open(VaultKey(os.urandom(32)), user_id=7)
         return sessions, clock, web_token
 
     def test_approval_is_required_and_redeem_is_single_use(self) -> None:
