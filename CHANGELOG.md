@@ -2,6 +2,10 @@
 
 This file records public Nedra releases.
 
+## [5.0.3] - 2026-11-22
+
+- Use a reserved example domain in the Desktop connection form and setup guide.
+
 ## [5.0.2] - 2026-11-22
 
 - Added Desktop connection to an existing Nedra server through explicit approval in the system browser, without entering server credentials in Desktop.

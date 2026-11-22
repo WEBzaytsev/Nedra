@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Nedra",
   "short_name": "Nedra",
-  "version": "5.0.2",
+  "version": "5.0.3",
   "description": "Fill logins from your self-hosted Nedra vault, only when you ask. No account, no tracking.",
   "homepage_url": "https://github.com/WEBzaytsev/Nedra",
   "icons": {
