@@ -6,9 +6,16 @@ from sqlalchemy import exists, or_, select
 from crud.attachment import AttachmentCRUD
 from crud.auth import AuthContext
 from crud.folder import FolderCRUD, grant_active
-from crud.password import PasswordCRUD
-from crud.records import find_entry, open_entry, open_folder, open_group, seal_entry
-from errors import Forbidden, InvalidRequest, NotFound
+from crud.password import Imported, PasswordCRUD
+from crud.records import (
+    EntryDocument,
+    find_entry,
+    open_entry,
+    open_folder,
+    open_group,
+    seal_entry,
+)
+from errors import FolderSelectionError, Forbidden, InvalidRequest, NotFound
 from helpers import VaultKey
 from models import (
     AccessAuditModel,
@@ -564,19 +571,14 @@ class AuthorizedPasswordCRUD(PasswordCRUD):
     async def create_password(
         self, password: Password, key: VaultKey
     ) -> PasswordCreate:
-        folder = None
-        if password.folder_id is not None:
-            folder = await FolderCRUD(self.session, self.context)._folder(
-                password.folder_id
-            )
-            permission = await FolderCRUD(self.session, self.context).permission_for(
-                folder
-            )
-            if permission not in (EntryPermission.owner, EntryPermission.write):
-                raise Forbidden("Write access to the folder is required.")
         result = await super().create_password(password, key)
         model, _ = await find_entry(self.session, key, password.password_name)
 
+        folder = (
+            await FolderCRUD(self.session, self.context)._folder(model.folder_id)
+            if model.folder_id is not None
+            else None
+        )
         model.owner_id = (
             folder.owner_id if folder is not None else self.context.owner_id
         )
@@ -604,8 +606,16 @@ class AuthorizedPasswordCRUD(PasswordCRUD):
     async def update_password(
         self, password_name: str, new_password: Password, key: VaultKey
     ) -> PasswordUpdate:
-        model = await self.acl.entry_by_name(password_name, key, EntryPermission.write)
-        current = open_entry(key, model)
+        await self.acl.entry_by_name(password_name, key, EntryPermission.write)
+        return await super().update_password(password_name, new_password, key)
+
+    async def _update_folder(
+        self,
+        model: EntryModel,
+        current: EntryDocument,
+        new_password: Password,
+        key: VaultKey,
+    ) -> tuple[FolderModel | None, Imported]:
         if (
             new_password.folder_id is None
             and model.folder_id is not None
@@ -614,18 +624,18 @@ class AuthorizedPasswordCRUD(PasswordCRUD):
             new_password = new_password.model_copy(
                 update={"folder_id": model.folder_id}
             )
+        if (
+            new_password.folder_id is not None
+            and new_password.folder_id == model.folder_id
+        ):
+            # An entry-level writer may edit without write access to its folder.
+            return await super()._folder_for(new_password, key)
+        folder, resolved = await self._folder_for(new_password, key)
         previous_folder_id = model.folder_id
-        if new_password.folder_id != previous_folder_id:
+        destination_id = folder.id if folder is not None else None
+        if destination_id != previous_folder_id:
             await self.acl.require(model.id, EntryPermission.owner)
-            if new_password.folder_id is not None:
-                folder_crud = FolderCRUD(self.session, self.context)
-                folder = await folder_crud._folder(new_password.folder_id)
-                permission = await folder_crud.permission_for(folder)
-                if permission not in (
-                    EntryPermission.owner,
-                    EntryPermission.write,
-                ):
-                    raise Forbidden("Write access to the folder is required.")
+            if folder is not None:
                 if folder.owner_id != model.owner_id:
                     raise InvalidRequest(
                         "An entry can only be moved into a folder owned by its owner."
@@ -639,16 +649,62 @@ class AuthorizedPasswordCRUD(PasswordCRUD):
                         resource_id=previous_folder_id,
                     )
                 )
-            if new_password.folder_id is not None:
+            if destination_id is not None:
                 self.session.add(
                     AccessAuditModel(
                         actor_user_id=self.context.user.id,
                         action="entry_added",
                         resource_type="folder",
-                        resource_id=new_password.folder_id,
+                        resource_id=destination_id,
                     )
                 )
-        return await super().update_password(password_name, new_password, key)
+        return folder, resolved
+
+    async def _folder_for(
+        self, password: Imported, key: VaultKey
+    ) -> tuple[FolderModel | None, Imported]:
+        folders = FolderCRUD(self.session, self.context)
+        if (
+            self.context.user.role == "service"
+            and isinstance(password, Password)
+            and password.folder
+            and password.folder_id is None
+        ):
+            # Folder-name indexes are scoped to the owner; do not enumerate
+            # or decrypt unrelated folder contents just to resolve one name.
+            owners = (
+                await self.session.scalars(select(FolderModel.owner_id).distinct())
+            ).all()
+            indexes = [
+                key.folder_name_index(owner, password.folder) for owner in owners
+            ]
+            candidates = (
+                await self.session.scalars(
+                    select(FolderModel).where(FolderModel.name_index.in_(indexes))
+                )
+            ).all()
+            matches = [
+                folder.id
+                for folder in candidates
+                if await folders.permission_for(folder)
+                in (EntryPermission.owner, EntryPermission.write)
+                and open_folder(key, folder).name == password.folder
+            ]
+            if not matches:
+                raise FolderSelectionError(
+                    "Choose a writable folder or omit folder to use the vault root."
+                )
+            if len(matches) != 1:
+                raise FolderSelectionError(
+                    "Multiple writable folders have this name. Specify folder_id."
+                )
+            password = password.model_copy(update={"folder_id": matches[0]})
+        folder_id = getattr(password, "folder_id", None)
+        if folder_id is not None:
+            permission = await folders.permission_for(await folders._folder(folder_id))
+            if permission not in (EntryPermission.owner, EntryPermission.write):
+                raise Forbidden("Write access to the folder is required.")
+        return await super()._folder_for(password, key)
 
     async def reuse_password_history(
         self, password_name: str, history_index: int, changed_at: str, key: VaultKey

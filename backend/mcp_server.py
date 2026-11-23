@@ -4,6 +4,7 @@ from typing import TypedDict, TypeVar, cast
 from mcp.server import MCPServer
 from mcp.server.auth.middleware.auth_context import get_access_token
 from mcp.server.auth.provider import AccessToken
+from mcp.server.mcpserver.exceptions import ToolError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,7 +12,7 @@ from crud.access import AuthorizedPasswordCRUD, EntryACL
 from crud.auth import AuthContext, AuthCRUD, token_digest
 from crud.engine import Database
 from crud.records import open_entry
-from errors import Forbidden, SessionRequired
+from errors import FolderSelectionError, Forbidden, SessionRequired
 from models import AccessAuditModel, EntryModel, UserModel
 from schemas import (
     CustomField,
@@ -38,6 +39,7 @@ class EntryChanges(TypedDict, total=False):
     tags: list[str]
     custom_fields: list[CustomField]
     folder: str | None
+    folder_id: int | None
     favorite: bool
 
 
@@ -173,6 +175,16 @@ def build_mcp_server(
             raise Forbidden(f"MCP operation '{operation}' is not enabled.")
         return cast(Result, result)
 
+    async def folder_service_call(
+        operation: ServiceOperation,
+        tool: str,
+        callback: Callable[[AsyncSession, AuthContext], Awaitable[Result]],
+    ) -> Result:
+        try:
+            return await service_call(operation, tool, callback)
+        except FolderSelectionError as exc:
+            raise ToolError(str(exc)) from exc
+
     @server.tool()
     async def list_entries() -> list[dict[str, object]]:
         """List metadata for entries explicitly shared with this service identity."""
@@ -202,7 +214,11 @@ def build_mcp_server(
 
     @server.tool()
     async def create_entry(entry: Password) -> dict[str, object]:
-        """Create an entry and return its non-secret metadata."""
+        """Create an entry and return its non-secret metadata.
+
+        Omit folder and folder_id for a root entry. Otherwise select an existing
+        writable folder; use folder_id if more than one has the same name.
+        """
 
         async def call(session, context):
             crud = AuthorizedPasswordCRUD(session, context)
@@ -218,7 +234,7 @@ def build_mcp_server(
             created, owner, access = await _by_id(crud, model.id, EntryPermission.write)
             return _index(created, owner, access)
 
-        return await service_call(ServiceOperation.create, "create_entry", call)
+        return await folder_service_call(ServiceOperation.create, "create_entry", call)
 
     @server.tool()
     async def update_entry(entry_id: int, changes: EntryChanges) -> dict[str, object]:
@@ -229,14 +245,18 @@ def build_mcp_server(
                 raise ValueError("At least one field must be changed.")
             crud = AuthorizedPasswordCRUD(session, context)
             current, _, _ = await _by_id(crud, entry_id, EntryPermission.write)
-            values = {field: getattr(current, field) for field in Password.model_fields}
+            values = current.model_dump(include=set(Password.model_fields))
             values.update(changes)
+            if "folder" in changes and "folder_id" not in changes:
+                values["folder_id"] = None
+            elif "folder_id" in changes and "folder" not in changes:
+                values["folder"] = None
             updated = Password.model_validate(values)
             await crud.update_password(current.password_name, updated, context.key)
             result, owner, access = await _by_id(crud, entry_id, EntryPermission.write)
             return _index(result, owner, access)
 
-        return await service_call(ServiceOperation.update, "update_entry", call)
+        return await folder_service_call(ServiceOperation.update, "update_entry", call)
 
     @server.tool()
     async def delete_entry(entry_id: int) -> dict[str, object]:

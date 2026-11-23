@@ -10,6 +10,10 @@ class Forbidden(VaultError):
     pass
 
 
+class FolderSelectionError(InvalidRequest):
+    """Safe guidance for selecting a writable destination."""
+
+
 class InvalidKey(Forbidden):
     pass
 

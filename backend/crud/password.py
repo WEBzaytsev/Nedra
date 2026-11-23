@@ -283,6 +283,15 @@ class PasswordCRUD(BaseCRUD):
         await self.flush_or_conflict(_NAME_TAKEN)
         return PasswordCreate(created=True, detail="Password created successfully.")
 
+    async def _update_folder(
+        self,
+        model: EntryModel,
+        current: EntryDocument,
+        new_password: Password,
+        key: VaultKey,
+    ) -> tuple[FolderModel | None, Imported]:
+        return await self._folder_for(new_password, key)
+
     async def update_password(
         self, password_name: str, new_password: Password, key: VaultKey
     ) -> PasswordUpdate:
@@ -306,7 +315,7 @@ class PasswordCRUD(BaseCRUD):
             )
             del history[HISTORY_LIMIT:]
 
-        folder, resolved = await self._folder_for(new_password, key)
+        folder, resolved = await self._update_folder(model, current, new_password, key)
         model.folder_id = folder.id if folder is not None else None
         seal_entry(key, model, document_from(resolved, history))
         model.backed_up = False

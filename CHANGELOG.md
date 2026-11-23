@@ -2,6 +2,10 @@
 
 This file records public Nedra releases.
 
+## [5.0.5] - 2026-11-24
+
+- Fixed MCP entry creation in shared folders. Service accounts can select an existing writable folder by name, including folders shared through a group. Ambiguous names require a folder ID; failed selections leave the vault unchanged.
+
 ## [5.0.4] - 2026-11-22
 
 - Improved Russian wording across the web vault, Desktop connection and security-key states.

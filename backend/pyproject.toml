@@ -1,6 +1,6 @@
 [project]
 name = "nedra-server"
-version = "5.0.4"
+version = "5.0.5"
 description = "Nedra Password Manager API"
 requires-python = ">=3.13,<3.15"
 dependencies = [
