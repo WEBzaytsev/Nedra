@@ -1,23 +1,33 @@
+import { useEffect } from "react";
 import { ArrowRight } from "@gravity-ui/icons";
-import { Flex, Icon, Link, Text } from "@gravity-ui/uikit";
+import { Button, Flex, Icon, Loader, Text } from "@gravity-ui/uikit";
 import Dialog from "./TaskSurface";
-import { useStoreState } from "easy-peasy";
+import { useStoreActions, useStoreState } from "easy-peasy";
 import { useTranslation } from "react-i18next";
 
-import { MANUAL_UPDATE_COMMAND } from "../lib/updateCommands";
 import { IS_DESKTOP } from "../platform";
 import DesktopUpdateDialog from "./DesktopUpdateDialog";
 
-const stripV = (value) => String(value ?? "").replace(/^v/, "");
+const stripV = (value) => String(value ?? "").replace(/^v/i, "");
 
-const UpdateDialog = ({ open, onClose }) => {
+const WebUpdateDialog = ({ open, onClose, checkForUpdates }) => {
   const { t } = useTranslation();
-  const { current, latest, releaseUrl } = useStoreState((state) => state.nedraModels.updates);
+  const { current, latest, releaseUrl, updateAvailable, checked, checking, error } = useStoreState(
+    (state) => state.nedraModels.updates
+  );
+  const title = t(
+    error
+      ? "updateDialog.checkFailed"
+      : checking || !checked
+        ? "updateDialog.checking"
+        : updateAvailable
+          ? "updateDialog.title"
+          : "updateDialog.upToDate"
+  );
 
   return (
     <Dialog
-      aria-label={t("updateDialog.title")}
-
+      aria-label={title}
       contentOverflow="auto"
       fullWidth
       maxWidth="s"
@@ -26,36 +36,48 @@ const UpdateDialog = ({ open, onClose }) => {
         if (!nextOpen) onClose();
       }}
     >
-      <Dialog.Header caption={t("updateDialog.title")} />
+      <Dialog.Header caption={title} />
       <Dialog.Body>
-        <Flex direction="column" gap="spacing-3" minWidth="0">
-          <Flex
-            direction="row"
-            gap="spacing-3"
-            alignItems="center"
-            minWidth="0"
-            aria-label={t("updateDialog.title")}
+        {error ? (
+          <Button
+            type="button"
+            view="normal"
+            size="xl"
+            onClick={() => checkForUpdates({ manual: true })}
           >
-            <Text color="secondary">{current ? `v${stripV(current)}` : "—"}</Text>
-            <Icon data={ArrowRight} size={16} />
-            <Text>{latest ?? "-"}</Text>
+            {t("updateDialog.retry")}
+          </Button>
+        ) : checking || !checked ? (
+          <Flex alignItems="center" gap="spacing-3" role="status">
+            <Loader size="m" />
+            <Text>{t("updateDialog.checking")}</Text>
           </Flex>
-
-          {releaseUrl && (
-            <Link href={releaseUrl} target="_blank" rel="noopener noreferrer">
-              {t("updateDialog.releaseNotes")}
-            </Link>
-          )}
-
+        ) : updateAvailable ? (
           <Flex direction="column" gap="spacing-3" minWidth="0">
-            <Text as="div" color="secondary" wordBreak="break-word">
-              {t("updateDialog.manualBackupDescription")}
-            </Text>
-            <Text as="div" variant="code-1" whiteSpace="break-spaces" wordBreak="break-all">
-              {MANUAL_UPDATE_COMMAND}
-            </Text>
+            <Flex alignItems="center" gap="spacing-3" minWidth="0">
+              <Text color="secondary">v{stripV(current)}</Text>
+              <Icon data={ArrowRight} size={16} />
+              <Text>v{stripV(latest)}</Text>
+            </Flex>
+            <Text color="secondary">{t("updateDialog.adminUpdates")}</Text>
+            {releaseUrl && (
+              <Button
+                component="a"
+                href={releaseUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                view="flat"
+                size="xl"
+              >
+                {t("updateDialog.releaseNotes")}
+              </Button>
+            )}
           </Flex>
-        </Flex>
+        ) : (
+          <Text color="secondary">
+            {t("updateDialog.installedVersion", { version: `v${stripV(current)}` })}
+          </Text>
+        )}
       </Dialog.Body>
       <Dialog.Footer
         onClickButtonApply={onClose}
@@ -66,4 +88,14 @@ const UpdateDialog = ({ open, onClose }) => {
   );
 };
 
-export default IS_DESKTOP ? DesktopUpdateDialog : UpdateDialog;
+export default function UpdateDialog({ open, onClose }) {
+  const checkForUpdates = useStoreActions((actions) => actions.nedraModels.updates.checkForUpdates);
+  useEffect(() => {
+    if (open) checkForUpdates({ manual: true });
+  }, [open, checkForUpdates]);
+  return IS_DESKTOP ? (
+    <DesktopUpdateDialog open={open} onClose={onClose} />
+  ) : (
+    <WebUpdateDialog open={open} onClose={onClose} checkForUpdates={checkForUpdates} />
+  );
+}

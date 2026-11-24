@@ -516,22 +516,13 @@ const en = {
   },
   updateDialog: {
     title: "Nedra update available",
+    upToDate: "No updates available",
+    checking: "Checking for updates…",
+    checkFailed: "Could not check for updates",
+    retry: "Try again",
+    installedVersion: "Installed version: {{version}}.",
+    adminUpdates: "The server administrator installs updates.",
     releaseNotes: "View changes on GitHub",
-    automaticDescription:
-      "Nedra checks image signatures, backs up the database and restarts to apply the update. If the update fails, it attempts to restore the previous version. You do not need to enter your account password.",
-    manualDescription:
-      "Automatic updates are disabled for this installation. Run the command in a terminal from the project directory:",
-    updateNow: "Update now",
-    complete: "Update installed. Reloading Nedra…",
-    background: "Update still in progress. Refresh the page shortly.",
-    states: {
-      requested: "Preparing update…",
-      verifying: "Checking image signatures…",
-      applying: "Installing update and restarting Nedra…",
-      success: "Update installed. Reloading Nedra…",
-      failed: "Update failed. Check the update logs before trying again.",
-      rolledBack: "Update failed. Nedra restored the previous version.",
-    },
   },
   trashDialog: {
     empty: "No entries in trash. Entries you move here can be restored or deleted permanently.",
@@ -881,10 +872,6 @@ Object.assign(en.errors, {
   loadGroupMembers: "Could not load group members. Try again.",
   saveGroupMember: "Could not add the group member. Try again.",
   removeGroupMember: "Could not remove the group member. Try again.",
-});
-Object.assign(en.updateDialog, {
-  manualBackupDescription:
-    "Run the update commands in a terminal from the project directory. The first command saves a snapshot of the encrypted vault file. To restore it, you need account credentials valid when the snapshot was created. Use Backup to create a portable copy instead.",
 });
 en.desktopUpdate = {
   installDescription:

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Flex, Text, Alert, Button, Dialog, Loader, Progress } from "@gravity-ui/uikit";
-import { useStoreState } from "easy-peasy";
+import { useStoreActions, useStoreState } from "easy-peasy";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -9,8 +9,26 @@ import { openExternal } from "../platform";
 
 export default function DesktopUpdateDialog({ open, onClose }) {
   const { t } = useTranslation();
-  const { current, latest, notes, canInstall, releaseUrl } = useStoreState(
-    (state) => state.nedraModels.updates
+  const {
+    current,
+    latest,
+    notes,
+    canInstall,
+    releaseUrl,
+    updateAvailable,
+    checked,
+    checking,
+    error: checkError,
+  } = useStoreState((state) => state.nedraModels.updates);
+  const checkForUpdates = useStoreActions((actions) => actions.nedraModels.updates.checkForUpdates);
+  const title = t(
+    checkError
+      ? "updateDialog.checkFailed"
+      : checking || !checked
+        ? "updateDialog.checking"
+        : updateAvailable
+          ? "updateDialog.title"
+          : "updateDialog.upToDate"
   );
   const [busy, setBusy] = useState(false);
   const [installing, setInstalling] = useState(false);
@@ -59,7 +77,7 @@ export default function DesktopUpdateDialog({ open, onClose }) {
 
   return (
     <Dialog
-      aria-label={t("updateDialog.title")}
+      aria-label={title}
 
       contentOverflow="auto"
       fullWidth
@@ -70,22 +88,49 @@ export default function DesktopUpdateDialog({ open, onClose }) {
         if (!nextOpen && !busy) onClose();
       }}
     >
-      <Dialog.Header caption={t("updateDialog.title")} />
+      <Dialog.Header caption={title} />
       <Dialog.Body>
         <Flex direction="column" gap="spacing-3" minWidth="0">
-          <Text as="div" color="secondary" wordBreak="break-word">
-            v{current} → v{latest}
-          </Text>
-          {notes && (
-            <Text as="div" color="secondary" wordBreak="break-word">
-              {notes}
+          {checkError ? (
+            <Button
+              type="button"
+              view="normal"
+              size="xl"
+              onClick={() => checkForUpdates({ manual: true })}
+            >
+              {t("updateDialog.retry")}
+            </Button>
+          ) : checking || !checked ? (
+            <Flex alignItems="center" gap="spacing-3" role="status">
+              <Loader size="m" />
+              <Text>{t("updateDialog.checking")}</Text>
+            </Flex>
+          ) : updateAvailable ? (
+            <>
+              <Text as="div" color="secondary" wordBreak="break-word">
+                v{current} → v{latest}
+              </Text>
+              {notes && (
+                <Text as="div" color="secondary" wordBreak="break-word">
+                  {notes}
+                </Text>
+              )}
+              <Text as="div" color="secondary" wordBreak="break-word">
+                {canInstall
+                  ? t("desktopUpdate.installDescription")
+                  : t("desktopUpdate.debianDescription")}
+              </Text>
+              {releaseUrl && (
+                <Button type="button" view="flat" onClick={() => openExternal(releaseUrl)}>
+                  {t("desktopUpdate.releaseNotes")}
+                </Button>
+              )}
+            </>
+          ) : (
+            <Text color="secondary">
+              {t("updateDialog.installedVersion", { version: `v${current}` })}
             </Text>
           )}
-          <Text as="div" color="secondary" wordBreak="break-word">
-            {canInstall
-              ? t("desktopUpdate.installDescription")
-              : t("desktopUpdate.debianDescription")}
-          </Text>
           {busy && (
             <Flex direction="column" gap="spacing-3" minWidth="0" role="status">
               {progress === null ? <Loader size="m" /> : <Progress value={progress} />}
@@ -95,11 +140,6 @@ export default function DesktopUpdateDialog({ open, onClose }) {
             </Flex>
           )}
           {error && <Alert theme="info" view="outlined" message={error} />}
-          {releaseUrl && (
-            <Button type="button" view="flat" onClick={() => openExternal(releaseUrl)}>
-              {t("desktopUpdate.releaseNotes")}
-            </Button>
-          )}
         </Flex>
       </Dialog.Body>
       <Dialog.Footer
@@ -114,7 +154,7 @@ export default function DesktopUpdateDialog({ open, onClose }) {
                 {t("common.actions.later")}
               </Button>
             )}
-            {canInstall && (
+            {updateAvailable && canInstall && !checkError && !checking && (
               <Button type="button" view="action" onClick={install} disabled={busy} loading={busy}>
                 {t("desktopUpdate.downloadInstall")}
               </Button>
