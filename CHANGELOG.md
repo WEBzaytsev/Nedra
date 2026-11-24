@@ -2,6 +2,13 @@
 
 This file records public Nedra releases.
 
+## [5.0.6] - 2026-11-24
+
+- Reworked mobile account security: security keys and recovery have separate pages, with focused actions, confirmations, loading and retry states.
+- Moved the mobile navigation drawer to the right, keeping the Nedra mark on the left.
+- Improved vault and trash selection with permission-aware bulk actions and clearer destructive confirmations; exposed frequent row actions when there is room.
+- Corrected web and Desktop update status when no newer version is available, and restored spacing below settings tabs.
+
 ## [5.0.5] - 2026-11-24
 
 - Fixed MCP entry creation in shared folders. Service accounts can select an existing writable folder by name, including folders shared through a group. Ambiguous names require a folder ID; failed selections leave the vault unchanged.
@@ -51,6 +58,8 @@ This file records public Nedra releases.
 - Multi-architecture container images with deterministic CycloneDX SBOMs, BuildKit provenance, and keyless cosign signatures.
 - Checked installation snapshots, integrity verification, rollback gates, and reproducible release manifests.
 
+[5.0.6]: https://github.com/WEBzaytsev/Nedra/releases/tag/v5.0.6
+[5.0.5]: https://github.com/WEBzaytsev/Nedra/releases/tag/v5.0.5
 [5.0.4]: https://github.com/WEBzaytsev/Nedra/releases/tag/v5.0.4
 [5.0.2]: https://github.com/WEBzaytsev/Nedra/releases/tag/v5.0.2
 [5.0.1]: https://github.com/WEBzaytsev/Nedra/releases/tag/v5.0.1

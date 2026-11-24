@@ -1,6 +1,6 @@
 {
   "name": "nedra-web",
-  "version": "5.0.5",
+  "version": "5.0.6",
   "private": true,
   "type": "module",
   "dependencies": {
@@ -29,6 +29,7 @@
     "format": "prettier --write \"src/**/*.{js,jsx}\"",
     "format:check": "prettier --check \"src/**/*.{js,jsx}\"",
     "test:desktop-mode": "node --test src/platform/serverMode.test.js src/lib/errorMessage.test.js",
+    "test:selection": "node --test src/lib/entrySelection.test.js",
     "build:desktop": "vite build --mode desktop"
   },
   "devDependencies": {

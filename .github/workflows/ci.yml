@@ -66,6 +66,9 @@ jobs:
         working-directory: frontend
         run: npm run format:check
 
+      - name: Selection tests
+        working-directory: frontend
+        run: npm run test:selection
 
   images:
     name: Images (${{ matrix.platform.slug }})

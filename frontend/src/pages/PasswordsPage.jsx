@@ -46,6 +46,7 @@ import useTaskRoute from "../hooks/useTaskRoute";
 import { VaultViewContext } from "../hooks/VaultViewContext";
 import TaskSurface from "../components/TaskSurface";
 import useMenuAction from "../hooks/useMenuAction";
+import { reconcileSelection, selectedActionableEntries } from "../lib/entrySelection";
 
 const buildSubtitle = (loading, passwords, t) => {
   if (loading) return t("common.labels.loading");
@@ -116,6 +117,8 @@ const PasswordsPage = () => {
   const searchInput = useRef(null);
   const [selectedEntryIds, setSelectedEntryIds] = useState([]);
   const [bulkTrashPending, setBulkTrashPending] = useState(false);
+  const [bulkTrashTargets, setBulkTrashTargets] = useState(null);
+  const [bulkTrashError, setBulkTrashError] = useState("");
   const [bulkMoveTargets, setBulkMoveTargets] = useState(null);
   const [bulkMovePending, setBulkMovePending] = useState(false);
   const bulkTrashInFlight = useRef(false);
@@ -235,12 +238,6 @@ const PasswordsPage = () => {
     getDamaged();
     getFolders().catch((requestError) => notify(requestError.message, { theme: "danger" }));
   }, [get, getTrash, getDamaged, getFolders, notify]);
-
-  useEffect(() => {
-    setSelectedEntryIds((ids) =>
-      ids.filter((id) => passwords.some((entry) => String(entry.id) === id))
-    );
-  }, [passwords]);
 
   const damagedCount = damaged.entries.length + damaged.attachments.length;
 
@@ -404,11 +401,6 @@ const PasswordsPage = () => {
     }
   };
 
-  const selectedEntries = useMemo(
-    () => passwords.filter((entry) => selectedEntryIds.includes(String(entry.id))),
-    [passwords, selectedEntryIds]
-  );
-
   const handleUndoBulkTrash = useCallback(
     async (receipt) => {
       if (bulkTrashInFlight.current) return;
@@ -429,12 +421,14 @@ const PasswordsPage = () => {
   );
 
   const handleBulkTrash = useCallback(async () => {
-    if (selectedEntries.length === 0 || bulkTrashInFlight.current) return;
+    if (!bulkTrashTargets?.length || bulkTrashInFlight.current) return;
     bulkTrashInFlight.current = true;
     setBulkTrashPending(true);
+    setBulkTrashError("");
     try {
-      const result = await bulkTrash(selectedEntries);
+      const result = await bulkTrash(bulkTrashTargets);
       setSelectedEntryIds([]);
+      setBulkTrashTargets(null);
       const receipt = result.entries;
       notify(
         <Flex alignItems="center" gap="spacing-3" wrap="wrap">
@@ -446,12 +440,12 @@ const PasswordsPage = () => {
         { theme: "success", autoHiding: false, name: "bulk-trash-undo" }
       );
     } catch (requestError) {
-      notify(requestError.message, { theme: "danger" });
+      setBulkTrashError(requestError.message);
     } finally {
       bulkTrashInFlight.current = false;
       setBulkTrashPending(false);
     }
-  }, [bulkTrash, selectedEntries, handleUndoBulkTrash, notify, t]);
+  }, [bulkTrash, bulkTrashTargets, handleUndoBulkTrash, notify, t]);
 
   const handleUndoBulkMove = useCallback(
     async (receipt) => {
@@ -623,6 +617,13 @@ const PasswordsPage = () => {
       ),
     [searchedPasswords, entryFilters, sortOrder]
   );
+  const selectedEntries = useMemo(
+    () => selectedActionableEntries(filteredPasswords, selectedEntryIds),
+    [filteredPasswords, selectedEntryIds]
+  );
+  useEffect(() => {
+    setSelectedEntryIds((ids) => reconcileSelection(ids, filteredPasswords));
+  }, [filteredPasswords]);
 
   const subtitle = useMemo(
     () => (error || passwords.length === 0 ? "" : buildSubtitle(loading, passwords, t)),
@@ -920,7 +921,10 @@ const PasswordsPage = () => {
               onMove={(entry) => setBulkMoveTargets([entry])}
               selectedEntryIds={selectedEntryIds}
               onSelectedEntryIdsChange={setSelectedEntryIds}
-              onBulkTrash={handleBulkTrash}
+              onBulkTrash={() => {
+                setBulkTrashError("");
+                setBulkTrashTargets(selectedEntries);
+              }}
               bulkTrashPending={bulkTrashPending}
               onBulkMove={() => setBulkMoveTargets(selectedEntries)}
               bulkMovePending={bulkMovePending}
@@ -1018,6 +1022,23 @@ const PasswordsPage = () => {
           components={{ strong: <Text as="strong" /> }}
         />
       </ConfirmDialog>
+      {Boolean(bulkTrashTargets?.length) && (
+        <ConfirmDialog
+          open
+          title={t("vault.bulk.trashTitle")}
+          confirmText={bulkTrashError ? t("common.actions.retry") : t("vault.bulk.moveToTrash")}
+          confirmColor="error"
+          error={bulkTrashError}
+          pending={bulkTrashPending}
+          onClose={() => {
+            setBulkTrashError("");
+            setBulkTrashTargets(null);
+          }}
+          onConfirm={handleBulkTrash}
+        >
+          {t("vault.bulk.trashMessage", { count: bulkTrashTargets?.length ?? 0 })}
+        </ConfirmDialog>
+      )}
       <ConfirmDialog
         open={removeDamagedOpen}
         title={t("vault.damage.removeTitle")}

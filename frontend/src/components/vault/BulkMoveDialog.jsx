@@ -3,6 +3,7 @@ import { Button, Flex, Select, Text, TextInput } from "@gravity-ui/uikit";
 import { useTranslation } from "react-i18next";
 
 import Dialog from "../TaskSurface";
+import { commonOwnerFolders } from "../../lib/entrySelection";
 
 const NO_FOLDER = "none";
 
@@ -20,18 +21,15 @@ const BulkMoveDialog = ({
   const [selected, setSelected] = useState(NO_FOLDER);
   const [newFolder, setNewFolder] = useState("");
   const [creating, setCreating] = useState(false);
-  const owners = useMemo(() => new Set(entries.map((entry) => entry.owner_id)), [entries]);
   const options = useMemo(
     () => [
       { value: NO_FOLDER, content: t("vault.bulk.noFolder") },
-      ...folders
-        .filter((folder) => owners.has(folder.owner_id))
-        .map((folder) => ({
-          value: String(folder.id),
-          content: `${folder.name} · ${folder.owner_username ?? folder.owner_id}`,
-        })),
+      ...commonOwnerFolders(entries, folders).map((folder) => ({
+        value: String(folder.id),
+        content: `${folder.name} · ${folder.owner_username ?? folder.owner_id}`,
+      })),
     ],
-    [folders, owners, t]
+    [entries, folders, t]
   );
 
   useEffect(() => {

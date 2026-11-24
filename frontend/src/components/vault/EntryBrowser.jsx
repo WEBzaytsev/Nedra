@@ -37,6 +37,10 @@ import EntryDetails from "./EntryDetails";
 import EntryListActions from "./EntryListActions";
 import TaskSurface from "../TaskSurface";
 import { IS_DESKTOP, openExternal } from "../../platform";
+import { actionableEntries, canActOnEntry } from "../../lib/entrySelection";
+
+const INLINE_ACTIONS_MIN_WIDTH = 800;
+const INLINE_SHARING_MIN_WIDTH = 1000;
 
 const contextTrigger = (left, top) => ({
   getBoundingClientRect: () => ({
@@ -79,7 +83,7 @@ const EntryContextMenu = ({ menu, onClose, onCopy, onCopyTotp, ...actions }) => 
         if (!open) onClose();
       }}
     >
-      {menu?.selection > 1 ? (
+      {menu?.selection > 0 ? (
         <>
           <MenuItem onClick={run(actions.onBulkMove)}>
             {t("vault.context.moveSelected", { count: menu.selection })}
@@ -204,11 +208,18 @@ const EntryBrowser = ({
   const [contextMenu, setContextMenu] = useState(null);
   const [revealedEntryId, setRevealedEntryId] = useState(null);
   const listRef = useRef(null);
+  const [entriesWidth, setEntriesWidth] = useState(0);
   const closeRef = useRef(null);
   const selectedTrigger = useRef(null);
   const previousMobileEntry = useRef(null);
   const selected = mobileEntry ?? entries.find((entry) => entry.id === selectedId);
   const selectedEntryIdSet = new Set(selectedEntryIds);
+  const availableEntries = actionableEntries(entries);
+  const selectedAvailableCount = availableEntries.filter((entry) =>
+    selectedEntryIdSet.has(String(entry.id))
+  ).length;
+  const allSelected =
+    availableEntries.length > 0 && selectedAvailableCount === availableEntries.length;
 
   const closeContextMenu = () => {
     const restoreFocus = contextMenu?.restoreFocus;
@@ -242,7 +253,7 @@ const EntryBrowser = ({
     const id = String(entryId);
     onSelectedEntryIdsChange?.(
       checked
-        ? [...selectedEntryIds, id]
+        ? [...new Set([...selectedEntryIds, id])]
         : selectedEntryIds.filter((selectedId) => selectedId !== id)
     );
   };
@@ -282,6 +293,14 @@ const EntryBrowser = ({
   useEffect(() => {
     if (desktop && selectedId !== null) closeRef.current?.focus();
   }, [selectedId, desktop]);
+
+  useEffect(() => {
+    const region = listRef.current;
+    if (!desktop || !region) return undefined;
+    const observer = new ResizeObserver(([entry]) => setEntriesWidth(entry.contentRect.width));
+    observer.observe(region);
+    return () => observer.disconnect();
+  }, [desktop, entries.length]);
 
   const closeDetails = () => {
     if (mobileEntry) {
@@ -359,6 +378,8 @@ const EntryBrowser = ({
             if (
               !event.defaultPrevented &&
               !bulkMovePending &&
+              !bulkTrashPending &&
+              !event.target.closest("input, textarea, [contenteditable='true']") &&
               selectedEntryIds.length > 0 &&
               (event.key === "Delete" || event.key === "Backspace")
             ) {
@@ -393,47 +414,53 @@ const EntryBrowser = ({
             as="section"
             aria-label={t("vault.browser.entries")}
           >
-            {selectedEntryIds.length > 0 && (
-              <Flex
-                direction={{ xs: "column", s: "row" }}
-                gap="spacing-3"
-                alignItems={{ s: "center" }}
-                justifyContent="space-between"
-                paddingBlockEnd="spacing-3"
-                minWidth="0"
-              >
-                <Text role="status">
-                  {t("vault.bulk.selected", { count: selectedEntryIds.length })}
-                </Text>
-                <Flex gap="spacing-2" wrap="wrap">
-                  <Button
-                    size="xl"
-                    view="outlined"
+            {availableEntries.length > 0 && (
+              <Flex direction="column" gap="spacing-2" paddingBlockEnd="spacing-3" minWidth="0">
+                <Flex gap="spacing-3" alignItems="center" wrap="wrap" minWidth="0">
+                  <Checkbox
+                    checked={allSelected}
+                    indeterminate={selectedAvailableCount > 0 && !allSelected}
                     disabled={bulkTrashPending || bulkMovePending}
-                    loading={bulkMovePending}
-                    onClick={onBulkMove}
-                  >
-                    {t("vault.bulk.move")}
-                  </Button>
-                  <Button
+                    onUpdate={(checked) =>
+                      onSelectedEntryIdsChange?.(
+                        checked ? availableEntries.map((entry) => String(entry.id)) : []
+                      )
+                    }
                     size="xl"
-                    view="outlined-danger"
-                    disabled={bulkTrashPending || bulkMovePending}
-                    loading={bulkTrashPending}
-                    onClick={onBulkTrash}
                   >
-                    <Icon data={TrashBin} />
-                    {t("vault.bulk.moveToTrash")}
-                  </Button>
-                  <Button
-                    size="xl"
-                    view="outlined"
-                    disabled={bulkTrashPending || bulkMovePending}
-                    onClick={() => onSelectedEntryIdsChange?.([])}
-                  >
-                    {t("vault.bulk.clearSelection")}
-                  </Button>
+                    {t(allSelected ? "vault.bulk.clearSelection" : "vault.bulk.selectAvailable")}
+                  </Checkbox>
+                  {selectedAvailableCount > 0 && (
+                    <Text role="status">
+                      {t("vault.bulk.selected", { count: selectedAvailableCount })}
+                    </Text>
+                  )}
                 </Flex>
+                {selectedAvailableCount > 0 && (
+                  <Flex direction={{ xs: "column", s: "row" }} gap="spacing-2" minWidth="0">
+                    <Button
+                      size="xl"
+                      view="outlined"
+                      disabled={bulkTrashPending || bulkMovePending}
+                      loading={bulkMovePending}
+                      onClick={onBulkMove}
+                      width={phone ? "max" : undefined}
+                    >
+                      {t("vault.bulk.move")}
+                    </Button>
+                    <Button
+                      size="xl"
+                      view="outlined-danger"
+                      disabled={bulkTrashPending || bulkMovePending}
+                      loading={bulkTrashPending}
+                      onClick={onBulkTrash}
+                      width={phone ? "max" : undefined}
+                    >
+                      <Icon data={TrashBin} />
+                      {t("vault.bulk.moveToTrash")}
+                    </Button>
+                  </Flex>
+                )}
               </Flex>
             )}
             {entries.length !== totalCount && (
@@ -472,6 +499,10 @@ const EntryBrowser = ({
                 selectionMode="single"
                 selectedIds={selected ? [String(selected.id)] : []}
                 onItemAction={(_id, entry, event) => {
+                  if (selectedEntryIds.length > 0 && canActOnEntry(entry)) {
+                    toggleSelection(entry.id, !selectedEntryIdSet.has(String(entry.id)));
+                    return;
+                  }
                   selectedTrigger.current = event.currentTarget;
                   setRevealedEntryId(null);
                   if (phone) onOpenEntry(entry);
@@ -503,9 +534,7 @@ const EntryBrowser = ({
                       <Flex {...getCellProps()} gap="spacing-2" alignItems="center">
                         <Checkbox
                           checked={selectedEntryIdSet.has(String(ctx.item.id))}
-                          disabled={
-                            bulkTrashPending || bulkMovePending || ctx.item.access === "read"
-                          }
+                          disabled={bulkTrashPending || bulkMovePending || !canActOnEntry(ctx.item)}
                           size="xl"
                           controlProps={{
                             "aria-label": t("vault.bulk.selectEntry", {
@@ -576,7 +605,7 @@ const EntryBrowser = ({
                       </Flex>
                     }
                     endContent={
-                      desktop && !selected ? (
+                      desktop && !selected && selectedEntryIds.length === 0 ? (
                         <Box {...getCellProps()} onClick={(event) => event.stopPropagation()}>
                           <EntryListActions
                             entry={ctx.item}
@@ -587,9 +616,11 @@ const EntryBrowser = ({
                               setRevealedEntryId(revealed ? ctx.item.id : null)
                             }
                             onMenuOpenChange={(open) => setMenuEntryId(open ? ctx.item.id : null)}
+                            showInlineActions={entriesWidth >= INLINE_ACTIONS_MIN_WIDTH}
+                            showInlineSharing={entriesWidth >= INLINE_SHARING_MIN_WIDTH}
                           />
                         </Box>
-                      ) : phone ? (
+                      ) : phone && selectedEntryIds.length === 0 ? (
                         <Box {...getCellProps()} onClick={(event) => event.stopPropagation()}>
                           <Button
                             type="button"

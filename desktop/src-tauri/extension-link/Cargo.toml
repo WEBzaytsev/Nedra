@@ -1,6 +1,6 @@
 [package]
 name = "nedra-extension-link"
-version = "5.0.5"
+version = "5.0.6"
 edition = "2021"
 publish = false
 description = "The link between the Nedra browser extension and the desktop app: framing, the paired channel, local IPC and native-host manifests."

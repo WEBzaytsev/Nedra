@@ -84,6 +84,7 @@ const ru = {
     changePasswordTitle: "Смените пароль",
     securityKey: "Аппаратный ключ",
     securityKeyAdd: "Добавить аппаратный ключ",
+    securityKeyRetry: "Повторить загрузку",
     securityKeyDefaultName: "Аппаратный ключ",
     securityKeyDescription:
       "Используйте ключ с PRF для входа и важных изменений. При включении код восстановления будет удалён.",
@@ -93,10 +94,16 @@ const ru = {
     securityKeyDisable: "Отключить аппаратный ключ",
     securityKeyDisableDescription:
       "Для отключения нужны текущий пароль и этот физический ключ. Все сессии будут завершены, а код восстановления не восстановится.",
+    securityKeyRemove: "Удалить ключ",
+    securityKeyRemoveConfirm:
+      "Удалить аппаратный ключ «{{name}}»? Для подтверждения нужны пароль и аппаратный ключ.",
     securityKeyName: "Название ключа",
     deviceUnlock: "Разблокировка устройством",
     touchId: "Touch ID",
     deviceUnlockAdd: "Добавить устройство",
+    deviceUnlockRemove: "Удалить устройство",
+    deviceUnlockRemoveConfirm:
+      "Удалить устройство «{{name}}»? После удаления потребуется войти снова.",
     deviceUnlockName: "Название устройства",
     deviceUnlockPasswordInterval: "Запрашивать пароль",
     deviceUnlockPasswordIntervalOption: "Каждые {{days}} дней",
@@ -307,7 +314,10 @@ const ru = {
       selected_many: "Выбрано {{count}} записей",
       selected_other: "Выбрано {{count}} записи",
       selectEntry: "Выбрать «{{name}}»",
+      selectAvailable: "Выбрать доступные",
       moveToTrash: "В корзину",
+      trashTitle: "Переместить выбранные записи в корзину?",
+      trashMessage: "Выбранные записи ({{count}}) можно будет восстановить из корзины.",
       move: "Переместить",
       undo: "Отменить",
       moveTitle: "Переместить выбранные записи",
@@ -563,7 +573,7 @@ const ru = {
     releaseNotes: "Что изменилось на GitHub",
   },
   trashDialog: {
-    empty: "Корзина пуста. Здесь можно восстановить записи или удалить их навсегда.",
+    empty: "Корзина пуста.",
     deleted: "Удалено",
     restore: "Восстановить",
     deleteForever: "Удалить навсегда",
@@ -572,12 +582,13 @@ const ru = {
       "Удалить <strong>{{name}}</strong> навсегда? Отменить это действие нельзя.",
     restoreSelected: "Восстановить выбранное",
     deleteSelected: "Удалить выбранное",
+    deleteOwnedOnly: "Навсегда удалить можно только свои записи.",
     deleteSelectedTitle: "Удалить выбранные записи навсегда?",
     deleteSelectedMessage:
       "Удалить навсегда выбранные записи: {{count}}? Отменить это действие нельзя.",
-    purgeFailed: "Не удалось удалить запись. Она осталась в корзине. Повторите попытку.",
-    deleteAll: "Очистить корзину",
-    deleteAllTitle: "Очистить корзину?",
+    purgeFailed: "Удаление не удалось. Попробуйте ещё раз.",
+    deleteAll: "Удалить все свои записи",
+    deleteAllTitle: "Удалить все свои записи навсегда?",
     deleteAllMessage:
       "Будут навсегда удалены все ваши записи в корзине: {{count}}. Отменить это действие нельзя.",
     deletedAll_one: "Навсегда удалена {{count}} запись.",

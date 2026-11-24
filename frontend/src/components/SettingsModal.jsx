@@ -14,6 +14,7 @@ import {
   TabList,
   TabPanel,
   TabProvider,
+  sp,
 } from "@gravity-ui/uikit";
 import { toaster } from "@gravity-ui/uikit/toaster-singleton";
 import { useStoreActions, useStoreState } from "easy-peasy";
@@ -204,7 +205,7 @@ const SettingsModal = ({ open, onClose }) => {
             if (!saving) setTab(value);
           }}
         >
-          <TabList contentOverflow="scroll" size="l">
+          <TabList className={sp({ mb: 5 })} contentOverflow="scroll" size="l">
             <Tab value="general">{t("settings.general")}</Tab>
             <Tab value="extension">{t("extension.title")}</Tab>
           </TabList>

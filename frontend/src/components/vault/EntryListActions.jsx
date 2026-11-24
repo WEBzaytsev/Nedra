@@ -41,6 +41,8 @@ const EntryListActions = ({
   onShare,
   onToggleFavorite,
   onMenuOpenChange,
+  showInlineActions = false,
+  showInlineSharing = false,
   revealed,
   onRevealChange,
 }) => {
@@ -82,54 +84,79 @@ const EntryListActions = ({
       />
       <QuickAction label={copyLabel} icon={Copy} onClick={() => onCopy(entry.password_value)} />
       {!isNote && entry.totp_secret && <TotpCell secret={entry.totp_secret} onCopy={onCopy} />}
-      <Menu
-        placement="bottom-end"
-        onOpenChange={onMenuOpenChange}
-        trigger={
-          <Button
-            type="button"
-            view="flat-secondary"
-            size="xl"
-            aria-label={`${t("navigation.more")}: ${entry.password_name}`}
-          >
-            <Icon data={EllipsisVertical} />
-          </Button>
-        }
-      >
-        {entry.url && (
-          <MenuItem icon={<Icon data={ArrowUpRightFromSquare} />} onClick={openWebsite}>
-            {t("vault.columns.openWebsite")}
-          </MenuItem>
-        )}
-        {writable && (
-          <MenuItem
-            icon={<Icon data={entry.favorite ? StarFill : Star} />}
+      {writable && showInlineActions && (
+        <>
+          <QuickAction
+            label={t(
+              entry.favorite ? "vault.columns.removeFavorite" : "vault.columns.markFavorite"
+            )}
+            icon={entry.favorite ? StarFill : Star}
+            selected={entry.favorite}
             onClick={() => onToggleFavorite(entry)}
-          >
-            {t(entry.favorite ? "vault.columns.removeFavorite" : "vault.columns.markFavorite")}
-          </MenuItem>
-        )}
-        {writable && (
-          <MenuItem icon={<Icon data={Pencil} />} onClick={() => onEdit(entry)}>
-            {t("common.actions.edit")}
-          </MenuItem>
-        )}
-        {entry.access === "owner" && (
-          <MenuItem icon={<Icon data={PersonPlus} />} onClick={() => onShare(entry)}>
-            {t("sharing.manage")}
-          </MenuItem>
-        )}
-        {writable && <MenuDivider />}
-        {writable && (
-          <MenuItem
-            theme="danger"
-            icon={<Icon data={TrashBin} />}
-            onClick={() => onDelete(entry.password_name)}
-          >
-            {t("common.actions.delete")}
-          </MenuItem>
-        )}
-      </Menu>
+          />
+          <QuickAction
+            label={t("common.actions.edit")}
+            icon={Pencil}
+            onClick={() => onEdit(entry)}
+          />
+        </>
+      )}
+      {entry.access === "owner" && showInlineSharing && (
+        <QuickAction label={t("sharing.manage")} icon={PersonPlus} onClick={() => onShare(entry)} />
+      )}
+      {(entry.url || writable) && (
+        <Menu
+          placement="bottom-end"
+          onOpenChange={onMenuOpenChange}
+          trigger={
+            <Button
+              type="button"
+              view="flat-secondary"
+              size="xl"
+              aria-label={`${t("navigation.more")}: ${entry.password_name}`}
+            >
+              <Icon data={EllipsisVertical} />
+            </Button>
+          }
+        >
+          {entry.url && (
+            <MenuItem icon={<Icon data={ArrowUpRightFromSquare} />} onClick={openWebsite}>
+              {t("vault.columns.openWebsite")}
+            </MenuItem>
+          )}
+          {writable && !showInlineActions && (
+            <MenuItem
+              icon={<Icon data={entry.favorite ? StarFill : Star} />}
+              onClick={() => onToggleFavorite(entry)}
+            >
+              {t(entry.favorite ? "vault.columns.removeFavorite" : "vault.columns.markFavorite")}
+            </MenuItem>
+          )}
+          {writable && !showInlineActions && (
+            <MenuItem icon={<Icon data={Pencil} />} onClick={() => onEdit(entry)}>
+              {t("common.actions.edit")}
+            </MenuItem>
+          )}
+          {entry.access === "owner" && !showInlineSharing && (
+            <MenuItem icon={<Icon data={PersonPlus} />} onClick={() => onShare(entry)}>
+              {t("sharing.manage")}
+            </MenuItem>
+          )}
+          {writable &&
+            (entry.url ||
+              !showInlineActions ||
+              (entry.access === "owner" && !showInlineSharing)) && <MenuDivider />}
+          {writable && (
+            <MenuItem
+              theme="danger"
+              icon={<Icon data={TrashBin} />}
+              onClick={() => onDelete(entry.password_name)}
+            >
+              {t("common.actions.delete")}
+            </MenuItem>
+          )}
+        </Menu>
+      )}
     </Flex>
   );
 };

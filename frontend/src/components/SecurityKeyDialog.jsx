@@ -1,5 +1,14 @@
-import { useEffect, useId, useState } from "react";
-import { Alert, Button, Flex, Select, Text, TextInput } from "@gravity-ui/uikit";
+import { useCallback, useEffect, useId, useState } from "react";
+import {
+  Alert,
+  Button,
+  Card,
+  Flex,
+  Select,
+  Text,
+  TextInput,
+  useLayoutContext,
+} from "@gravity-ui/uikit";
 import { useTranslation } from "react-i18next";
 
 import apiClient from "../api/client";
@@ -26,25 +35,33 @@ const dialogError = (error, fallback) =>
 
 const SecurityKeyDialog = ({ open, onClose }) => {
   const { t } = useTranslation();
+  const { isMediaActive } = useLayoutContext();
+  const phone = !isMediaActive("s");
   const titleId = useId();
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
+  const [mode, setMode] = useState("overview");
+  const [target, setTarget] = useState(null);
   const [enabled, setEnabled] = useState(false);
   const [keys, setKeys] = useState([]);
   const [devices, setDevices] = useState([]);
   const [touchIdAvailable, setTouchIdAvailable] = useState(false);
   const [passwordIntervalDays, setPasswordIntervalDays] = useState(14);
-  const [adding, setAdding] = useState(false);
-  const [deviceAdding, setDeviceAdding] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [reload, setReload] = useState(0);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (!open) return;
+    let active = true;
     setName("");
     setPassword("");
-    setAdding(false);
-    setDeviceAdding(false);
+    setMode("overview");
+    setTarget(null);
+    setLoading(true);
+    setLoadFailed(false);
     setError("");
     Promise.all([
       apiClient.get("/security"),
@@ -55,6 +72,7 @@ const SecurityKeyDialog = ({ open, onClose }) => {
         const nativeStatus = hasTouchId
           ? await biometricStatus(getSessionToken())
           : { devices: [] };
+        if (!active) return;
         setEnabled(security.data.enabled);
         setKeys(security.data.security_keys);
         setTouchIdAvailable(hasTouchId);
@@ -64,8 +82,70 @@ const SecurityKeyDialog = ({ open, onClose }) => {
         ]);
         setPasswordIntervalDays(deviceUnlock.data.password_interval_days);
       })
-      .catch(async (err) => setError(await dialogError(err, t("errors.load"))));
-  }, [open, t]);
+      .catch(async (err) => {
+        const message = await dialogError(err, t("errors.load"));
+        if (active) {
+          setError(message);
+          setLoadFailed(true);
+        }
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [open, reload, t]);
+
+  const choose = useCallback(
+    (next, selected = null) => {
+      setMode(next);
+      setTarget(selected);
+      setName("");
+      setPassword("");
+      setError("");
+      if (next === "overview" && phone) {
+        window.requestAnimationFrame(() =>
+          document.getElementById(titleId)?.focus({ preventScroll: true })
+        );
+      }
+    },
+    [phone, titleId]
+  );
+
+  const closeTask = useCallback(() => {
+    if (busy) return;
+    if (mode === "overview") onClose();
+    else choose("overview");
+  }, [busy, mode, onClose, choose]);
+
+  useEffect(() => {
+    if (!open || !phone) return undefined;
+    const handleEscape = (event) => {
+      if (event.key !== "Escape" || busy) return;
+      event.preventDefault();
+      closeTask();
+    };
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
+  }, [open, phone, busy, closeTask]);
+
+  const startDeviceEnrollment = async () => {
+    if (!IS_DESKTOP) {
+      try {
+        const supported =
+          window.isSecureContext &&
+          window.PublicKeyCredential &&
+          (await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()) &&
+          (await PublicKeyCredential.getClientCapabilities?.())?.["extension:prf"] !== false;
+        if (!supported) throw new Error(t("auth.deviceUnlockUnavailable"));
+      } catch (err) {
+        setError(await dialogError(err, t("auth.deviceUnlockUnavailable")));
+        return;
+      }
+    }
+    choose("add-device");
+  };
 
   const enroll = async () => {
     setBusy(true);
@@ -122,9 +202,7 @@ const SecurityKeyDialog = ({ open, onClose }) => {
           ...devices.filter((device) => device.kind === "webauthn"),
           ...status.devices.map((device) => ({ ...device, kind: "touch-id" })),
         ]);
-        setDeviceAdding(false);
-        setName("");
-        setPassword("");
+        choose("overview");
         return;
       }
       if (!IS_DESKTOP) {
@@ -154,9 +232,7 @@ const SecurityKeyDialog = ({ open, onClose }) => {
         ...response,
       });
       setDevices(data.devices);
-      setDeviceAdding(false);
-      setName("");
-      setPassword("");
+      choose("overview");
     } catch (err) {
       setError(await dialogError(err, t("errors.save")));
     } finally {
@@ -239,6 +315,26 @@ const SecurityKeyDialog = ({ open, onClose }) => {
     }
   };
 
+  const caption =
+    mode === "overview"
+      ? t("auth.securityKey")
+      : t(
+          {
+            "add-key": "auth.securityKeyAdd",
+            "add-device": "auth.deviceUnlockAdd",
+            "disable-key": "auth.securityKeyDisable",
+            "remove-key": "auth.securityKeyRemove",
+            "remove-device": "auth.deviceUnlockRemove",
+          }[mode]
+        );
+  const submit = {
+    "add-key": enroll,
+    "add-device": enrollDevice,
+    "disable-key": disable,
+    "remove-key": () => remove(target.id),
+    "remove-device": () => removeDevice(target),
+  }[mode];
+
   return (
     <Dialog
       aria-labelledby={titleId}
@@ -247,123 +343,194 @@ const SecurityKeyDialog = ({ open, onClose }) => {
       fullWidth
       hasCloseButton={!busy}
       maxWidth="s"
-      onOpenChange={(next) => !next && !busy && onClose()}
+      onOpenChange={(next) => {
+        if (!next) closeTask();
+      }}
       open={open}
     >
-      <Dialog.Header caption={t("auth.securityKey")} id={titleId} />
+      <Dialog.Header caption={caption} id={titleId} />
       <Dialog.Body>
         <Flex direction="column" gap="spacing-5">
-          {error && <Alert message={error} theme="danger" />}
-          <Text color="secondary">
-            {t(
-              enabled && !adding
-                ? "auth.securityKeyDisableDescription"
-                : "auth.securityKeyDescription"
-            )}
-          </Text>
-          {enabled && !adding && (
-            <Flex direction="column" gap="spacing-2">
-              {keys.map((key) => (
-                <Flex alignItems="center" justifyContent="space-between" key={key.id}>
-                  <Text>{key.name}</Text>
-                  <Button
-                    disabled={busy || !password}
-                    onClick={() => remove(key.id)}
-                    view="flat-danger"
-                  >
-                    {t("common.actions.remove")}
-                  </Button>
+          {loading ? (
+            <Text color="secondary" role="status">
+              {t("common.labels.loading")}
+            </Text>
+          ) : (
+            <>
+              {error && (
+                <Flex role="alert">
+                  <Alert message={error} theme="danger" />
                 </Flex>
-              ))}
-              <Button disabled={busy} onClick={() => setAdding(true)} view="flat">
-                {t("auth.securityKeyAdd")}
-              </Button>
-            </Flex>
-          )}
-          {devices.length > 0 && !deviceAdding && (
-            <Flex direction="column" gap="spacing-2">
-              <Text variant="subheader-2">{t("auth.deviceUnlock")}</Text>
-              {devices.map((device) => (
-                <Flex
-                  alignItems="center"
-                  justifyContent="space-between"
-                  key={`${device.kind}-${device.id}`}
-                >
-                  <Flex direction="column" gap="spacing-1">
-                    <Text>{device.name}</Text>
-                    {device.kind === "touch-id" && (
-                      <Text color="secondary" variant="caption-2">
-                        {t("auth.touchId")}
-                      </Text>
+              )}
+              {loadFailed ? (
+                <Button size="xl" onClick={() => setReload((value) => value + 1)}>
+                  {t("auth.securityKeyRetry")}
+                </Button>
+              ) : mode === "overview" ? (
+                <>
+                  <Flex direction="column" gap="spacing-3" minWidth="0">
+                    {!enabled && <Text color="secondary">{t("auth.securityKeyDescription")}</Text>}
+                    {keys.map((key) => (
+                      <Card key={key.id}>
+                        <Flex
+                          alignItems={phone ? "stretch" : "center"}
+                          direction={phone ? "column" : "row"}
+                          justifyContent="space-between"
+                          gap="spacing-2"
+                          padding="spacing-3"
+                          minWidth="0"
+                        >
+                          <Text wordBreak="break-word">{key.name}</Text>
+                          <Button
+                            size="xl"
+                            view="flat-danger"
+                            disabled={busy}
+                            onClick={() => choose("remove-key", key)}
+                          >
+                            {t("common.actions.remove")}
+                          </Button>
+                        </Flex>
+                      </Card>
+                    ))}
+                    <Button
+                      size="xl"
+                      view={enabled ? "normal" : "action"}
+                      disabled={busy}
+                      onClick={() => choose("add-key")}
+                    >
+                      {t("auth.securityKeyAdd")}
+                    </Button>
+                    {enabled && (
+                      <Button
+                        size="xl"
+                        view="flat-danger"
+                        disabled={busy}
+                        onClick={() => choose("disable-key")}
+                      >
+                        {t("auth.securityKeyDisable")}
+                      </Button>
                     )}
                   </Flex>
-                  <Button disabled={busy} onClick={() => removeDevice(device)} view="flat-danger">
-                    {t("common.actions.remove")}
-                  </Button>
-                </Flex>
-              ))}
-              <Select
-                aria-label={t("auth.deviceUnlockPasswordInterval")}
-                disabled={busy}
-                label={t("auth.deviceUnlockPasswordInterval")}
-                onUpdate={([value = passwordIntervalDays]) => updateDeviceUnlockPolicy(value)}
-                options={[7, 14, 30].map((days) => ({
-                  value: String(days),
-                  content: t("auth.deviceUnlockPasswordIntervalOption", { days }),
-                }))}
-                value={[String(passwordIntervalDays)]}
-              />
-              <Text color="secondary" variant="caption-2">
-                {t("auth.deviceUnlockPasswordIntervalHint")}
-              </Text>
-            </Flex>
+                  <Flex direction="column" gap="spacing-3" minWidth="0">
+                    <Text variant="subheader-2">{t("auth.deviceUnlock")}</Text>
+                    {devices.map((device) => (
+                      <Card key={`${device.kind}-${device.id}`}>
+                        <Flex
+                          alignItems={phone ? "stretch" : "center"}
+                          direction={phone ? "column" : "row"}
+                          justifyContent="space-between"
+                          gap="spacing-2"
+                          padding="spacing-3"
+                          minWidth="0"
+                        >
+                          <Flex direction="column" gap="spacing-1" minWidth="0">
+                            <Text wordBreak="break-word">{device.name}</Text>
+                            {device.kind === "touch-id" && (
+                              <Text color="secondary" variant="caption-2">
+                                {t("auth.touchId")}
+                              </Text>
+                            )}
+                          </Flex>
+                          <Button
+                            size="xl"
+                            view="flat-danger"
+                            disabled={busy}
+                            onClick={() => choose("remove-device", device)}
+                          >
+                            {t("common.actions.remove")}
+                          </Button>
+                        </Flex>
+                      </Card>
+                    ))}
+                    {devices.length > 0 && (
+                      <Flex direction="column" gap="spacing-2">
+                        <Text>{t("auth.deviceUnlockPasswordInterval")}</Text>
+                        <Select
+                          aria-label={t("auth.deviceUnlockPasswordInterval")}
+                          disabled={busy}
+                          onUpdate={([value = passwordIntervalDays]) =>
+                            updateDeviceUnlockPolicy(value)
+                          }
+                          options={[7, 14, 30].map((days) => ({
+                            value: String(days),
+                            content: t("auth.deviceUnlockPasswordIntervalOption", { days }),
+                          }))}
+                          value={[String(passwordIntervalDays)]}
+                        />
+                        <Text color="secondary" variant="caption-2">
+                          {t("auth.deviceUnlockPasswordIntervalHint")}
+                        </Text>
+                      </Flex>
+                    )}
+                    <Button size="xl" disabled={busy} onClick={startDeviceEnrollment}>
+                      {t("auth.deviceUnlockAdd")}
+                    </Button>
+                  </Flex>
+                </>
+              ) : (
+                <>
+                  {mode === "add-key" && !enabled && (
+                    <Alert message={t("auth.securityKeyDescription")} theme="warning" />
+                  )}
+                  {mode === "disable-key" && (
+                    <Alert message={t("auth.securityKeyDisableDescription")} theme="warning" />
+                  )}
+                  {mode === "remove-key" && (
+                    <Text>{t("auth.securityKeyRemoveConfirm", { name: target.name })}</Text>
+                  )}
+                  {mode === "remove-device" && (
+                    <Text>{t("auth.deviceUnlockRemoveConfirm", { name: target.name })}</Text>
+                  )}
+                  {(mode === "add-key" || mode === "add-device") && (
+                    <Flex direction="column" gap="spacing-2" minWidth="0">
+                      <Text as="label" htmlFor={`${titleId}-name`}>
+                        {t(
+                          mode === "add-device" ? "auth.deviceUnlockName" : "auth.securityKeyName"
+                        )}
+                      </Text>
+                      <TextInput
+                        id={`${titleId}-name`}
+                        size="xl"
+                        autoFocus
+                        disabled={busy}
+                        onUpdate={setName}
+                        placeholder={
+                          mode === "add-key" ? t("auth.securityKeyDefaultName") : undefined
+                        }
+                        value={name}
+                      />
+                    </Flex>
+                  )}
+                  {mode !== "remove-device" && (
+                    <PasswordField
+                      autoComplete="current-password"
+                      autoFocus={mode !== "add-key" && mode !== "add-device"}
+                      disabled={busy}
+                      label={t("auth.currentPassword")}
+                      onChange={(event) => setPassword(event.target.value)}
+                      value={password}
+                    />
+                  )}
+                </>
+              )}
+            </>
           )}
-          {!deviceAdding && (
-            <Button
-              disabled={busy}
-              onClick={() => {
-                setAdding(false);
-                setDeviceAdding(true);
-                setName("");
-              }}
-              view="flat"
-            >
-              {t("auth.deviceUnlockAdd")}
-            </Button>
-          )}
-          {(!enabled || adding || deviceAdding) && (
-            <TextInput
-              controlProps={{
-                "aria-label": t(deviceAdding ? "auth.deviceUnlockName" : "auth.securityKeyName"),
-              }}
-              disabled={busy}
-              label={t(deviceAdding ? "auth.deviceUnlockName" : "auth.securityKeyName")}
-              onUpdate={setName}
-              value={name}
-            />
-          )}
-          <PasswordField
-            autoComplete="current-password"
-            disabled={busy}
-            label={t("auth.currentPassword")}
-            onChange={(event) => setPassword(event.target.value)}
-            value={password}
-          />
         </Flex>
       </Dialog.Body>
       <Dialog.Footer
         loading={busy}
-        onClickButtonApply={deviceAdding ? enrollDevice : enabled && !adding ? disable : enroll}
-        onClickButtonCancel={onClose}
-        propsButtonApply={{ disabled: !password || (deviceAdding && !name.trim()) }}
-        textButtonApply={t(
-          deviceAdding
-            ? "auth.deviceUnlockAdd"
-            : enabled && !adding
-              ? "auth.securityKeyDisable"
-              : "auth.securityKeyAdd"
-        )}
-        textButtonCancel={t("common.actions.cancel")}
+        onClickButtonApply={submit}
+        onClickButtonCancel={closeTask}
+        propsButtonApply={{
+          disabled:
+            loading ||
+            loadFailed ||
+            (mode !== "remove-device" && !password) ||
+            (mode === "add-device" && !name.trim()),
+          view: mode.startsWith("remove") || mode === "disable-key" ? "flat-danger" : "action",
+        }}
+        textButtonApply={mode === "overview" ? undefined : caption}
+        textButtonCancel={t(mode === "overview" ? "common.actions.close" : "common.actions.cancel")}
       />
     </Dialog>
   );

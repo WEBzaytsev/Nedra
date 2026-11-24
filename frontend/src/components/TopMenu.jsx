@@ -77,6 +77,15 @@ const TopMenu = () => {
   const { isMediaActive } = useLayoutContext();
   const desktop = isMediaActive("l");
   const phone = !isMediaActive("s");
+  const routedUtility =
+    phone ||
+    [
+      "/settings",
+      "/account/password",
+      "/account/security-key",
+      "/account/recovery",
+      "/updates",
+    ].includes(location.pathname);
   const currentUser = getCurrentUser();
   const admin = currentUser?.role === "admin";
   const language = (i18n.resolvedLanguage ?? i18n.language)?.startsWith("ru") ? "ru" : "en";
@@ -90,6 +99,10 @@ const TopMenu = () => {
   const [updateOpen, setUpdateOpen] = useState(false);
   const mobileMenuButton = useRef(null);
   const utilityReturnTarget = useRef(null);
+
+  useEffect(() => {
+    if (desktop) setMobileNavOpen(false);
+  }, [desktop]);
 
   const updateCheckEnabled = useStoreState(
     (state) => state.nedraModels.settings.settings.update_check_enabled
@@ -120,7 +133,7 @@ const TopMenu = () => {
     if (!admin) return;
     rememberUtilityTrigger(event);
     closeMobileNav();
-    if (phone) {
+    if (routedUtility) {
       navigate("/settings", { state: { taskReturn: location.pathname + location.search } });
       return;
     }
@@ -129,7 +142,7 @@ const TopMenu = () => {
   const openPassword = (event) => {
     rememberUtilityTrigger(event);
     closeMobileNav();
-    if (phone) {
+    if (routedUtility) {
       navigate("/account/password", { state: { taskReturn: location.pathname + location.search } });
       return;
     }
@@ -138,17 +151,27 @@ const TopMenu = () => {
   const openRecovery = (event) => {
     rememberUtilityTrigger(event);
     closeMobileNav();
+    if (routedUtility) {
+      navigate("/account/recovery", { state: { taskReturn: location.pathname + location.search } });
+      return;
+    }
     setRecoveryOpen(true);
   };
   const openSecurityKey = (event) => {
     rememberUtilityTrigger(event);
     closeMobileNav();
+    if (routedUtility) {
+      navigate("/account/security-key", {
+        state: { taskReturn: location.pathname + location.search },
+      });
+      return;
+    }
     setSecurityKeyOpen(true);
   };
   const openUpdate = (event) => {
     rememberUtilityTrigger(event);
     closeMobileNav();
-    if (phone) {
+    if (routedUtility) {
       navigate("/updates", { state: { taskReturn: location.pathname + location.search } });
       return;
     }
@@ -417,10 +440,12 @@ const TopMenu = () => {
         <Flex as="header" direction="column">
           <Flex
             alignItems="center"
+            justifyContent="space-between"
             gap="spacing-3"
             paddingInline="spacing-3"
             paddingBlock="spacing-2"
           >
+            <Brand />
             <Button
               ref={mobileMenuButton}
               type="button"
@@ -431,7 +456,6 @@ const TopMenu = () => {
             >
               <Icon data={Bars} />
             </Button>
-            <Brand />
           </Flex>
           <Divider />
         </Flex>
@@ -440,7 +464,7 @@ const TopMenu = () => {
       <Drawer
         open={mobileNavOpen}
         onOpenChange={setMobileNavOpen}
-        placement="left"
+        placement="right"
         size="auto"
         returnFocus={mobileMenuButton}
         disableLayer={false}

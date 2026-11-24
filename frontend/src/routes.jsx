@@ -40,6 +40,8 @@ const routes = [
   ...[
     { path: "/settings", section: "settings", role: "admin" },
     { path: "/account/password", section: "password" },
+    { path: "/account/security-key", section: "security-key" },
+    { path: "/account/recovery", section: "recovery" },
     { path: "/updates", section: "updates" },
   ].map(({ path, section, role }) => ({
     path,
