@@ -341,6 +341,113 @@ const EntryBrowser = ({
     />
   );
 
+  const handleBrowserKeyDown = (event) => {
+    if (contextMenu && event.key === "Escape") {
+      event.preventDefault();
+      closeContextMenu();
+      return;
+    }
+    if (
+      !event.defaultPrevented &&
+      !bulkMovePending &&
+      !bulkTrashPending &&
+      !event.target.closest("input, textarea, [contenteditable='true']") &&
+      selectedEntryIds.length > 0 &&
+      (event.key === "Delete" || event.key === "Backspace")
+    ) {
+      event.preventDefault();
+      onBulkTrash?.();
+      return;
+    }
+    if (
+      !event.defaultPrevented &&
+      !bulkTrashPending &&
+      !bulkMovePending &&
+      selectedEntryIds.length > 0 &&
+      event.key === "Escape"
+    ) {
+      event.preventDefault();
+      onSelectedEntryIdsChange?.([]);
+      return;
+    }
+    if (desktop && selected && event.key === "Escape" && !event.defaultPrevented) {
+      event.stopPropagation();
+      closeDetails();
+    }
+  };
+
+  const bulkToolbar = availableEntries.length > 0 && (
+    <Flex
+      gap="spacing-3"
+      alignItems="center"
+      justifyContent="space-between"
+      wrap="wrap"
+      padding="spacing-3"
+      minWidth="0"
+    >
+      <Flex
+        gap="spacing-3"
+        alignItems="center"
+        wrap="wrap"
+        minWidth="0"
+        width={phone ? "100%" : undefined}
+      >
+        <Checkbox
+          checked={allSelected}
+          indeterminate={selectedAvailableCount > 0 && !allSelected}
+          disabled={bulkTrashPending || bulkMovePending}
+          controlProps={{
+            "aria-label": t(
+              allSelected ? "vault.bulk.clearSelection" : "vault.bulk.selectAvailable"
+            ),
+          }}
+          onUpdate={(checked) =>
+            onSelectedEntryIdsChange?.(
+              checked ? availableEntries.map((entry) => String(entry.id)) : []
+            )
+          }
+          size="xl"
+        >
+          {(selectedAvailableCount === 0 || phone) &&
+            t(allSelected ? "vault.bulk.clearSelection" : "vault.bulk.selectAvailable")}
+        </Checkbox>
+        {selectedAvailableCount > 0 && (
+          <Text role="status">{t("vault.bulk.selected", { count: selectedAvailableCount })}</Text>
+        )}
+      </Flex>
+      {selectedAvailableCount > 0 && (
+        <Flex
+          direction={{ xs: "column", s: "row" }}
+          gap="spacing-2"
+          minWidth="0"
+          width={phone ? "100%" : undefined}
+        >
+          <Button
+            size="xl"
+            view="normal"
+            disabled={bulkTrashPending || bulkMovePending}
+            loading={bulkMovePending}
+            onClick={onBulkMove}
+            width={phone ? "max" : undefined}
+          >
+            {t("vault.bulk.move")}
+          </Button>
+          <Button
+            size="xl"
+            view="outlined-danger"
+            disabled={bulkTrashPending || bulkMovePending}
+            loading={bulkTrashPending}
+            onClick={onBulkTrash}
+            width={phone ? "max" : undefined}
+          >
+            <Icon data={TrashBin} />
+            {t("vault.bulk.moveToTrash")}
+          </Button>
+        </Flex>
+      )}
+    </Flex>
+  );
+
   const showPhoneDetails = Boolean(phone && selected && taskActive);
 
   return (
@@ -364,352 +471,257 @@ const EntryBrowser = ({
       )}
       {!showPhoneDetails && (
         <Flex
-          gap="spacing-6"
-          alignItems={fixedViewport ? "stretch" : "flex-start"}
+          direction="column"
           flexGrow={fixedViewport ? 1 : undefined}
           minHeight={fixedViewport ? "0" : undefined}
           overflow={fixedViewport ? "hidden" : undefined}
-          onKeyDown={(event) => {
-            if (contextMenu && event.key === "Escape") {
-              event.preventDefault();
-              closeContextMenu();
-              return;
-            }
-            if (
-              !event.defaultPrevented &&
-              !bulkMovePending &&
-              !bulkTrashPending &&
-              !event.target.closest("input, textarea, [contenteditable='true']") &&
-              selectedEntryIds.length > 0 &&
-              (event.key === "Delete" || event.key === "Backspace")
-            ) {
-              event.preventDefault();
-              onBulkTrash?.();
-              return;
-            }
-            if (
-              !event.defaultPrevented &&
-              !bulkTrashPending &&
-              !bulkMovePending &&
-              selectedEntryIds.length > 0 &&
-              event.key === "Escape"
-            ) {
-              event.preventDefault();
-              onSelectedEntryIdsChange?.([]);
-              return;
-            }
-            if (desktop && selected && event.key === "Escape" && !event.defaultPrevented) {
-              event.stopPropagation();
-              closeDetails();
-            }
-          }}
+          onKeyDown={handleBrowserKeyDown}
         >
-          <Box
-            minWidth="0"
-            flexGrow={1}
-            flexBasis="0"
-            height={fixedViewport ? "100%" : undefined}
+          {bulkToolbar}
+          <Flex
+            gap="spacing-6"
+            alignItems={fixedViewport ? "stretch" : "flex-start"}
+            flexGrow={fixedViewport ? 1 : undefined}
             minHeight={fixedViewport ? "0" : undefined}
-            overflow={fixedViewport ? "auto" : undefined}
-            as="section"
-            aria-label={t("vault.browser.entries")}
+            overflow={fixedViewport ? "hidden" : undefined}
           >
-            {availableEntries.length > 0 && (
-              <Flex
-                gap="spacing-3"
-                alignItems="center"
-                justifyContent="space-between"
-                wrap="wrap"
-                paddingBlockEnd="spacing-3"
-                minWidth="0"
-              >
-                <Flex
-                  gap="spacing-3"
-                  alignItems="center"
-                  wrap="wrap"
-                  minWidth="0"
-                  width={phone ? "100%" : undefined}
-                >
-                  <Checkbox
-                    checked={allSelected}
-                    indeterminate={selectedAvailableCount > 0 && !allSelected}
-                    disabled={bulkTrashPending || bulkMovePending}
-                    controlProps={{
-                      "aria-label": t(
-                        allSelected ? "vault.bulk.clearSelection" : "vault.bulk.selectAvailable"
-                      ),
-                    }}
-                    onUpdate={(checked) =>
-                      onSelectedEntryIdsChange?.(
-                        checked ? availableEntries.map((entry) => String(entry.id)) : []
-                      )
-                    }
-                    size="xl"
-                  >
-                    {(selectedAvailableCount === 0 || phone) &&
-                      t(allSelected ? "vault.bulk.clearSelection" : "vault.bulk.selectAvailable")}
-                  </Checkbox>
-                  {selectedAvailableCount > 0 && (
-                    <Text role="status">
-                      {t("vault.bulk.selected", { count: selectedAvailableCount })}
-                    </Text>
-                  )}
+            <Box
+              minWidth="0"
+              flexGrow={1}
+              flexBasis="0"
+              height={fixedViewport ? "100%" : undefined}
+              minHeight={fixedViewport ? "0" : undefined}
+              overflow={fixedViewport ? "auto" : undefined}
+              as="section"
+              aria-label={t("vault.browser.entries")}
+            >
+              {entries.length !== totalCount && (
+                <Flex alignItems="center" gap="spacing-2" paddingBlockEnd="spacing-3">
+                  <Text variant="subheader-1">{t("vault.browser.entries")}</Text>
+                  <Text color="secondary">{entries.length}</Text>
                 </Flex>
-                {selectedAvailableCount > 0 && (
-                  <Flex
-                    direction={{ xs: "column", s: "row" }}
-                    gap="spacing-2"
-                    minWidth="0"
-                    width={phone ? "100%" : undefined}
-                  >
-                    <Button
-                      size="xl"
-                      view="normal"
-                      disabled={bulkTrashPending || bulkMovePending}
-                      loading={bulkMovePending}
-                      onClick={onBulkMove}
-                      width={phone ? "max" : undefined}
-                    >
-                      {t("vault.bulk.move")}
-                    </Button>
-                    <Button
-                      size="xl"
-                      view="outlined-danger"
-                      disabled={bulkTrashPending || bulkMovePending}
-                      loading={bulkTrashPending}
-                      onClick={onBulkTrash}
-                      width={phone ? "max" : undefined}
-                    >
-                      <Icon data={TrashBin} />
-                      {t("vault.bulk.moveToTrash")}
-                    </Button>
-                  </Flex>
-                )}
-              </Flex>
-            )}
-            {entries.length !== totalCount && (
-              <Flex alignItems="center" gap="spacing-2" paddingBlockEnd="spacing-3">
-                <Text variant="subheader-1">{t("vault.browser.entries")}</Text>
-                <Text color="secondary">{entries.length}</Text>
-              </Flex>
-            )}
-            {entries.length === 0 ? (
-              <PlaceholderContainer
-                size="s"
-                direction="column"
-                content={
-                  <Text variant="subheader-1" wordBreak="break-word">
-                    {emptyMessage}
-                  </Text>
-                }
-                actions={[
-                  {
-                    text: t("vault.resetFilters"),
-                    size: "xl",
-                    view: "outlined",
-                    onClick: onResetFilters,
-                  },
-                ]}
-              />
-            ) : (
-              <List
-                ref={listRef}
-                aria-label={t("vault.browser.entries")}
-                role="grid"
-                size="xl"
-                items={entries}
-                getItemId={(entry) => String(entry.id)}
-                getItemTextValue={(entry) => entry.password_name}
-                selectionMode="single"
-                selectedIds={selected ? [String(selected.id)] : []}
-                onItemAction={(_id, entry, event) => {
-                  if (selectedEntryIds.length > 0 && canActOnEntry(entry)) {
-                    toggleSelection(entry.id, !selectedEntryIdSet.has(String(entry.id)));
-                    return;
+              )}
+              {entries.length === 0 ? (
+                <PlaceholderContainer
+                  size="s"
+                  direction="column"
+                  content={
+                    <Text variant="subheader-1" wordBreak="break-word">
+                      {emptyMessage}
+                    </Text>
                   }
-                  selectedTrigger.current = event.currentTarget;
-                  setRevealedEntryId(null);
-                  if (phone) onOpenEntry(entry);
-                  else setSelectedId(entry.id);
-                }}
-                renderItem={(ctx, { getItemProps, getItemViewProps, getCellProps }) => (
-                  <List.ItemView
-                    {...getItemProps({
-                      "data-entry-id": ctx.item.id,
-                      onContextMenu: (event) =>
-                        openContextMenu(ctx.item, event.currentTarget, event),
-                      onKeyDown: (event) => {
-                        if (
-                          event.key === "ContextMenu" ||
-                          (event.shiftKey && event.key === "F10")
-                        ) {
-                          event.preventDefault();
-                          openContextMenu(ctx.item, event.currentTarget);
-                        }
-                      },
-                    })}
-                    {...getItemViewProps()}
-                    hovered={
-                      menuEntryId === ctx.item.id || contextMenu?.entry.id === ctx.item.id
-                        ? true
-                        : undefined
+                  actions={[
+                    {
+                      text: t("vault.resetFilters"),
+                      size: "xl",
+                      view: "outlined",
+                      onClick: onResetFilters,
+                    },
+                  ]}
+                />
+              ) : (
+                <List
+                  ref={listRef}
+                  aria-label={t("vault.browser.entries")}
+                  role="grid"
+                  size="xl"
+                  items={entries}
+                  getItemId={(entry) => String(entry.id)}
+                  getItemTextValue={(entry) => entry.password_name}
+                  selectionMode="single"
+                  selectedIds={selected ? [String(selected.id)] : []}
+                  onItemAction={(_id, entry, event) => {
+                    if (selectedEntryIds.length > 0 && canActOnEntry(entry)) {
+                      toggleSelection(entry.id, !selectedEntryIdSet.has(String(entry.id)));
+                      return;
                     }
-                    startContent={
-                      <Flex {...getCellProps()} gap="spacing-2" alignItems="center">
-                        <Checkbox
-                          checked={selectedEntryIdSet.has(String(ctx.item.id))}
-                          disabled={bulkTrashPending || bulkMovePending || !canActOnEntry(ctx.item)}
-                          size="xl"
-                          controlProps={{
-                            "aria-label": t("vault.bulk.selectEntry", {
-                              name: ctx.item.password_name,
-                            }),
-                            tabIndex: -1,
-                            onClick: (event) => event.stopPropagation(),
-                            onKeyDown: (event) => {
-                              if (event.key === "Enter") {
-                                event.preventDefault();
-                                event.stopPropagation();
-                                toggleSelection(
-                                  ctx.item.id,
-                                  !selectedEntryIdSet.has(String(ctx.item.id))
-                                );
-                              } else if (event.key === " ") {
-                                event.stopPropagation();
-                              }
-                            },
-                          }}
-                          onUpdate={(checked) => toggleSelection(ctx.item.id, checked)}
-                        />
-                        <Icon data={ctx.item.kind === "note" ? FileText : Key} />
-                      </Flex>
-                    }
-                    description={
-                      <Flex direction="column" gap="spacing-2" minWidth="0" width="100%">
-                        <Flex gap="spacing-2" wrap="wrap" alignItems="center">
-                          <Text wordBreak="break-all" ellipsis={phone}>
-                            {ctx.item.kind === "note"
-                              ? t("entry.kind.note")
-                              : ctx.item.username || ctx.item.url || t("entry.kind.login")}
-                          </Text>
-                          {ctx.item.access === "read" && (
-                            <Text color="secondary">{t("sharing.readOnlyAccess")}</Text>
-                          )}
-                          {ctx.item.folder && (
-                            <Text wordBreak="break-word" ellipsis={phone} color="secondary">
-                              {ctx.item.folder}
+                    selectedTrigger.current = event.currentTarget;
+                    setRevealedEntryId(null);
+                    if (phone) onOpenEntry(entry);
+                    else setSelectedId(entry.id);
+                  }}
+                  renderItem={(ctx, { getItemProps, getItemViewProps, getCellProps }) => (
+                    <List.ItemView
+                      {...getItemProps({
+                        "data-entry-id": ctx.item.id,
+                        onContextMenu: (event) =>
+                          openContextMenu(ctx.item, event.currentTarget, event),
+                        onKeyDown: (event) => {
+                          if (
+                            event.key === "ContextMenu" ||
+                            (event.shiftKey && event.key === "F10")
+                          ) {
+                            event.preventDefault();
+                            openContextMenu(ctx.item, event.currentTarget);
+                          }
+                        },
+                      })}
+                      {...getItemViewProps()}
+                      hovered={
+                        menuEntryId === ctx.item.id || contextMenu?.entry.id === ctx.item.id
+                          ? true
+                          : undefined
+                      }
+                      startContent={
+                        <Flex {...getCellProps()} gap="spacing-2" alignItems="center">
+                          <Checkbox
+                            checked={selectedEntryIdSet.has(String(ctx.item.id))}
+                            disabled={
+                              bulkTrashPending || bulkMovePending || !canActOnEntry(ctx.item)
+                            }
+                            size="xl"
+                            controlProps={{
+                              "aria-label": t("vault.bulk.selectEntry", {
+                                name: ctx.item.password_name,
+                              }),
+                              tabIndex: -1,
+                              onClick: (event) => event.stopPropagation(),
+                              onKeyDown: (event) => {
+                                if (event.key === "Enter") {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                  toggleSelection(
+                                    ctx.item.id,
+                                    !selectedEntryIdSet.has(String(ctx.item.id))
+                                  );
+                                } else if (event.key === " ") {
+                                  event.stopPropagation();
+                                }
+                              },
+                            }}
+                            onUpdate={(checked) => toggleSelection(ctx.item.id, checked)}
+                          />
+                          <Icon data={ctx.item.kind === "note" ? FileText : Key} />
+                        </Flex>
+                      }
+                      description={
+                        <Flex direction="column" gap="spacing-2" minWidth="0" width="100%">
+                          <Flex gap="spacing-2" wrap="wrap" alignItems="center">
+                            <Text wordBreak="break-all" ellipsis={phone}>
+                              {ctx.item.kind === "note"
+                                ? t("entry.kind.note")
+                                : ctx.item.username || ctx.item.url || t("entry.kind.login")}
                             </Text>
-                          )}
-                          {ctx.item.attachment_count > 0 && (
-                            <Text>
-                              <Icon data={Paperclip} size={12} /> {ctx.item.attachment_count}
-                            </Text>
+                            {ctx.item.access === "read" && (
+                              <Text color="secondary">{t("sharing.readOnlyAccess")}</Text>
+                            )}
+                            {ctx.item.folder && (
+                              <Text wordBreak="break-word" ellipsis={phone} color="secondary">
+                                {ctx.item.folder}
+                              </Text>
+                            )}
+                            {ctx.item.attachment_count > 0 && (
+                              <Text>
+                                <Icon data={Paperclip} size={12} /> {ctx.item.attachment_count}
+                              </Text>
+                            )}
+                          </Flex>
+                          {revealedEntryId === ctx.item.id && (
+                            <Flex direction="column" gap="spacing-1" minWidth="0">
+                              <Divider />
+                              <Text variant="caption-2" color="secondary">
+                                {t(
+                                  ctx.item.kind === "note"
+                                    ? "entry.labels.note"
+                                    : "common.fields.password"
+                                )}
+                              </Text>
+                              <Text
+                                as="code"
+                                variant="code-1"
+                                whiteSpace="break-spaces"
+                                wordBreak="break-all"
+                              >
+                                {ctx.item.password_value}
+                              </Text>
+                            </Flex>
                           )}
                         </Flex>
-                        {revealedEntryId === ctx.item.id && (
-                          <Flex direction="column" gap="spacing-1" minWidth="0">
-                            <Divider />
-                            <Text variant="caption-2" color="secondary">
-                              {t(
-                                ctx.item.kind === "note"
-                                  ? "entry.labels.note"
-                                  : "common.fields.password"
-                              )}
-                            </Text>
-                            <Text
-                              as="code"
-                              variant="code-1"
-                              whiteSpace="break-spaces"
-                              wordBreak="break-all"
+                      }
+                      endContent={
+                        desktop && !selected && selectedEntryIds.length === 0 ? (
+                          <Box {...getCellProps()} onClick={(event) => event.stopPropagation()}>
+                            <EntryListActions
+                              entry={ctx.item}
+                              onCopy={onCopy}
+                              {...actions}
+                              revealed={revealedEntryId === ctx.item.id}
+                              onRevealChange={(revealed) =>
+                                setRevealedEntryId(revealed ? ctx.item.id : null)
+                              }
+                              onMenuOpenChange={(open) => setMenuEntryId(open ? ctx.item.id : null)}
+                              showInlineActions={entriesWidth >= INLINE_ACTIONS_MIN_WIDTH}
+                              showInlineSharing={entriesWidth >= INLINE_SHARING_MIN_WIDTH}
+                            />
+                          </Box>
+                        ) : phone && selectedEntryIds.length === 0 ? (
+                          <Box {...getCellProps()} onClick={(event) => event.stopPropagation()}>
+                            <Button
+                              type="button"
+                              view="flat-secondary"
+                              size="xl"
+                              aria-label={`${t("navigation.more")}: ${ctx.item.password_name}`}
+                              onClick={(event) => openContextMenu(ctx.item, event.currentTarget)}
                             >
-                              {ctx.item.password_value}
-                            </Text>
-                          </Flex>
-                        )}
+                              <Icon data={EllipsisVertical} />
+                            </Button>
+                          </Box>
+                        ) : undefined
+                      }
+                    >
+                      <Flex {...getCellProps()} alignItems="center" gap="spacing-1" minWidth="0">
+                        <Text wordBreak="break-word" ellipsisLines={phone ? 2 : undefined}>
+                          {ctx.item.password_name}
+                        </Text>
+                        {ctx.item.favorite && <Icon data={StarFill} size={12} />}
                       </Flex>
-                    }
-                    endContent={
-                      desktop && !selected && selectedEntryIds.length === 0 ? (
-                        <Box {...getCellProps()} onClick={(event) => event.stopPropagation()}>
-                          <EntryListActions
-                            entry={ctx.item}
-                            onCopy={onCopy}
-                            {...actions}
-                            revealed={revealedEntryId === ctx.item.id}
-                            onRevealChange={(revealed) =>
-                              setRevealedEntryId(revealed ? ctx.item.id : null)
-                            }
-                            onMenuOpenChange={(open) => setMenuEntryId(open ? ctx.item.id : null)}
-                            showInlineActions={entriesWidth >= INLINE_ACTIONS_MIN_WIDTH}
-                            showInlineSharing={entriesWidth >= INLINE_SHARING_MIN_WIDTH}
-                          />
-                        </Box>
-                      ) : phone && selectedEntryIds.length === 0 ? (
-                        <Box {...getCellProps()} onClick={(event) => event.stopPropagation()}>
-                          <Button
-                            type="button"
-                            view="flat-secondary"
-                            size="xl"
-                            aria-label={`${t("navigation.more")}: ${ctx.item.password_name}`}
-                            onClick={(event) => openContextMenu(ctx.item, event.currentTarget)}
-                          >
-                            <Icon data={EllipsisVertical} />
-                          </Button>
-                        </Box>
-                      ) : undefined
-                    }
-                  >
-                    <Flex {...getCellProps()} alignItems="center" gap="spacing-1" minWidth="0">
-                      <Text wordBreak="break-word" ellipsisLines={phone ? 2 : undefined}>
-                        {ctx.item.password_name}
-                      </Text>
-                      {ctx.item.favorite && <Icon data={StarFill} size={12} />}
-                    </Flex>
-                  </List.ItemView>
-                )}
-              />
-            )}
-          </Box>
-          {desktop && selected && (
-            <Flex
-              as="section"
-              aria-label={t("vault.browser.details")}
-              direction="column"
-              gap="spacing-4"
-              flexBasis="50%"
-              minWidth="0"
-              minHeight="0"
-              overflow="auto"
-            >
-              <Flex>
-                <Button size="xl" ref={closeRef} view="outlined" onClick={closeDetails}>
-                  <Icon data={ArrowLeft} />
-                  {t("vault.browser.back")}
-                </Button>
+                    </List.ItemView>
+                  )}
+                />
+              )}
+            </Box>
+            {desktop && selected && (
+              <Flex
+                as="section"
+                aria-label={t("vault.browser.details")}
+                direction="column"
+                gap="spacing-4"
+                flexBasis="60%"
+                minWidth="0"
+                minHeight="0"
+                overflow="auto"
+                padding="spacing-4"
+              >
+                <Flex>
+                  <Button size="xl" ref={closeRef} view="outlined" onClick={closeDetails}>
+                    <Icon data={ArrowLeft} />
+                    {t("vault.browser.back")}
+                  </Button>
+                </Flex>
+                {details}
               </Flex>
-              {details}
-            </Flex>
-          )}
-          {!desktop && !phone && (
-            <Dialog
-              open={Boolean(selected)}
-              onOpenChange={(open) => {
-                if (!open) closeDetails();
-              }}
-              aria-label={selected?.password_name}
-              fullWidth
-              maxWidth="m"
-              contentOverflow="auto"
-              returnFocus={selectedTrigger}
-            >
-              <Dialog.Header caption={selected?.password_name} />
-              <Dialog.Body>{details}</Dialog.Body>
-              <Dialog.Footer
-                onClickButtonCancel={closeDetails}
-                textButtonCancel={t("vault.browser.back")}
-              />
-            </Dialog>
-          )}
+            )}
+            {!desktop && !phone && (
+              <Dialog
+                open={Boolean(selected)}
+                onOpenChange={(open) => {
+                  if (!open) closeDetails();
+                }}
+                aria-label={selected?.password_name}
+                fullWidth
+                maxWidth="m"
+                contentOverflow="auto"
+                returnFocus={selectedTrigger}
+              >
+                <Dialog.Header caption={selected?.password_name} />
+                <Dialog.Body>{details}</Dialog.Body>
+                <Dialog.Footer
+                  onClickButtonCancel={closeDetails}
+                  textButtonCancel={t("vault.browser.back")}
+                />
+              </Dialog>
+            )}
+          </Flex>
         </Flex>
       )}
       <EntryContextMenu

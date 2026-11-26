@@ -1,6 +1,6 @@
 [package]
 name = "nedra-native-host"
-version = "5.0.6"
+version = "5.0.7"
 edition = "2021"
 publish = false
 description = "The native-messaging host of the Nedra browser extension: relays between the browser and the running desktop app."

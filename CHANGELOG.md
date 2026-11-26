@@ -2,6 +2,11 @@
 
 This file records public Nedra releases.
 
+## [5.0.7] - 2026-11-27
+
+- Moved bulk-selection actions above the vault list and open entry, keeping them usable without narrowing the entry details.
+- Widened the open entry panel and gave its back button breathing room.
+
 ## [5.0.6] - 2026-11-24
 
 - Reworked mobile account security: security keys and recovery have separate pages, with focused actions, confirmations, loading and retry states.
@@ -58,6 +63,7 @@ This file records public Nedra releases.
 - Multi-architecture container images with deterministic CycloneDX SBOMs, BuildKit provenance, and keyless cosign signatures.
 - Checked installation snapshots, integrity verification, rollback gates, and reproducible release manifests.
 
+[5.0.7]: https://github.com/WEBzaytsev/Nedra/releases/tag/v5.0.7
 [5.0.6]: https://github.com/WEBzaytsev/Nedra/releases/tag/v5.0.6
 [5.0.5]: https://github.com/WEBzaytsev/Nedra/releases/tag/v5.0.5
 [5.0.4]: https://github.com/WEBzaytsev/Nedra/releases/tag/v5.0.4
