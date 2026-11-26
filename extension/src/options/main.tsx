@@ -501,8 +501,7 @@ const About = () => (
     <h2 id="about">{t("ui_about")}</h2>
     <p>{t("ui_about_description", VERSION)}</p>
     <p>
-      {t("ui_verify_install")} <code>shasum -a 256 -c SHA256SUMS</code>.{" "}
-      {t("ui_reproducible_build")}
+      {t("ui_verify_install")} <code>shasum -a 256 -c SHA256SUMS</code>.
     </p>
   </section>
 );
@@ -522,7 +521,6 @@ const App = () => {
         </span>
         <span class="wordmark">Nedra</span>
       </h1>
-      <p class="tagline">{t("ui_your_secrets_stay_in_the_dark")}</p>
       {status ? (
         <>
           <Mode status={status} reload={reload} />

@@ -415,12 +415,30 @@ const EntryBrowser = ({
             aria-label={t("vault.browser.entries")}
           >
             {availableEntries.length > 0 && (
-              <Flex direction="column" gap="spacing-2" paddingBlockEnd="spacing-3" minWidth="0">
-                <Flex gap="spacing-3" alignItems="center" wrap="wrap" minWidth="0">
+              <Flex
+                gap="spacing-3"
+                alignItems="center"
+                justifyContent="space-between"
+                wrap="wrap"
+                paddingBlockEnd="spacing-3"
+                minWidth="0"
+              >
+                <Flex
+                  gap="spacing-3"
+                  alignItems="center"
+                  wrap="wrap"
+                  minWidth="0"
+                  width={phone ? "100%" : undefined}
+                >
                   <Checkbox
                     checked={allSelected}
                     indeterminate={selectedAvailableCount > 0 && !allSelected}
                     disabled={bulkTrashPending || bulkMovePending}
+                    controlProps={{
+                      "aria-label": t(
+                        allSelected ? "vault.bulk.clearSelection" : "vault.bulk.selectAvailable"
+                      ),
+                    }}
                     onUpdate={(checked) =>
                       onSelectedEntryIdsChange?.(
                         checked ? availableEntries.map((entry) => String(entry.id)) : []
@@ -428,7 +446,8 @@ const EntryBrowser = ({
                     }
                     size="xl"
                   >
-                    {t(allSelected ? "vault.bulk.clearSelection" : "vault.bulk.selectAvailable")}
+                    {(selectedAvailableCount === 0 || phone) &&
+                      t(allSelected ? "vault.bulk.clearSelection" : "vault.bulk.selectAvailable")}
                   </Checkbox>
                   {selectedAvailableCount > 0 && (
                     <Text role="status">
@@ -437,10 +456,15 @@ const EntryBrowser = ({
                   )}
                 </Flex>
                 {selectedAvailableCount > 0 && (
-                  <Flex direction={{ xs: "column", s: "row" }} gap="spacing-2" minWidth="0">
+                  <Flex
+                    direction={{ xs: "column", s: "row" }}
+                    gap="spacing-2"
+                    minWidth="0"
+                    width={phone ? "100%" : undefined}
+                  >
                     <Button
                       size="xl"
-                      view="outlined"
+                      view="normal"
                       disabled={bulkTrashPending || bulkMovePending}
                       loading={bulkMovePending}
                       onClick={onBulkMove}

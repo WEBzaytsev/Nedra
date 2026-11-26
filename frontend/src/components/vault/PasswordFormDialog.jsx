@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  CircleQuestion,
   Copy,
   Eye,
   EyeSlash,
@@ -642,11 +641,6 @@ const PasswordFormDialog = ({
                 show={showTotp}
                 onToggleShow={() => setShowTotp((value) => !value)}
                 note={t("entry.help.twoFactor")}
-                adornment={
-                  <Tooltip content={t("entry.help.twoFactorTooltip")}>
-                    <Icon data={CircleQuestion} />
-                  </Tooltip>
-                }
               />
             </FormSection>
           )}

@@ -74,7 +74,7 @@ mod native {
         )?;
         let new_login = action(
             "new-login",
-            text("New Login", "Новый вход"),
+            text("New Login", "Новая запись с паролем"),
             Some("CmdOrCtrl+N"),
         )?;
         let new_note = action(
