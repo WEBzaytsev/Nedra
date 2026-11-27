@@ -24,7 +24,7 @@ const QuickAction = ({ label, icon, onClick, selected = false }) => (
       view="flat-secondary"
       size="xl"
       aria-label={label}
-
+      tabIndex={-1}
       onClick={onClick}
       selected={selected}
     >
@@ -41,8 +41,6 @@ const EntryListActions = ({
   onShare,
   onToggleFavorite,
   onMenuOpenChange,
-  showInlineActions = false,
-  showInlineSharing = false,
   revealed,
   onRevealChange,
 }) => {
@@ -83,8 +81,10 @@ const EntryListActions = ({
         onClick={() => onRevealChange(!revealed)}
       />
       <QuickAction label={copyLabel} icon={Copy} onClick={() => onCopy(entry.password_value)} />
-      {!isNote && entry.totp_secret && <TotpCell secret={entry.totp_secret} onCopy={onCopy} />}
-      {writable && showInlineActions && (
+      {!isNote && entry.totp_secret && (
+        <TotpCell secret={entry.totp_secret} onCopy={onCopy} tabIndex={-1} />
+      )}
+      {writable && (
         <>
           <QuickAction
             label={t(
@@ -101,7 +101,7 @@ const EntryListActions = ({
           />
         </>
       )}
-      {entry.access === "owner" && showInlineSharing && (
+      {entry.access === "owner" && (
         <QuickAction label={t("sharing.manage")} icon={PersonPlus} onClick={() => onShare(entry)} />
       )}
       {(entry.url || writable) && (
@@ -114,6 +114,7 @@ const EntryListActions = ({
               view="flat-secondary"
               size="xl"
               aria-label={`${t("navigation.more")}: ${entry.password_name}`}
+              tabIndex={-1}
             >
               <Icon data={EllipsisVertical} />
             </Button>
@@ -124,28 +125,7 @@ const EntryListActions = ({
               {t("vault.columns.openWebsite")}
             </MenuItem>
           )}
-          {writable && !showInlineActions && (
-            <MenuItem
-              icon={<Icon data={entry.favorite ? StarFill : Star} />}
-              onClick={() => onToggleFavorite(entry)}
-            >
-              {t(entry.favorite ? "vault.columns.removeFavorite" : "vault.columns.markFavorite")}
-            </MenuItem>
-          )}
-          {writable && !showInlineActions && (
-            <MenuItem icon={<Icon data={Pencil} />} onClick={() => onEdit(entry)}>
-              {t("common.actions.edit")}
-            </MenuItem>
-          )}
-          {entry.access === "owner" && !showInlineSharing && (
-            <MenuItem icon={<Icon data={PersonPlus} />} onClick={() => onShare(entry)}>
-              {t("sharing.manage")}
-            </MenuItem>
-          )}
-          {writable &&
-            (entry.url ||
-              !showInlineActions ||
-              (entry.access === "owner" && !showInlineSharing)) && <MenuDivider />}
+          {writable && entry.url && <MenuDivider />}
           {writable && (
             <MenuItem
               theme="danger"

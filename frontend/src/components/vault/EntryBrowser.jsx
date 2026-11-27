@@ -39,9 +39,6 @@ import TaskSurface from "../TaskSurface";
 import { IS_DESKTOP, openExternal } from "../../platform";
 import { actionableEntries, canActOnEntry } from "../../lib/entrySelection";
 
-const INLINE_ACTIONS_MIN_WIDTH = 800;
-const INLINE_SHARING_MIN_WIDTH = 1000;
-
 const contextTrigger = (left, top) => ({
   getBoundingClientRect: () => ({
     width: 0,
@@ -208,7 +205,6 @@ const EntryBrowser = ({
   const [contextMenu, setContextMenu] = useState(null);
   const [revealedEntryId, setRevealedEntryId] = useState(null);
   const listRef = useRef(null);
-  const [entriesWidth, setEntriesWidth] = useState(0);
   const closeRef = useRef(null);
   const selectedTrigger = useRef(null);
   const previousMobileEntry = useRef(null);
@@ -293,14 +289,6 @@ const EntryBrowser = ({
   useEffect(() => {
     if (desktop && selectedId !== null) closeRef.current?.focus();
   }, [selectedId, desktop]);
-
-  useEffect(() => {
-    const region = listRef.current;
-    if (!desktop || !region) return undefined;
-    const observer = new ResizeObserver(([entry]) => setEntriesWidth(entry.contentRect.width));
-    observer.observe(region);
-    return () => observer.disconnect();
-  }, [desktop, entries.length]);
 
   const closeDetails = () => {
     if (mobileEntry) {
@@ -650,8 +638,6 @@ const EntryBrowser = ({
                                 setRevealedEntryId(revealed ? ctx.item.id : null)
                               }
                               onMenuOpenChange={(open) => setMenuEntryId(open ? ctx.item.id : null)}
-                              showInlineActions={entriesWidth >= INLINE_ACTIONS_MIN_WIDTH}
-                              showInlineSharing={entriesWidth >= INLINE_SHARING_MIN_WIDTH}
                             />
                           </Box>
                         ) : phone && selectedEntryIds.length === 0 ? (
@@ -661,6 +647,7 @@ const EntryBrowser = ({
                               view="flat-secondary"
                               size="xl"
                               aria-label={`${t("navigation.more")}: ${ctx.item.password_name}`}
+                              tabIndex={-1}
                               onClick={(event) => openContextMenu(ctx.item, event.currentTarget)}
                             >
                               <Icon data={EllipsisVertical} />

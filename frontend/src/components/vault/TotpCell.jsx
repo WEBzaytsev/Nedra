@@ -6,7 +6,7 @@ import { generateTotp, totpRemaining } from "../../lib/totp";
 
 const PERIOD = 30;
 
-const TotpCell = ({ secret, onCopy }) => {
+const TotpCell = ({ secret, onCopy, tabIndex }) => {
   const { t } = useTranslation();
   const [code, setCode] = useState("");
   const [remaining, setRemaining] = useState(PERIOD);
@@ -43,6 +43,7 @@ const TotpCell = ({ secret, onCopy }) => {
         view="flat-secondary"
         size="xl"
         aria-label={`${t("totp.copy")} ${code.slice(0, 3)} ${code.slice(3)} ${remaining}s`}
+        tabIndex={tabIndex}
         onClick={() => onCopy?.(code)}
       >
         <Text as="span" variant="code-1">
